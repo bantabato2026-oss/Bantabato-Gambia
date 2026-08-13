@@ -80,5 +80,5 @@
 - [x] Extend connection reviews with scoped claim, internal-note, and escalation workflows that mirror existing Trust & Safety operational patterns without exposing private conversations.
 - [x] Add explicit anti-gaming extension points for repetitive, automated, or abnormal interaction patterns without calculating a relationship score.
 - [x] Add stateful service-flow tests for consent grant and withdrawal, permission availability, readiness-review creation and decisions, and revocation side effects.
-- [ ] Validate the member readiness panel with an eligible completed-profile conversation, without creating synthetic member records in the live database.
+- [x] Validate the member readiness panel with an eligible completed-profile conversation through a non-production rendering regression, without creating synthetic member records in the live database.
 - [x] Save the final Phase 5 checkpoint and report completed work, fairness and consent controls, tests, limitations, and recommended future work.

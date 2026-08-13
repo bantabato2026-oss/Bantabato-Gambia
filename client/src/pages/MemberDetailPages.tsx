@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CircleAlert, HeartHandshake, ImageOff, LockKeyhole, MessageCircle, Mic, PauseCircle, PhoneCall, PlayCircle, Send, ShieldAlert, ShieldCheck, Square, Video, Volume2 } from "lucide-react";
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { useLocation } from "wouter";
 
 export function MemberProfileDetailPage({ profileId }: { profileId: number }) {
@@ -70,7 +70,7 @@ export function MessageThreadPage({ conversationId }: { conversationId: number }
   </MemberShell>;
 }
 
-function ReadinessPanel({ readiness, loading, unavailable, pending, onGrant, onWithdraw }: { readiness: { stage: string; status: string; readyForReview: boolean; reviewRequired: boolean; explanation: string; criteria: Array<{ label: string; met: boolean }>; yourConsents: Array<{ capability: "voice" | "video"; status: "pending" | "granted" | "withdrawn" | "declined" }>; partnerConsentReceived: Array<{ capability: "voice" | "video"; granted: boolean }>; permissions: Array<{ capability: "voice" | "video"; status: "unavailable" | "available" | "paused" | "revoked"; providerConfigured: boolean }>; safetyGuidance: string[]; futureProvider: { configured: boolean; message: string } } | undefined; loading: boolean; unavailable: boolean; pending: boolean; onGrant: (capability: "voice" | "video") => void; onWithdraw: (capability: "voice" | "video") => void }) {
+export function ReadinessPanel({ readiness, loading, unavailable, pending, onGrant, onWithdraw }: { readiness: { stage: string; status: string; readyForReview: boolean; reviewRequired: boolean; explanation: string; criteria: Array<{ label: string; met: boolean }>; yourConsents: Array<{ capability: "voice" | "video"; status: "pending" | "granted" | "withdrawn" | "declined" }>; partnerConsentReceived: Array<{ capability: "voice" | "video"; granted: boolean }>; permissions: Array<{ capability: "voice" | "video"; status: "unavailable" | "available" | "paused" | "revoked"; providerConfigured: boolean }>; safetyGuidance: string[]; futureProvider: { configured: boolean; message: string } } | undefined; loading: boolean; unavailable: boolean; pending: boolean; onGrant: (capability: "voice" | "video") => void; onWithdraw: (capability: "voice" | "video") => void }) {
   if (loading) return <div className="border-b border-forest/10 px-5 py-5"><div className="h-20 animate-pulse rounded-2xl bg-forest/8" /></div>;
   if (!readiness) return <div className="border-b border-forest/10 bg-cream/35 px-5 py-4"><p className="text-sm font-semibold text-ink">Connection readiness is private to an active mutual match.</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{unavailable ? "This conversation is unavailable, paused beyond the current access rules, or no longer active." : "It will appear here once this mutual conversation is available."}</p></div>;
   const consent = (capability: "voice" | "video") => readiness.yourConsents.find(item => item.capability === capability)?.status;

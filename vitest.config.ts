@@ -12,8 +12,8 @@ export default defineConfig({
       "@assets": path.resolve(templateRoot, "attached_assets"),
     },
   },
-  test: {
-    environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
-  },
+	test: {
+	  environment: "node",
+	  include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.ts", "client/**/*.test.tsx"],
+	},
 });
