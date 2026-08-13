@@ -66,3 +66,19 @@
 - [x] Add database-backed messaging-service tests for read-state persistence, unread-count changes, and interaction-signal counter updates on text, voice, and read events.
 - [x] Add stateful service-flow tests for sendText, uploadVoiceNote, message reads, and conversation unread counts using a safe non-production harness rather than inserting synthetic members into the live database.
 - [x] Save the final Phase 4 checkpoint and report completed work, privacy and safety controls, tests, limitations, and next recommended work.
+- [x] Audit the existing Phase 4 interaction signals, message safety, consent-adjacent controls, compatibility, verification, Trust & Safety, notifications, and audit foundations without duplicating systems.
+- [x] Add configurable readiness policy, readiness state, consent, permission, review, event, and revocation records for future enhanced communication.
+- [x] Implement a deterministic, non-scoring readiness evaluator that considers balanced participation, consistency, reciprocal voice notes, safety, current compatibility, verification, consent, and account eligibility.
+- [x] Ensure readiness rules are configurable and provide a member-safe explanation without exposing thresholds, private messages, internal risk factors, or hidden profile data.
+- [x] Add separate mutual-consent flows for prospective voice and video eligibility; make consent withdrawal immediate and enforce revocation for blocks, safety restrictions, suspensions, reports, or new hard incompatibilities.
+- [x] Add future voice/video provider integration boundaries and concise call-safety guidance without building or faking actual call technology.
+- [x] Integrate escalated connection reviews with existing Trust & Safety scopes, audit logs, and case operations without creating a duplicate moderation system.
+- [x] Build member communication-readiness controls and scoped administrative review foundations with clear unavailable, building, review, approved, paused, restricted, and revoked states.
+- [x] Preserve premium neutrality and add anti-gaming extension points; do not create a personality score, popularity score, compatibility score, or automatic call unlock from a single metric.
+- [x] Add tests for readiness signals, balanced participation, consistency, voice participation, safety and compatibility gates, consent, revocation, permissions, explanation privacy, and no-premium advantage; validate desktop and mobile flows.
+- [x] Add immediate safety-restriction, suspension, and hard-compatibility revocation hooks with service-level permission and state regression coverage.
+- [x] Extend connection reviews with scoped claim, internal-note, and escalation workflows that mirror existing Trust & Safety operational patterns without exposing private conversations.
+- [x] Add explicit anti-gaming extension points for repetitive, automated, or abnormal interaction patterns without calculating a relationship score.
+- [x] Add stateful service-flow tests for consent grant and withdrawal, permission availability, readiness-review creation and decisions, and revocation side effects.
+- [ ] Validate the member readiness panel with an eligible completed-profile conversation, without creating synthetic member records in the live database.
+- [x] Save the final Phase 5 checkpoint and report completed work, fairness and consent controls, tests, limitations, and recommended future work.

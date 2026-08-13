@@ -1,0 +1,1 @@
+ALTER TABLE `notifications` MODIFY COLUMN `notificationType` enum('interest','match','message','verification','safety','family','connection') NOT NULL;

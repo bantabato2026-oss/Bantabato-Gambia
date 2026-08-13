@@ -1,0 +1,1 @@
+ALTER TABLE `case_notes` MODIFY COLUMN `caseType` enum('verification','report','connection_review') NOT NULL;

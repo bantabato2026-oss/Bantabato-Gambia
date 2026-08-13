@@ -494,7 +494,7 @@ export async function markNotificationRead(userId: number, notificationId: numbe
   await db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
 }
 
-export async function createNotification(userId: number, notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family", title: string, body: string, actionPath?: string, eventKey?: string) {
+export async function createNotification(userId: number, notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family" | "connection", title: string, body: string, actionPath?: string, eventKey?: string) {
   const db = await getDb();
   if (!db) return;
   await db.insert(notifications).values({ userId, notificationType, title, body, actionPath, eventKey: eventKey ?? null }).onDuplicateKeyUpdate({ set: { title, body, actionPath } });

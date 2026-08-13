@@ -32,6 +32,7 @@ import {
 import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase, getActiveAdminScopes, getReportCase, getReportQueue, getScopedAdminOverview, getVerificationCase, getVerificationDocumentForAuthorizedReview, getVerificationQueue, requireOperationalScope } from "./operations";
 import { getCompatibilityExplanation, getCompatibilityPreferences, getCuratedDiscovery, listProfileFieldVisibilities, saveCompatibilityPreferences, saveProfileFieldVisibilities } from "./compatibilityService";
 import { blockConversationMember, deleteOwnVoiceNote, getConversationPrompts, getVoiceNoteUrl, listConversations, listMessages, reportMessage, sendText, setConversationModerationState, setConversationPreference, setConversationState, uploadVoiceNote } from "./messagingService";
+import { addConnectionReviewNote, claimConnectionReviewCase, decideConnectionReview, escalateConnectionReviewCase, flagConnectionIntegrityConcern, getConnectionReviewCase, getReadinessForMember, grantConnectionConsent, listConnectionReviewQueue, revokeConnectionForConversation, revokeConnectionForProfilePair, revokeConnectionsForProfile, revokeHardIncompatibleConnectionsForProfile, withdrawConnectionConsent } from "./readinessService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -123,9 +124,11 @@ export const appRouter = router({
       const [completeness, verification] = await Promise.all([getProfileCompleteness(profile.id), getVerificationSummary(profile.id)]);
       return { ...profile, completeness, verification };
     }),
-    save: protectedProcedure.input(profileInput).mutation(async ({ ctx, input }) =>
-      saveMemberProfile(ctx.user.id, { ...input, birthDate: input.birthDate ? new Date(input.birthDate) : undefined }),
-    ),
+	    save: protectedProcedure.input(profileInput).mutation(async ({ ctx, input }) => {
+	      const profile = await saveMemberProfile(ctx.user.id, { ...input, birthDate: input.birthDate ? new Date(input.birthDate) : undefined });
+	      if (profile) await revokeHardIncompatibleConnectionsForProfile(profile.id);
+	      return profile;
+	    }),
     view: protectedProcedure.input(z.object({ profileId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const viewer = await requireProfile(ctx.user.id);
       return getProfileForMember(viewer.id, input.profileId);
@@ -147,7 +150,7 @@ export const appRouter = router({
   }),
   compatibility: router({
     preferences: protectedProcedure.query(async ({ ctx }) => getCompatibilityPreferences((await requireProfile(ctx.user.id)).id)),
-    savePreferences: protectedProcedure.input(preferenceInput).mutation(async ({ ctx, input }) => saveCompatibilityPreferences((await requireProfile(ctx.user.id)).id, input)),
+	    savePreferences: protectedProcedure.input(preferenceInput).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveCompatibilityPreferences(profile.id, input); await revokeHardIncompatibleConnectionsForProfile(profile.id); return saved; }),
     explain: protectedProcedure.input(z.object({ profileId: z.number().int().positive() })).query(async ({ ctx, input }) => getCompatibilityExplanation((await requireProfile(ctx.user.id)).id, input.profileId)),
   }),
   interests: router({
@@ -171,6 +174,11 @@ export const appRouter = router({
     block: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => blockConversationMember((await requireProfile(ctx.user.id)).id, input.conversationId, input.reason)),
     reportMessage: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), messageId: z.number().int().positive(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => reportMessage((await requireProfile(ctx.user.id)).id, input.conversationId, input.messageId, input.reason, input.details)),
   }),
+  readiness: router({
+    status: protectedProcedure.input(z.object({ conversationId: z.number().int().positive() })).query(async ({ ctx, input }) => getReadinessForMember((await requireProfile(ctx.user.id)).id, input.conversationId)),
+    grantConsent: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), capability: z.enum(["voice", "video"]) })).mutation(async ({ ctx, input }) => grantConnectionConsent((await requireProfile(ctx.user.id)).id, input.conversationId, input.capability)),
+    withdrawConsent: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), capability: z.enum(["voice", "video"]) })).mutation(async ({ ctx, input }) => withdrawConnectionConsent((await requireProfile(ctx.user.id)).id, input.conversationId, input.capability)),
+  }),
   family: router({
     list: protectedProcedure.query(async ({ ctx }) => listFamilyLinks((await requireProfile(ctx.user.id)).id)),
     invite: protectedProcedure.input(z.object({ relationship: z.enum(["parent", "wali_guardian"]), contactName: z.string().min(2).max(160), contactEmail: z.string().email().optional(), contactPhone: z.string().max(40).optional(), canReceiveMatchNotifications: z.boolean() }).refine(value => Boolean(value.contactEmail || value.contactPhone), { message: "Provide an email address or phone number." })).mutation(async ({ ctx, input }) => upsertFamilyLink((await requireProfile(ctx.user.id)).id, input)),
@@ -180,8 +188,8 @@ export const appRouter = router({
     submitIdentity: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]) })).mutation(async ({ ctx, input }) => submitIdentityVerification((await requireProfile(ctx.user.id)).id, input.documentType)),
   }),
   safety: router({
-    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => createReport((await requireProfile(ctx.user.id)).id, input)),
-    block: protectedProcedure.input(z.object({ blockedProfileId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => blockProfile((await requireProfile(ctx.user.id)).id, input.blockedProfileId, input.reason)),
+    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await createReport(profile.id, input); if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason)) { if (input.conversationId) await revokeConnectionForConversation(input.conversationId, "open_report", { profileId: profile.id }); if (input.reportedProfileId) await revokeConnectionForProfilePair(profile.id, input.reportedProfileId, "open_report", { profileId: profile.id }); } return { success: true }; }),
+    block: protectedProcedure.input(z.object({ blockedProfileId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await blockProfile(profile.id, input.blockedProfileId, input.reason); await revokeConnectionForProfilePair(profile.id, input.blockedProfileId, "block", { profileId: profile.id }); return { success: true }; }),
   }),
   notifications: router({
     list: protectedProcedure.query(async ({ ctx }) => getNotificationsForUser(ctx.user.id)),
@@ -236,14 +244,30 @@ export const appRouter = router({
       await claimReportCase(ctx.user.id, input.reportId);
       return { success: true };
     }),
-    decideReport: protectedProcedure.input(z.object({ reportId: z.number().int().positive(), status: z.enum(["in_review", "action_required", "resolved", "dismissed", "escalated"]), priority: z.enum(["low", "normal", "high", "critical"]).optional(), memberAction: z.enum(["none", "warn", "restrict", "temporary_suspend"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), resolution: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
-      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
-      await decideReportCase({ actorUserId: ctx.user.id, ...input });
-      return { success: true };
+	    decideReport: protectedProcedure.input(z.object({ reportId: z.number().int().positive(), status: z.enum(["in_review", "action_required", "resolved", "dismissed", "escalated"]), priority: z.enum(["low", "normal", "high", "critical"]).optional(), memberAction: z.enum(["none", "warn", "restrict", "temporary_suspend"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), resolution: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
+	      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+	      const outcome = await decideReportCase({ actorUserId: ctx.user.id, ...input });
+	      if (outcome.reportedProfileId && ["restrict", "temporary_suspend"].includes(outcome.memberAction)) await revokeConnectionsForProfile(outcome.reportedProfileId, outcome.memberAction === "temporary_suspend" ? "account_suspended" : "safety_restriction", { userId: ctx.user.id });
+	      return { success: true };
     }),
     setConversationModeration: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), state: z.enum(["restricted", "active"]), reason: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
+	      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+	      await setConversationModerationState(ctx.user.id, input.conversationId, input.state, input.reason);
+	      if (input.state === "restricted") await revokeConnectionForConversation(input.conversationId, "safety_restriction", { userId: ctx.user.id });
+      return { success: true };
+    }),
+	    connectionReviewQueue: protectedProcedure.query(async ({ ctx }) => {
       await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
-      await setConversationModerationState(ctx.user.id, input.conversationId, input.state, input.reason);
+	      return listConnectionReviewQueue();
+	    }),
+	    connectionReviewCase: protectedProcedure.input(z.object({ reviewId: z.number().int().positive() })).query(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); return getConnectionReviewCase(input.reviewId); }),
+	    claimConnectionReview: protectedProcedure.input(z.object({ reviewId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); await claimConnectionReviewCase(ctx.user.id, input.reviewId); return { success: true }; }),
+	    addConnectionReviewNote: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), body: z.string().trim().min(1).max(2000) })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); await addConnectionReviewNote(ctx.user.id, input.reviewId, input.body); return { success: true }; }),
+	    escalateConnectionReview: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); await escalateConnectionReviewCase(ctx.user.id, input.reviewId, input.internalNote); return { success: true }; }),
+	    flagConnectionIntegrity: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); return flagConnectionIntegrityConcern(ctx.user.id, input.conversationId, input.internalNote); }),
+    decideConnectionReview: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), decision: z.enum(["approved_voice", "approved_video", "declined", "restricted", "revoked"]), memberMessage: z.string().max(500).optional(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+      await decideConnectionReview(ctx.user.id, input.reviewId, input.decision, input.memberMessage, input.internalNote);
       return { success: true };
     }),
   }),

@@ -12,6 +12,7 @@ export type VerificationReason = (typeof VERIFICATION_REASONS)[number];
 type VerificationDecision = "approved" | "rejected" | "requires_resubmission" | "escalated";
 type ReportStatus = "in_review" | "action_required" | "resolved" | "dismissed" | "escalated";
 type ReportAction = "none" | "warn" | "restrict" | "temporary_suspend";
+export type OperationalCaseType = "verification" | "report" | "connection_review";
 
 type WorkflowDependencies = {
   getDb: () => Promise<any>;
@@ -181,18 +182,19 @@ export async function decideReportCase(input: { actorUserId: number; reportId: n
     if (memberAction === "restrict") await db.update(memberProfiles).set({ searchVisible: false }).where(eq(memberProfiles.id, record[0].reportedProfileId));
     const target = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, record[0].reportedProfileId)).limit(1);
     if (target[0]) await dependencies.createNotification(target[0].userId, "safety", "An account safety action was applied", memberMessage, "/app/settings", `report-action:${input.reportId}:${memberAction}:${Date.now()}`);
-  }
-  await dependencies.createAuditLog(input.actorUserId, `report.${input.status}`, "report", String(input.reportId), { previousStatus: record[0].status, newStatus: input.status, memberAction, priority: input.priority ?? "normal" });
+	  }
+	  await dependencies.createAuditLog(input.actorUserId, `report.${input.status}`, "report", String(input.reportId), { previousStatus: record[0].status, newStatus: input.status, memberAction, priority: input.priority ?? "normal" });
+	  return { reportedProfileId: record[0].reportedProfileId, memberAction };
 }
 
-export async function addCaseNote(authorUserId: number, caseType: "verification" | "report", caseId: number, body: string) {
+export async function addCaseNote(authorUserId: number, caseType: OperationalCaseType, caseId: number, body: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.insert(caseNotes).values({ authorUserId, caseType, caseId, body: body.trim() });
   await createAuditLog(authorUserId, "case_note.created", caseType, String(caseId), { noteLength: body.trim().length });
 }
 
-async function getCaseNotes(caseType: "verification" | "report", caseId: number) {
+export async function getCaseNotes(caseType: OperationalCaseType, caseId: number) {
   const db = await getDb();
   if (!db) return [];
   const notes = await db.select({ id: caseNotes.id, body: caseNotes.body, createdAt: caseNotes.createdAt, authorUserId: caseNotes.authorUserId }).from(caseNotes).where(and(eq(caseNotes.caseType, caseType), eq(caseNotes.caseId, caseId))).orderBy(asc(caseNotes.createdAt));

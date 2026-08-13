@@ -5,6 +5,7 @@ import { getCompatibilityExplanation } from "./compatibilityService";
 import { blockProfile, createAuditLog, createNotification, createReport, getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { safePromptForDimension, validateVoiceNoteMeta } from "./domain/messagingPolicy";
+import { revokeConnectionForConversation } from "./readinessService";
 
 const MAX_TEXT_LENGTH = 2_000;
 const MAX_VOICE_SECONDS = 180;
@@ -146,6 +147,7 @@ export async function blockConversationMember(profileId: number, conversationId:
   await db.update(conversations).set({ status: "blocked", closedAt: new Date(), lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
   await db.update(matches).set({ status: "blocked", closedAt: new Date() }).where(eq(matches.id, access.match.id));
   await recordEvent(conversationId, profileId, "member_blocked");
+  await revokeConnectionForConversation(conversationId, "block", { profileId });
 }
 
 export async function reportMessage(profileId: number, conversationId: number, messageId: number, reason: ReportReason, details?: string) {
@@ -159,6 +161,7 @@ export async function reportMessage(profileId: number, conversationId: number, m
   await db.update(messages).set({ reportCount: sql`${messages.reportCount} + 1`, moderationStatus: "flagged" }).where(eq(messages.id, messageId));
   await db.update(conversations).set({ status: "reported", lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
   await recordEvent(conversationId, profileId, "safety_reported", { messageId, reason });
+  if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(reason)) await revokeConnectionForConversation(conversationId, "open_report", { profileId });
   return { created: true };
 }
 

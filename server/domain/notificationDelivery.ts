@@ -2,7 +2,7 @@ export type NotificationChannel = "in_app" | "email" | "sms" | "push";
 
 export type TransactionalNotificationPayload = {
   recipientUserId: number;
-  notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family";
+  notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family" | "connection";
   subject: string;
   body: string;
   actionPath?: string;

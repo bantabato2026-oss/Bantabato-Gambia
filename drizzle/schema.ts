@@ -352,6 +352,131 @@ export const conversationInteractionSignals = mysqlTable(
   table => [uniqueIndex("conversation_interaction_signals_unique").on(table.conversationId, table.profileId), index("conversation_interaction_profile_idx").on(table.profileId, table.lastParticipatedAt)],
 );
 
+/** Configurable policy values for connection readiness. Thresholds are evidence gates, never scores. */
+export const connectionReadinessPolicies = mysqlTable(
+  "connection_readiness_policies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    policyName: varchar("policyName", { length: 120 }).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    stageConfig: json("stageConfig").notNull(),
+    thresholdConfig: json("thresholdConfig").notNull(),
+    requireIdentityVerification: boolean("requireIdentityVerification").default(true).notNull(),
+    requireVoiceNotesForReview: boolean("requireVoiceNotesForReview").default(true).notNull(),
+    requireHumanReviewForVoice: boolean("requireHumanReviewForVoice").default(false).notNull(),
+    requireHumanReviewForVideo: boolean("requireHumanReviewForVideo").default(true).notNull(),
+    updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("connection_readiness_policy_active_idx").on(table.isActive, table.updatedAt)],
+);
+
+/** Current state for one match conversation; stores explainable gate outcomes, never a relationship score. */
+export const connectionStates = mysqlTable(
+  "connection_states",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    conversationId: int("conversationId").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    policyId: int("policyId").references(() => connectionReadinessPolicies.id, { onDelete: "set null" }),
+    stage: mysqlEnum("stage", ["mutual_interest", "text_conversation", "voice_note_conversation", "ready_for_review", "voice_call_eligible", "video_call_eligible"]).default("mutual_interest").notNull(),
+    status: mysqlEnum("status", ["not_ready", "building_connection", "ready_for_review", "approved_voice", "approved_video", "declined", "paused", "restricted", "revoked"]).default("not_ready").notNull(),
+    readinessSummary: json("readinessSummary"),
+    policySnapshot: json("policySnapshot"),
+    reviewRequired: boolean("reviewRequired").default(false).notNull(),
+    voiceEligible: boolean("voiceEligible").default(false).notNull(),
+    videoEligible: boolean("videoEligible").default(false).notNull(),
+    lastEvaluatedAt: timestamp("lastEvaluatedAt"),
+    approvedAt: timestamp("approvedAt"),
+    pausedAt: timestamp("pausedAt"),
+    restrictedAt: timestamp("restrictedAt"),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("connection_states_conversation_unique").on(table.conversationId), index("connection_states_status_idx").on(table.status, table.reviewRequired, table.updatedAt)],
+);
+
+export const connectionConsents = mysqlTable(
+  "connection_consents",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    connectionStateId: int("connectionStateId").notNull().references(() => connectionStates.id, { onDelete: "cascade" }),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    capability: mysqlEnum("capability", ["voice", "video"]).notNull(),
+    status: mysqlEnum("status", ["pending", "granted", "withdrawn", "declined"]).default("pending").notNull(),
+    grantedAt: timestamp("grantedAt"),
+    withdrawnAt: timestamp("withdrawnAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("connection_consents_unique").on(table.connectionStateId, table.profileId, table.capability), index("connection_consents_profile_idx").on(table.profileId, table.capability, table.status)],
+);
+
+/** Future provider-facing capability state. This phase grants no calls and stores no provider credentials. */
+export const communicationPermissions = mysqlTable(
+  "communication_permissions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    connectionStateId: int("connectionStateId").notNull().references(() => connectionStates.id, { onDelete: "cascade" }),
+    capability: mysqlEnum("capability", ["voice", "video"]).notNull(),
+    status: mysqlEnum("status", ["unavailable", "available", "paused", "revoked"]).default("unavailable").notNull(),
+    providerReference: varchar("providerReference", { length: 255 }),
+    availableAt: timestamp("availableAt"),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("communication_permissions_unique").on(table.connectionStateId, table.capability), index("communication_permissions_status_idx").on(table.status, table.capability)],
+);
+
+export const connectionReviews = mysqlTable(
+  "connection_reviews",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    connectionStateId: int("connectionStateId").notNull().references(() => connectionStates.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", ["pending", "approved_voice", "approved_video", "declined", "restricted", "revoked", "escalated"]).default("pending").notNull(),
+    reason: mysqlEnum("reason", ["safety_signal", "fraud_concern", "open_report", "ambiguous_criteria", "policy_requirement", "other"]),
+    assignedReviewerUserId: int("assignedReviewerUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    memberMessage: varchar("memberMessage", { length: 500 }),
+    internalNote: text("internalNote"),
+    reviewedAt: timestamp("reviewedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("connection_reviews_queue_idx").on(table.status, table.createdAt), index("connection_reviews_assignee_idx").on(table.assignedReviewerUserId, table.status)],
+);
+
+export const connectionEvents = mysqlTable(
+  "connection_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    connectionStateId: int("connectionStateId").notNull().references(() => connectionStates.id, { onDelete: "cascade" }),
+    actorProfileId: int("actorProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+    actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+    eventType: mysqlEnum("eventType", ["evaluated", "ready_for_review", "voice_consent_granted", "voice_consent_withdrawn", "video_consent_granted", "video_consent_withdrawn", "voice_approved", "video_approved", "review_escalated", "restricted", "revoked", "paused"])
+      .notNull(),
+    metadata: json("metadata"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("connection_events_state_idx").on(table.connectionStateId, table.createdAt)],
+);
+
+export const communicationRevocations = mysqlTable(
+  "communication_revocations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    connectionStateId: int("connectionStateId").notNull().references(() => connectionStates.id, { onDelete: "cascade" }),
+    capability: mysqlEnum("capability", ["voice", "video", "all"]).default("all").notNull(),
+    reason: mysqlEnum("reason", ["member_withdrew_consent", "block", "open_report", "safety_restriction", "account_suspended", "hard_incompatibility", "manual_review", "other"]).notNull(),
+    actorProfileId: int("actorProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+    actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("communication_revocations_state_idx").on(table.connectionStateId, table.createdAt)],
+);
+
 export const reports = mysqlTable(
   "reports",
   {
@@ -386,7 +511,7 @@ export const caseNotes = mysqlTable(
   "case_notes",
   {
     id: int("id").autoincrement().primaryKey(),
-    caseType: mysqlEnum("caseType", ["verification", "report"]).notNull(),
+	    caseType: mysqlEnum("caseType", ["verification", "report", "connection_review"]).notNull(),
     caseId: int("caseId").notNull(),
     authorUserId: int("authorUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
@@ -429,7 +554,7 @@ export const notifications = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family"])
+    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection"])
       .notNull(),
     title: varchar("title", { length: 160 }).notNull(),
     body: varchar("body", { length: 500 }).notNull(),
