@@ -1,0 +1,23 @@
+# Project TODO
+
+- [x] Establish a refined, culturally respectful visual system for a Gambian Muslim and Christian matrimonial platform.
+- [x] Build the public landing page with clear trust, marriage-intent, family, safety, and registration messaging.
+- [x] Add public information pages for About, How it Works, Safety & Verification, Privacy, Terms, Contact, and FAQ.
+- [x] Define configurable eligibility, location, religion, marital-status, visibility, and profile-completion business rules.
+- [x] Create a secure database model for profiles, preferences, photo privacy, family contacts, verification submissions, interests, matches, messages, reports, and audit events.
+- [x] Implement an account onboarding flow for personal details, Gambian ethnicity/tribe, religious practice, local-or-diaspora location, and marriage intentions.
+- [x] Build profile viewing and editing with sensitive data protected by default and clear audience controls.
+- [x] Build deliberate member discovery and search with age, location, tribe, religion, and education filters; do not use swipe-first interactions.
+- [x] Implement consent-based interest requests and ensure conversation access is granted only after a mutual match.
+- [x] Build a clean matched-member conversation interface with report and block controls.
+- [x] Add optional Wali/guardian invitations with consent, scoped match notifications, and auditable permissions.
+- [x] Add manual identity-verification submission and status flows; award badges only after administrator approval.
+- [x] Add a structured administrative application shell for verification review, reports, trust and safety, member management, subscriptions, support, audit logs, and settings.
+- [x] Prepare secure cloud-storage integration points for member photos and verification documents without presenting any mock check as a real verification.
+- [x] Design notification foundations for interest, mutual-match, and message events, keeping email delivery clearly modular until a provider is selected.
+- [x] Add unit tests for matching, messaging access, privacy, and verification rules.
+- [x] Add age-range, country, tribe, and education filters to deliberate member discovery.
+- [x] Add report and block controls directly inside the private conversation experience.
+- [x] Record family-contact invitations and scoped notification permissions as audit events.
+- [x] Add an email-delivery service boundary that remains inactive until a provider is intentionally configured.
+- [x] Validate desktop and mobile UX, resolve issues, and save a final project checkpoint.
