@@ -50,3 +50,19 @@
 - [x] Add married to the existing onboarding marital-status selector and visible curated-discovery marital-status filter.
 - [x] Add explicit regression coverage for the has-children compatibility preference dimension.
 - [x] Save the final Phase 3 checkpoint and report completed work, privacy/fairness controls, tests, limitations, and the next recommended phase.
+- [x] Audit existing mutual-match conversations, messages, reports, blocks, Trust & Safety cases, storage helpers, notifications, and tests without duplicating prior systems.
+- [x] Extend conversation, message, media, read-state, participant preference, event, and interaction-signal records for private serious communication and future Phase 5 analysis.
+- [x] Preserve and strengthen the server-enforced mutual-interest conversation gate, conversation membership, message ownership, blocks, privacy, moderation states, and appropriate rate limits.
+- [x] Build optional serious conversation prompts, including safe compatibility-aware prompts that do not disclose hidden profile data or private preferences.
+- [x] Add paginated text messaging with sent, delivered, read, retry-safe, and unread-state foundations; do not load complete histories by default.
+- [x] Add private voice-note upload, playback, deletion, and reporting foundations with strict audio validation, mobile-aware duration limits, controlled signed access, and no permanent public URLs.
+- [x] Add conversation actions for mute, safety reporting, block, restriction, and closure while preserving records for Trust & Safety.
+- [x] Integrate messaging and voice-note events with the existing in-app notification boundary without claiming email, SMS, or push delivery.
+- [x] Add messaging safety and moderation extension points for human review of reports without creating a duplicate Trust & Safety console.
+- [x] Add tests for conversation authorization, pagination, read-state, blocks, private media access, voice ownership, prompt privacy, and interaction-signal collection; validate desktop and mobile communication flows.
+- [x] Add service-level tests for private voice-note access denial, voice-note ownership deletion, blocked conversation media denial, and interaction-signal updates.
+- [x] Add service-level tests for read-state persistence and unread-message behavior using the real Phase 4 service contracts.
+- [x] Add database-backed messaging-service tests for blocked voice-media denial and sender-only voice deletion after real conversation authorization.
+- [x] Add database-backed messaging-service tests for read-state persistence, unread-count changes, and interaction-signal counter updates on text, voice, and read events.
+- [x] Add stateful service-flow tests for sendText, uploadVoiceNote, message reads, and conversation unread counts using a safe non-production harness rather than inserting synthetic members into the live database.
+- [x] Save the final Phase 4 checkpoint and report completed work, privacy and safety controls, tests, limitations, and next recommended work.

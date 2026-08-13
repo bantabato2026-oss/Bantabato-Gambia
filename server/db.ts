@@ -4,6 +4,7 @@ import {
   auditLogs,
   blocks,
   conversations,
+  conversationEvents,
   familyLinks,
   interestRequests,
   matches,
@@ -342,7 +343,9 @@ export async function respondToInterest(recipientProfileId: number, interestId: 
   const result = await db.insert(matches).values(pair).onDuplicateKeyUpdate({ set: { status: "active", closedAt: null } });
   const matchId = Number(result[0].insertId) || (await db.select({ id: matches.id }).from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId))).limit(1))[0]?.id;
   if (!matchId) throw new Error("Unable to establish a match");
-  await db.insert(conversations).values({ matchId }).onDuplicateKeyUpdate({ set: { status: "active" } });
+  const conversationResult = await db.insert(conversations).values({ matchId, status: "active", mutualInterestAt: new Date(), lastActivityAt: new Date() }).onDuplicateKeyUpdate({ set: { status: "active", mutualInterestAt: new Date(), lastActivityAt: new Date() } });
+  const conversationId = Number(conversationResult[0].insertId) || (await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.matchId, matchId)).limit(1))[0]?.id;
+  if (conversationId) await db.insert(conversationEvents).values({ conversationId, actorProfileId: recipientProfileId, eventType: "mutual_interest" });
   const sender = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, request[0].senderProfileId)).limit(1);
   if (sender[0]) await createNotification(sender[0].userId, "match", "Your introduction was accepted", "You can now begin a private conversation together.", "/app/messages", `match:${matchId}:sender`);
   const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, recipientProfileId)).limit(1);
@@ -498,7 +501,7 @@ export async function createNotification(userId: number, notificationType: "inte
   await routeTransactionalNotification({ recipientUserId: userId, notificationType, subject: title, body, actionPath });
 }
 
-export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {
+export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.insert(reports).values({ reporterProfileId, ...input });

@@ -259,12 +259,16 @@ export const conversations = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     matchId: int("matchId").notNull().references(() => matches.id, { onDelete: "cascade" }),
-    status: mysqlEnum("status", ["active", "archived", "blocked"]).default("active").notNull(),
+    status: mysqlEnum("status", ["mutual_interest", "active", "paused", "archived", "blocked", "reported", "restricted", "closed"]).default("mutual_interest").notNull(),
+    mutualInterestAt: timestamp("mutualInterestAt").defaultNow().notNull(),
     lastMessageAt: timestamp("lastMessageAt"),
+    lastActivityAt: timestamp("lastActivityAt"),
+    restrictedAt: timestamp("restrictedAt"),
+    closedAt: timestamp("closedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [uniqueIndex("conversations_match_unique").on(table.matchId)],
+  table => [uniqueIndex("conversations_match_unique").on(table.matchId), index("conversations_status_activity_idx").on(table.status, table.lastActivityAt)],
 );
 
 export const messages = mysqlTable(
@@ -276,11 +280,76 @@ export const messages = mysqlTable(
     messageType: mysqlEnum("messageType", ["text", "voice", "image"]).default("text").notNull(),
     body: text("body"),
     mediaStorageKey: varchar("mediaStorageKey", { length: 512 }),
+    mimeType: varchar("mimeType", { length: 100 }),
+    durationSeconds: int("durationSeconds"),
+    deliveryStatus: mysqlEnum("deliveryStatus", ["sent", "delivered", "failed"]).default("sent").notNull(),
+    deliveredAt: timestamp("deliveredAt"),
+    failureReason: varchar("failureReason", { length: 500 }),
+    retryOfMessageId: int("retryOfMessageId"),
+    moderationStatus: mysqlEnum("moderationStatus", ["normal", "flagged", "under_review", "restricted"]).default("normal").notNull(),
+    reportCount: int("reportCount").default(0).notNull(),
+    metadata: json("metadata"),
     readAt: timestamp("readAt"),
     deletedAt: timestamp("deletedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => [index("messages_conversation_idx").on(table.conversationId, table.createdAt)],
+  table => [index("messages_conversation_idx").on(table.conversationId, table.createdAt), index("messages_sender_idx").on(table.senderProfileId, table.createdAt)],
+);
+
+export const messageReads = mysqlTable(
+  "message_reads",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    messageId: int("messageId").notNull().references(() => messages.id, { onDelete: "cascade" }),
+    readerProfileId: int("readerProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    readAt: timestamp("readAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("message_reads_unique").on(table.messageId, table.readerProfileId), index("message_reads_reader_idx").on(table.readerProfileId, table.readAt)],
+);
+
+export const conversationPreferences = mysqlTable(
+  "conversation_preferences",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    conversationId: int("conversationId").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    isMuted: boolean("isMuted").default(false).notNull(),
+    readReceiptsEnabled: boolean("readReceiptsEnabled").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("conversation_preferences_unique").on(table.conversationId, table.profileId), index("conversation_preferences_profile_idx").on(table.profileId, table.isMuted)],
+);
+
+export const conversationEvents = mysqlTable(
+  "conversation_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    conversationId: int("conversationId").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    actorProfileId: int("actorProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+    eventType: mysqlEnum("eventType", ["mutual_interest", "conversation_started", "message_sent", "voice_note_sent", "message_read", "conversation_paused", "conversation_restricted", "conversation_closed", "safety_reported", "member_blocked"])
+      .notNull(),
+    metadata: json("metadata"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("conversation_events_timeline_idx").on(table.conversationId, table.createdAt), index("conversation_events_actor_idx").on(table.actorProfileId, table.eventType, table.createdAt)],
+);
+
+/** Activity indicators for Phase 5 analysis; never a score and never an automatic permission trigger. */
+export const conversationInteractionSignals = mysqlTable(
+  "conversation_interaction_signals",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    conversationId: int("conversationId").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    firstParticipatedAt: timestamp("firstParticipatedAt"),
+    lastParticipatedAt: timestamp("lastParticipatedAt"),
+    messagesSent: int("messagesSent").default(0).notNull(),
+    voiceNotesSent: int("voiceNotesSent").default(0).notNull(),
+    readEvents: int("readEvents").default(0).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("conversation_interaction_signals_unique").on(table.conversationId, table.profileId), index("conversation_interaction_profile_idx").on(table.profileId, table.lastParticipatedAt)],
 );
 
 export const reports = mysqlTable(
@@ -290,6 +359,7 @@ export const reports = mysqlTable(
     reporterProfileId: int("reporterProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
     reportedProfileId: int("reportedProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
     conversationId: int("conversationId").references(() => conversations.id, { onDelete: "set null" }),
+    messageId: int("messageId").references(() => messages.id, { onDelete: "set null" }),
     reason: mysqlEnum("reason", ["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]).notNull(),
     details: text("details"),
     status: mysqlEnum("status", ["open", "in_review", "action_required", "resolved", "dismissed", "escalated"]).default("open").notNull(),

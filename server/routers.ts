@@ -31,6 +31,7 @@ import {
 } from "./db";
 import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase, getActiveAdminScopes, getReportCase, getReportQueue, getScopedAdminOverview, getVerificationCase, getVerificationDocumentForAuthorizedReview, getVerificationQueue, requireOperationalScope } from "./operations";
 import { getCompatibilityExplanation, getCompatibilityPreferences, getCuratedDiscovery, listProfileFieldVisibilities, saveCompatibilityPreferences, saveProfileFieldVisibilities } from "./compatibilityService";
+import { blockConversationMember, deleteOwnVoiceNote, getConversationPrompts, getVoiceNoteUrl, listConversations, listMessages, reportMessage, sendText, setConversationModerationState, setConversationPreference, setConversationState, uploadVoiceNote } from "./messagingService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -158,9 +159,17 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => getMatchesForProfile((await requireProfile(ctx.user.id)).id)),
   }),
   messaging: router({
-    conversations: protectedProcedure.query(async ({ ctx }) => getConversationsForProfile((await requireProfile(ctx.user.id)).id)),
-    messages: protectedProcedure.input(z.object({ conversationId: z.number().int().positive() })).query(async ({ ctx, input }) => getMessagesForProfile((await requireProfile(ctx.user.id)).id, input.conversationId)),
-    sendText: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), body: z.string().trim().min(1).max(2000) })).mutation(async ({ ctx, input }) => sendTextMessage((await requireProfile(ctx.user.id)).id, input.conversationId, input.body)),
+    conversations: protectedProcedure.input(z.object({ cursor: z.number().int().positive().optional(), limit: z.number().int().min(1).max(30).optional() }).optional()).query(async ({ ctx, input }) => listConversations((await requireProfile(ctx.user.id)).id, input)),
+    messages: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), cursor: z.number().int().positive().optional(), limit: z.number().int().min(1).max(50).optional() })).query(async ({ ctx, input }) => listMessages((await requireProfile(ctx.user.id)).id, input.conversationId, input)),
+    sendText: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), body: z.string().trim().min(1).max(2000), retryOfMessageId: z.number().int().positive().optional() })).mutation(async ({ ctx, input }) => sendText((await requireProfile(ctx.user.id)).id, input.conversationId, input.body, input.retryOfMessageId)),
+    prompts: protectedProcedure.input(z.object({ conversationId: z.number().int().positive() })).query(async ({ ctx, input }) => getConversationPrompts((await requireProfile(ctx.user.id)).id, input.conversationId)),
+    uploadVoice: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), dataUrl: z.string().max(9_000_000), durationSeconds: z.number().int().min(1).max(180) })).mutation(async ({ ctx, input }) => uploadVoiceNote((await requireProfile(ctx.user.id)).id, input.conversationId, input.dataUrl, input.durationSeconds)),
+    voiceUrl: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), messageId: z.number().int().positive() })).query(async ({ ctx, input }) => getVoiceNoteUrl((await requireProfile(ctx.user.id)).id, input.conversationId, input.messageId)),
+    deleteVoice: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), messageId: z.number().int().positive() })).mutation(async ({ ctx, input }) => deleteOwnVoiceNote((await requireProfile(ctx.user.id)).id, input.conversationId, input.messageId)),
+    preferences: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), isMuted: z.boolean().optional(), readReceiptsEnabled: z.boolean().optional() })).mutation(async ({ ctx, input }) => setConversationPreference((await requireProfile(ctx.user.id)).id, input.conversationId, input)),
+    setState: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), state: z.enum(["paused", "closed"]) })).mutation(async ({ ctx, input }) => setConversationState((await requireProfile(ctx.user.id)).id, input.conversationId, input.state)),
+    block: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => blockConversationMember((await requireProfile(ctx.user.id)).id, input.conversationId, input.reason)),
+    reportMessage: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), messageId: z.number().int().positive(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => reportMessage((await requireProfile(ctx.user.id)).id, input.conversationId, input.messageId, input.reason, input.details)),
   }),
   family: router({
     list: protectedProcedure.query(async ({ ctx }) => listFamilyLinks((await requireProfile(ctx.user.id)).id)),
@@ -230,6 +239,11 @@ export const appRouter = router({
     decideReport: protectedProcedure.input(z.object({ reportId: z.number().int().positive(), status: z.enum(["in_review", "action_required", "resolved", "dismissed", "escalated"]), priority: z.enum(["low", "normal", "high", "critical"]).optional(), memberAction: z.enum(["none", "warn", "restrict", "temporary_suspend"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), resolution: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
       await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
       await decideReportCase({ actorUserId: ctx.user.id, ...input });
+      return { success: true };
+    }),
+    setConversationModeration: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), state: z.enum(["restricted", "active"]), reason: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+      await setConversationModerationState(ctx.user.id, input.conversationId, input.state, input.reason);
       return { success: true };
     }),
   }),
