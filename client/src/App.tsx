@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AdminPage from "@/pages/AdminPage";
+import { AdminReportCasePage, AdminReportsQueuePage, AdminVerificationCasePage, AdminVerificationQueuePage } from "@/pages/AdminOperations";
 import Home from "@/pages/Home";
 import { ContactPage, FAQPage, PublicInfoPage, SignInPage } from "@/pages/PublicPages";
 import { MemberProfileDetailPage, MessageThreadPage } from "@/pages/MemberDetailPages";
@@ -38,6 +39,10 @@ function Router() {
     <Route path="/app/settings" component={SettingsPage} />
     <Route path="/app/notifications" component={NotificationsPage} />
     <Route path="/admin" component={AdminPage} />
+    <Route path="/admin/verification" component={AdminVerificationQueuePage} />
+    <Route path="/admin/verification/:caseId">{params => <AdminVerificationCasePage caseId={Number(params.caseId)} />}</Route>
+    <Route path="/admin/reports" component={AdminReportsQueuePage} />
+    <Route path="/admin/reports/:caseId">{params => <AdminReportCasePage caseId={Number(params.caseId)} />}</Route>
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;

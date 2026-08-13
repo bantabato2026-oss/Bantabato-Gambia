@@ -29,6 +29,7 @@ import {
   getVerificationDocumentForReview,
   reviewIdentityVerification,
 } from "./db";
+import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase, getActiveAdminScopes, getReportCase, getReportQueue, getScopedAdminOverview, getVerificationCase, getVerificationDocumentForAuthorizedReview, getVerificationQueue, requireOperationalScope } from "./operations";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -66,8 +67,13 @@ async function requireProfile(userId: number) {
   return profile;
 }
 
-function requireAdmin(user: { role: string }) {
+async function requireOperationalAccess(user: { id: number; role: string }, allowedScopes: Array<"verification_reviewer" | "trust_safety" | "support_agent" | "subscription_manager" | "platform_admin">) {
   if (user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Administrator access is required." });
+  try {
+    return await requireOperationalScope(user.id, allowedScopes);
+  } catch {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Your operational role does not permit this action." });
+  }
 }
 
 export const appRouter = router({
@@ -128,7 +134,7 @@ export const appRouter = router({
     submitIdentity: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]) })).mutation(async ({ ctx, input }) => submitIdentityVerification((await requireProfile(ctx.user.id)).id, input.documentType)),
   }),
   safety: router({
-    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["harassment", "impersonation", "scam", "inappropriate_content", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => createReport((await requireProfile(ctx.user.id)).id, input)),
+    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => createReport((await requireProfile(ctx.user.id)).id, input)),
     block: protectedProcedure.input(z.object({ blockedProfileId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => blockProfile((await requireProfile(ctx.user.id)).id, input.blockedProfileId, input.reason)),
   }),
   notifications: router({
@@ -137,16 +143,56 @@ export const appRouter = router({
   }),
   admin: router({
     overview: protectedProcedure.query(async ({ ctx }) => {
-      requireAdmin(ctx.user);
-      return getAdminOverview();
+      const scopes = await requireOperationalAccess(ctx.user, ["verification_reviewer", "trust_safety", "support_agent", "subscription_manager", "platform_admin"]);
+      return getScopedAdminOverview(scopes);
     }),
     verificationDocument: protectedProcedure.input(z.object({ verificationId: z.number().int().positive() })).query(async ({ ctx, input }) => {
-      requireAdmin(ctx.user);
-      return getVerificationDocumentForReview(input.verificationId);
+      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
+      return getVerificationDocumentForAuthorizedReview(ctx.user.id, input.verificationId);
     }),
     reviewIdentity: protectedProcedure.input(z.object({ verificationId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), reviewNotes: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.user);
+      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
       await reviewIdentityVerification(ctx.user.id, input.verificationId, input.decision, input.reviewNotes);
+      return { success: true };
+    }),
+    operationalScopes: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Administrator access is required." });
+      return getActiveAdminScopes(ctx.user.id);
+    }),
+    verificationQueue: protectedProcedure.query(async ({ ctx }) => {
+      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
+      return getVerificationQueue();
+    }),
+    verificationCase: protectedProcedure.input(z.object({ verificationId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
+      return getVerificationCase(input.verificationId);
+    }),
+    claimVerification: protectedProcedure.input(z.object({ verificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
+      await claimVerificationCase(ctx.user.id, input.verificationId);
+      return { success: true };
+    }),
+    decideVerification: protectedProcedure.input(z.object({ verificationId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "requires_resubmission", "escalated"]), reason: z.enum(["document_unclear", "document_expired", "document_unsupported", "information_mismatch", "image_quality_insufficient", "verification_image_insufficient", "suspected_duplicate", "suspected_fraud", "requires_additional_review", "other"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), priority: z.enum(["standard", "attention", "high"]).optional() })).mutation(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
+      await decideVerificationCase({ actorUserId: ctx.user.id, ...input });
+      return { success: true };
+    }),
+    reportQueue: protectedProcedure.query(async ({ ctx }) => {
+      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+      return getReportQueue();
+    }),
+    reportCase: protectedProcedure.input(z.object({ reportId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+      return getReportCase(input.reportId);
+    }),
+    claimReport: protectedProcedure.input(z.object({ reportId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+      await claimReportCase(ctx.user.id, input.reportId);
+      return { success: true };
+    }),
+    decideReport: protectedProcedure.input(z.object({ reportId: z.number().int().positive(), status: z.enum(["in_review", "action_required", "resolved", "dismissed", "escalated"]), priority: z.enum(["low", "normal", "high", "critical"]).optional(), memberAction: z.enum(["none", "warn", "restrict", "temporary_suspend"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), resolution: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
+      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+      await decideReportCase({ actorUserId: ctx.user.id, ...input });
       return { success: true };
     }),
   }),

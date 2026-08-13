@@ -21,3 +21,18 @@
 - [x] Record family-contact invitations and scoped notification permissions as audit events.
 - [x] Add an email-delivery service boundary that remains inactive until a provider is intentionally configured.
 - [x] Validate desktop and mobile UX, resolve issues, and save a final project checkpoint.
+- [x] Audit the existing Phase 1 authentication, profile, verification, storage, notification, Trust & Safety, RBAC, audit-log, and test foundations without duplicating them.
+- [x] Extend verification records and administrator roles for structured review states, reviewer assignments, reasons, safe member-facing outcomes, and scoped document access.
+- [x] Build an authorized verification-case queue and review interface with profile context, internal notes, approval, rejection, resubmission, and escalation actions.
+- [x] Enable member-facing verification resubmission guidance without exposing internal moderation or fraud notes.
+- [x] Extend reports into operational Trust & Safety cases with categories, status, priority, assignment, internal notes, controlled moderator actions, and safe outcomes.
+- [x] Add permission boundaries and future four-eyes markers for high-impact Trust & Safety and sensitive-data actions.
+- [x] Expand audit logging to capture verification and Trust & Safety state changes without storing raw documents or unnecessary sensitive data.
+- [x] Extend the notification abstraction for email, in-app, future SMS, and future push delivery without inventing external-provider credentials.
+- [x] Integrate the supplied official Bantabato logo and approved authentic Gambian visual assets if they are present; otherwise retain clearly identified placeholders.
+- [x] Add verification workflow, report workflow, RBAC, and sensitive-storage regression tests; validate desktop and mobile administration flows.
+- [x] Save the final Phase 2 checkpoint and report the operational status, incomplete integrations, risks, and next recommended module.
+- [x] Add server-level regression coverage for verification and report workflow transitions, scoped RBAC denial paths, and private verification-document access restrictions.
+- [x] Validate the administrator overview and operational queue interfaces at a mobile breakpoint, documenting and resolving any responsive issues.
+- [x] Add service-layer tests that exercise verification claim and decision transitions with audited safe member outcomes.
+- [x] Add service-layer tests that exercise report claim and resolution transitions with audited controlled actions.

@@ -19,7 +19,7 @@ import {
   verificationRecords,
 } from "../drizzle/schema";
 import { canonicalProfilePair } from "./domain/permissions";
-import { queueEmailNotification } from "./domain/notificationDelivery";
+import { routeTransactionalNotification } from "./domain/notificationDelivery";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { ENV } from "./_core/env";
 
@@ -417,7 +417,7 @@ export async function uploadIdentityDocument(profileId: number, documentType: "n
 export async function getVerificationSummary(profileId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(verificationRecords).where(eq(verificationRecords.profileId, profileId)).orderBy(desc(verificationRecords.createdAt));
+  return db.select({ id: verificationRecords.id, verificationType: verificationRecords.verificationType, status: verificationRecords.status, documentType: verificationRecords.documentType, memberMessage: verificationRecords.memberMessage, submittedAt: verificationRecords.submittedAt, reviewedAt: verificationRecords.reviewedAt, createdAt: verificationRecords.createdAt }).from(verificationRecords).where(eq(verificationRecords.profileId, profileId)).orderBy(desc(verificationRecords.createdAt));
 }
 
 export async function getNotificationsForUser(userId: number) {
@@ -436,10 +436,10 @@ export async function createNotification(userId: number, notificationType: "inte
   const db = await getDb();
   if (!db) return;
   await db.insert(notifications).values({ userId, notificationType, title, body, actionPath, eventKey: eventKey ?? null }).onDuplicateKeyUpdate({ set: { title, body, actionPath } });
-  await queueEmailNotification({ recipientUserId: userId, notificationType, subject: title, body, actionPath });
+  await routeTransactionalNotification({ recipientUserId: userId, notificationType, subject: title, body, actionPath });
 }
 
-export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; reason: "harassment" | "impersonation" | "scam" | "inappropriate_content" | "other"; details?: string }) {
+export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.insert(reports).values({ reporterProfileId, ...input });

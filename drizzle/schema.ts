@@ -119,23 +119,32 @@ export const verificationRecords = mysqlTable(
     profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
     verificationType: mysqlEnum("verificationType", ["phone", "email", "identity_document", "facial", "profile_photo"])
       .notNull(),
-    status: mysqlEnum("status", ["not_started", "submitted", "under_review", "approved", "rejected", "expired"])
+    status: mysqlEnum("status", ["not_started", "submitted", "under_review", "approved", "rejected", "requires_resubmission", "escalated", "expired"])
       .default("not_started")
       .notNull(),
     documentStorageKey: varchar("documentStorageKey", { length: 512 }),
     documentType: mysqlEnum("documentType", ["national_id", "passport"]),
     providerReference: varchar("providerReference", { length: 255 }),
     reviewNotes: text("reviewNotes"),
+    reviewReason: mysqlEnum("reviewReason", ["document_unclear", "document_expired", "document_unsupported", "information_mismatch", "image_quality_insufficient", "verification_image_insufficient", "suspected_duplicate", "suspected_fraud", "requires_additional_review", "other"]),
+    memberMessage: varchar("memberMessage", { length: 500 }),
+    priority: mysqlEnum("priority", ["standard", "attention", "high"])
+      .default("standard")
+      .notNull(),
+    assignedReviewerUserId: int("assignedReviewerUserId").references(() => users.id, { onDelete: "set null" }),
     reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
     submittedAt: timestamp("submittedAt"),
     reviewedAt: timestamp("reviewedAt"),
+    escalatedAt: timestamp("escalatedAt"),
+    closedAt: timestamp("closedAt"),
     expiresAt: timestamp("expiresAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
     index("verification_records_profile_idx").on(table.profileId, table.status),
-    index("verification_records_queue_idx").on(table.status, table.submittedAt),
+    index("verification_records_queue_idx").on(table.status, table.priority, table.submittedAt),
+    index("verification_records_assignee_idx").on(table.assignedReviewerUserId, table.status),
   ],
 );
 
@@ -232,15 +241,39 @@ export const reports = mysqlTable(
     reporterProfileId: int("reporterProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
     reportedProfileId: int("reportedProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
     conversationId: int("conversationId").references(() => conversations.id, { onDelete: "set null" }),
-    reason: mysqlEnum("reason", ["harassment", "impersonation", "scam", "inappropriate_content", "other"]).notNull(),
+    reason: mysqlEnum("reason", ["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]).notNull(),
     details: text("details"),
-    status: mysqlEnum("status", ["open", "in_review", "resolved", "dismissed"]).default("open").notNull(),
+    status: mysqlEnum("status", ["open", "in_review", "action_required", "resolved", "dismissed", "escalated"]).default("open").notNull(),
+    priority: mysqlEnum("priority", ["low", "normal", "high", "critical"]).default("normal").notNull(),
+    assignedModeratorUserId: int("assignedModeratorUserId").references(() => users.id, { onDelete: "set null" }),
+    memberAction: mysqlEnum("memberAction", ["none", "warn", "restrict", "temporary_suspend"])
+      .default("none")
+      .notNull(),
+    memberMessage: varchar("memberMessage", { length: 500 }),
+    resolution: varchar("resolution", { length: 500 }),
     reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
     resolvedAt: timestamp("resolvedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("reports_queue_idx").on(table.status, table.createdAt)],
+  table => [
+    index("reports_queue_idx").on(table.status, table.priority, table.createdAt),
+    index("reports_assignee_idx").on(table.assignedModeratorUserId, table.status),
+  ],
+);
+
+/** Internal-only operational notes. Case IDs are intentionally polymorphic to avoid duplicating note structures. */
+export const caseNotes = mysqlTable(
+  "case_notes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    caseType: mysqlEnum("caseType", ["verification", "report"]).notNull(),
+    caseId: int("caseId").notNull(),
+    authorUserId: int("authorUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("case_notes_case_idx").on(table.caseType, table.caseId, table.createdAt)],
 );
 
 export const blocks = mysqlTable(

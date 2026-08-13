@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { CircleAlert, HeartHandshake, ImageOff, LockKeyhole, MessageCircle, Send, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -13,8 +14,8 @@ export function MemberProfileDetailPage({ profileId }: { profileId: number }) {
   const [note, setNote] = useState("");
   const [, setLocation] = useLocation();
   const sendInterest = trpc.interests.send.useMutation({ onSuccess: () => setLocation("/app/matches") });
-  const report = trpc.safety.report.useMutation();
-  const block = trpc.safety.block.useMutation({ onSuccess: () => { utils.discovery.list.invalidate(); setLocation("/app/discover"); } });
+  const report = trpc.safety.report.useMutation({ onSuccess: () => toast.success("Your report was submitted privately. Our Trust & Safety team will review it.") });
+  const block = trpc.safety.block.useMutation({ onSuccess: () => { utils.discovery.list.invalidate(); toast.success("This member has been blocked. Further contact is stopped."); setLocation("/app/discover"); } });
   const member = profile.data;
 
   return <MemberShell eyebrow="Member profile" title={member?.displayName || "Considered profile"} description="Review the details a member has chosen to share. You control whether to send an introduction request.">
@@ -41,9 +42,9 @@ export function MessageThreadPage({ conversationId }: { conversationId: number }
   const utils = trpc.useUtils();
   const [body, setBody] = useState("");
   const send = trpc.messaging.sendText.useMutation({ onSuccess: () => { setBody(""); utils.messaging.messages.invalidate({ conversationId }); utils.messaging.conversations.invalidate(); } });
-  const report = trpc.safety.report.useMutation();
+  const report = trpc.safety.report.useMutation({ onSuccess: () => toast.success("Your report was submitted privately. Our Trust & Safety team will review it.") });
   const profile = trpc.profile.mine.useQuery();
-  const block = trpc.safety.block.useMutation();
+  const block = trpc.safety.block.useMutation({ onSuccess: () => toast.success("This member has been blocked. Further contact is stopped.") });
   const conversation = conversations.data?.find(item => item.id === conversationId);
   const otherProfileId = conversation && profile.data ? (conversation.match?.memberOneProfileId === profile.data.id ? conversation.match.memberTwoProfileId : conversation.match?.memberOneProfileId) : undefined;
 
