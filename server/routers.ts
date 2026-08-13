@@ -30,11 +30,13 @@ import {
   reviewIdentityVerification,
 } from "./db";
 import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase, getActiveAdminScopes, getReportCase, getReportQueue, getScopedAdminOverview, getVerificationCase, getVerificationDocumentForAuthorizedReview, getVerificationQueue, requireOperationalScope } from "./operations";
+import { getCompatibilityExplanation, getCompatibilityPreferences, getCuratedDiscovery, listProfileFieldVisibilities, saveCompatibilityPreferences, saveProfileFieldVisibilities } from "./compatibilityService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const profileInput = z.object({
+  firstName: z.string().max(80).optional(),
   displayName: z.string().min(2).max(80).optional(),
   birthDate: z.string().date().optional(),
   gender: z.enum(["woman", "man", "self_described"]).optional(),
@@ -44,22 +46,49 @@ const profileInput = z.object({
   tribe: z.string().max(100).optional(),
   residenceType: z.enum(["gambia", "diaspora"]).optional(),
   country: z.string().max(100).optional(),
+  region: z.string().max(100).optional(),
   city: z.string().max(100).optional(),
-  maritalStatus: z.enum(["never_married", "divorced", "widowed"]).optional(),
+  nationality: z.string().max(100).optional(),
+  languages: z.array(z.string().trim().min(1).max(60)).max(12).optional(),
+  maritalStatus: z.enum(["never_married", "married", "divorced", "widowed"]).optional(),
   educationLevel: z.string().max(100).optional(),
+  educationField: z.string().max(120).optional(),
+  educationInstitution: z.string().max(160).optional(),
   profession: z.string().max(160).optional(),
+  employmentStatus: z.enum(["employed", "self_employed", "student", "seeking_work", "retired", "prefer_not_to_say"]).optional(),
+  industry: z.string().max(120).optional(),
+  personality: z.string().max(1200).optional(),
+  interests: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+  hobbies: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   marriageTimeline: z.string().max(100).optional(),
+  marriageIntent: z.string().max(255).optional(),
+  marriageExpectations: z.string().max(1600).optional(),
+  reasonSeekingMarriage: z.string().max(1200).optional(),
   relocationWillingness: z.enum(["open", "within_gambia", "not_open", "discuss"]).optional(),
   polygynyOpenness: z.enum(["open", "not_open", "discuss", "not_applicable"]).optional(),
   hasChildren: z.boolean().optional(),
+  desireChildren: z.enum(["yes", "no", "open", "private"]).optional(),
+  familyInvolvementPreference: z.enum(["active", "limited", "optional", "private"]).optional(),
+  smokingPreference: z.enum(["no", "occasionally", "yes", "private"]).optional(),
+  alcoholPreference: z.enum(["no", "occasionally", "yes", "private"]).optional(),
   about: z.string().max(2400).optional(),
   familyBackground: z.string().max(1200).optional(),
   lifestyle: z.string().max(1200).optional(),
+  values: z.string().max(1600).optional(),
+  importantPrinciples: z.string().max(1600).optional(),
   profileVisibility: z.enum(["public", "members_only", "hidden"]).optional(),
   photoVisibility: z.enum(["public", "mutual_match", "hidden"]).optional(),
   searchVisible: z.boolean().optional(),
   familyVisibility: z.enum(["private", "matches", "visible"]).optional(),
 });
+
+const preferenceInput = z.object({
+  minAge: z.number().int().min(18).max(80).optional(), maxAge: z.number().int().min(18).max(80).optional(),
+  preferredGenders: z.array(z.enum(["woman", "man", "self_described"])).max(3).optional(), preferredReligions: z.array(z.enum(["muslim", "christian"])).max(2).optional(), preferredLocations: z.array(z.string().trim().min(1).max(100)).max(12).optional(), preferredMaritalStatuses: z.array(z.enum(["never_married", "married", "divorced", "widowed"])).max(4).optional(),
+  childrenPreference: z.enum(["open", "prefer_no_children", "open_to_children", "not_important"]).optional(), desiredChildrenPreference: z.enum(["yes", "no", "open", "not_important"]).optional(), preferredRelocation: z.array(z.enum(["open", "within_gambia", "not_open", "discuss"])).max(4).optional(), preferredEducationLevels: z.array(z.string().trim().min(1).max(100)).max(10).optional(), preferredMarriageTimelines: z.array(z.string().trim().min(1).max(100)).max(10).optional(), preferredPolygynyOpenness: z.array(z.enum(["open", "not_open", "discuss", "not_applicable"])).max(4).optional(), preferredFamilyInvolvement: z.array(z.enum(["active", "limited", "optional", "private"])).max(4).optional(), lifestylePreferences: z.array(z.enum(["no", "occasionally", "yes", "private"])).max(4).optional(), preferenceImportance: z.record(z.string(), z.enum(["required", "preferred", "neutral", "not_important"])).optional(), marriageIntent: z.string().max(1200).optional(), mustHaves: z.string().max(1200).optional(),
+}).refine(input => input.minAge === undefined || input.maxAge === undefined || input.minAge <= input.maxAge, { message: "Minimum age cannot exceed maximum age." });
+
+const fieldVisibilityInput = z.object({ fields: z.array(z.object({ fieldKey: z.enum(["religion", "practiceLevel", "ethnicity", "tribe", "country", "region", "city", "languages", "maritalStatus", "educationLevel", "educationField", "profession", "employmentStatus", "industry", "about", "personality", "interests", "hobbies", "marriageTimeline", "marriageIntent", "marriageExpectations", "relocationWillingness", "polygynyOpenness", "hasChildren", "desireChildren", "familyInvolvementPreference", "lifestyle", "values", "importantPrinciples", "familyBackground"]), audience: z.enum(["public", "verified_members", "potential_matches", "matched_members", "family_circle", "private", "admin_restricted"]) })).max(30) });
 
 async function requireProfile(userId: number) {
   const profile = await getProfileByUserId(userId);
@@ -100,6 +129,8 @@ export const appRouter = router({
       const viewer = await requireProfile(ctx.user.id);
       return getProfileForMember(viewer.id, input.profileId);
     }),
+    fieldVisibilities: protectedProcedure.query(async ({ ctx }) => listProfileFieldVisibilities((await requireProfile(ctx.user.id)).id)),
+    saveFieldVisibilities: protectedProcedure.input(fieldVisibilityInput).mutation(async ({ ctx, input }) => saveProfileFieldVisibilities((await requireProfile(ctx.user.id)).id, input.fields)),
   }),
   uploads: router({
     profilePhotos: protectedProcedure.query(async ({ ctx }) => listOwnProfilePhotos((await requireProfile(ctx.user.id)).id)),
@@ -111,6 +142,12 @@ export const appRouter = router({
       const profile = await requireProfile(ctx.user.id);
       return getDiscoveryProfiles(profile.id, input);
     }),
+    curated: protectedProcedure.input(z.object({ cursor: z.number().int().positive().optional(), limit: z.number().int().min(1).max(24).optional(), collection: z.enum(["recommended", "new", "recently_updated", "verified", "potentially_compatible"]).optional(), minAge: z.number().int().min(18).max(80).optional(), maxAge: z.number().int().min(18).max(80).optional(), gender: z.enum(["woman", "man", "self_described"]).optional(), religion: z.enum(["muslim", "christian"]).optional(), country: z.string().max(100).optional(), city: z.string().max(100).optional(), maritalStatus: z.enum(["never_married", "married", "divorced", "widowed"]).optional(), hasChildren: z.boolean().optional(), relocationWillingness: z.enum(["open", "within_gambia", "not_open", "discuss"]).optional(), polygynyOpenness: z.enum(["open", "not_open", "discuss", "not_applicable"]).optional(), verifiedOnly: z.boolean().optional() }).optional()).query(async ({ ctx, input }) => getCuratedDiscovery((await requireProfile(ctx.user.id)).id, input)),
+  }),
+  compatibility: router({
+    preferences: protectedProcedure.query(async ({ ctx }) => getCompatibilityPreferences((await requireProfile(ctx.user.id)).id)),
+    savePreferences: protectedProcedure.input(preferenceInput).mutation(async ({ ctx, input }) => saveCompatibilityPreferences((await requireProfile(ctx.user.id)).id, input)),
+    explain: protectedProcedure.input(z.object({ profileId: z.number().int().positive() })).query(async ({ ctx, input }) => getCompatibilityExplanation((await requireProfile(ctx.user.id)).id, input.profileId)),
   }),
   interests: router({
     incoming: protectedProcedure.query(async ({ ctx }) => listIncomingInterests((await requireProfile(ctx.user.id)).id)),

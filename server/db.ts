@@ -11,6 +11,7 @@ import {
   memberProfiles,
   messages,
   notifications,
+  profileFieldVisibilities,
   profilePhotos,
   reports,
   type InsertUser,
@@ -79,6 +80,7 @@ export async function getProfileByUserId(userId: number) {
 }
 
 export type ProfileUpdate = Partial<{
+  firstName: string;
   displayName: string;
   birthDate: Date;
   gender: "woman" | "man" | "self_described";
@@ -88,17 +90,36 @@ export type ProfileUpdate = Partial<{
   tribe: string;
   residenceType: "gambia" | "diaspora";
   country: string;
+  region: string;
   city: string;
-  maritalStatus: "never_married" | "divorced" | "widowed";
+  nationality: string;
+  languages: string[];
+  maritalStatus: "never_married" | "married" | "divorced" | "widowed";
   educationLevel: string;
+  educationField: string;
+  educationInstitution: string;
   profession: string;
+  employmentStatus: "employed" | "self_employed" | "student" | "seeking_work" | "retired" | "prefer_not_to_say";
+  industry: string;
+  personality: string;
+  interests: string[];
+  hobbies: string[];
   marriageTimeline: string;
+  marriageIntent: string;
+  marriageExpectations: string;
+  reasonSeekingMarriage: string;
   relocationWillingness: "open" | "within_gambia" | "not_open" | "discuss";
   polygynyOpenness: "open" | "not_open" | "discuss" | "not_applicable";
   hasChildren: boolean;
+  desireChildren: "yes" | "no" | "open" | "private";
+  familyInvolvementPreference: "active" | "limited" | "optional" | "private";
+  smokingPreference: "no" | "occasionally" | "yes" | "private";
+  alcoholPreference: "no" | "occasionally" | "yes" | "private";
   about: string;
   familyBackground: string;
   lifestyle: string;
+  values: string;
+  importantPrinciples: string;
   profileVisibility: "public" | "members_only" | "hidden";
   photoVisibility: "public" | "mutual_match" | "hidden";
   searchVisible: boolean;
@@ -109,25 +130,39 @@ export async function saveMemberProfile(userId: number, input: ProfileUpdate) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const current = await getProfileByUserId(userId);
+  const next = { ...(current ?? {}), ...input };
+  const completedAt = next.displayName && next.birthDate && next.gender && next.country && next.maritalStatus ? current?.completedAt ?? new Date() : current?.completedAt;
   if (!current) {
-    await db.insert(memberProfiles).values({ userId, ...input });
+    await db.insert(memberProfiles).values({ userId, ...input, completedAt });
   } else {
-    await db.update(memberProfiles).set(input).where(eq(memberProfiles.id, current.id));
+    await db.update(memberProfiles).set({ ...input, completedAt }).where(eq(memberProfiles.id, current.id));
   }
   return getProfileByUserId(userId);
 }
 
 export async function getProfileCompleteness(profileId: number) {
   const db = await getDb();
-  if (!db) return { photoCount: 0, hasPreferences: false };
-  const [photos, preferences] = await Promise.all([
+  if (!db) return { photoCount: 0, hasPreferences: false, completedRecommendedFields: 0, recommendedFieldCount: 8, suggestedNext: [] as string[] };
+  const [photos, preferences, profiles] = await Promise.all([
     db
       .select({ id: profilePhotos.id })
       .from(profilePhotos)
       .where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))),
     db.select({ id: memberPreferences.id }).from(memberPreferences).where(eq(memberPreferences.profileId, profileId)).limit(1),
+    db.select().from(memberProfiles).where(eq(memberProfiles.id, profileId)).limit(1),
   ]);
-  return { photoCount: photos.length, hasPreferences: Boolean(preferences[0]) };
+  const profile = profiles[0];
+  const recommended = [
+    ["About you", profile?.about],
+    ["Marriage intention", profile?.marriageIntent],
+    ["Marriage timeline", profile?.marriageTimeline],
+    ["Education or career", profile?.educationLevel || profile?.profession],
+    ["Location", profile?.country],
+    ["Values", profile?.values],
+    ["Lifestyle", profile?.lifestyle],
+    ["Compatibility preferences", preferences[0]],
+  ];
+  return { photoCount: photos.length, hasPreferences: Boolean(preferences[0]), completedRecommendedFields: recommended.filter(([, value]) => Boolean(value)).length, recommendedFieldCount: recommended.length, suggestedNext: recommended.filter(([, value]) => !value).map(([label]) => label) };
 }
 
 export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
@@ -204,33 +239,12 @@ export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
 export async function getProfileForMember(viewerProfileId: number, targetProfileId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const profile = await db
-    .select({
-      id: memberProfiles.id,
-      displayName: memberProfiles.displayName,
-      birthDate: memberProfiles.birthDate,
-      religion: memberProfiles.religion,
-      practiceLevel: memberProfiles.practiceLevel,
-      ethnicity: memberProfiles.ethnicity,
-      tribe: memberProfiles.tribe,
-      residenceType: memberProfiles.residenceType,
-      country: memberProfiles.country,
-      city: memberProfiles.city,
-      maritalStatus: memberProfiles.maritalStatus,
-      educationLevel: memberProfiles.educationLevel,
-      profession: memberProfiles.profession,
-      marriageTimeline: memberProfiles.marriageTimeline,
-      relocationWillingness: memberProfiles.relocationWillingness,
-      polygynyOpenness: memberProfiles.polygynyOpenness,
-      about: memberProfiles.about,
-      familyBackground: memberProfiles.familyBackground,
-      familyVisibility: memberProfiles.familyVisibility,
-      lifestyle: memberProfiles.lifestyle,
-      photoVisibility: memberProfiles.photoVisibility,
-    })
-    .from(memberProfiles)
-    .where(and(eq(memberProfiles.id, targetProfileId), eq(memberProfiles.profileStatus, "active"), isNull(memberProfiles.deletedAt)))
-    .limit(1);
+  if (viewerProfileId === targetProfileId) return undefined;
+  const viewer = await db.select({ id: memberProfiles.id }).from(memberProfiles).where(and(eq(memberProfiles.id, viewerProfileId), eq(memberProfiles.profileStatus, "active"), isNull(memberProfiles.deletedAt))).limit(1);
+  if (!viewer[0]) return undefined;
+  const blocked = await db.select({ id: blocks.id }).from(blocks).where(or(and(eq(blocks.blockerProfileId, viewerProfileId), eq(blocks.blockedProfileId, targetProfileId)), and(eq(blocks.blockerProfileId, targetProfileId), eq(blocks.blockedProfileId, viewerProfileId)))).limit(1);
+  if (blocked[0]) return undefined;
+  const profile = await db.select().from(memberProfiles).where(and(eq(memberProfiles.id, targetProfileId), eq(memberProfiles.profileStatus, "active"), ne(memberProfiles.profileVisibility, "hidden"), isNull(memberProfiles.deletedAt))).limit(1);
   if (!profile[0]) return undefined;
   const pair = canonicalProfilePair(viewerProfileId, targetProfileId);
   const mutualMatch = await db
@@ -239,11 +253,54 @@ export async function getProfileForMember(viewerProfileId: number, targetProfile
     .where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId), eq(matches.status, "active")))
     .limit(1);
   const hasMutualMatch = Boolean(mutualMatch[0]);
-  const maySeeFamilyBackground = profile[0].familyVisibility === "visible" || (profile[0].familyVisibility === "matches" && hasMutualMatch);
+  const [fieldVisibilities, viewerVerification, targetVerification] = await Promise.all([
+    db.select({ fieldKey: profileFieldVisibilities.fieldKey, audience: profileFieldVisibilities.audience }).from(profileFieldVisibilities).where(eq(profileFieldVisibilities.profileId, targetProfileId)),
+    db.select({ id: verificationRecords.id }).from(verificationRecords).where(and(eq(verificationRecords.profileId, viewerProfileId), eq(verificationRecords.verificationType, "identity_document"), eq(verificationRecords.status, "approved"))).limit(1),
+    db.select({ id: verificationRecords.id }).from(verificationRecords).where(and(eq(verificationRecords.profileId, targetProfileId), eq(verificationRecords.verificationType, "identity_document"), eq(verificationRecords.status, "approved"))).limit(1),
+  ]);
+  const visibility = new Map(fieldVisibilities.map(field => [field.fieldKey, field.audience]));
+  const maySee = (field: string, defaultAudience: "potential_matches" | "private" = "potential_matches") => {
+    const audience = visibility.get(field) ?? defaultAudience;
+    return audience === "public" || audience === "potential_matches" || (audience === "verified_members" && Boolean(viewerVerification[0])) || (audience === "matched_members" && hasMutualMatch);
+  };
+  const maySeeFamilyBackground = (profile[0].familyVisibility === "visible" || (profile[0].familyVisibility === "matches" && hasMutualMatch)) && maySee("familyBackground", "private");
   return {
-    ...profile[0],
-    familyBackground: maySeeFamilyBackground ? profile[0].familyBackground : null,
+    id: profile[0].id,
+    displayName: profile[0].displayName,
+    photoVisibility: profile[0].photoVisibility,
+    residenceType: profile[0].residenceType,
     hasMutualMatch,
+    identityVerified: Boolean(targetVerification[0]),
+    religion: maySee("religion") ? profile[0].religion : null,
+    practiceLevel: maySee("practiceLevel") ? profile[0].practiceLevel : null,
+    ethnicity: maySee("ethnicity", "private") ? profile[0].ethnicity : null,
+    tribe: maySee("tribe", "private") ? profile[0].tribe : null,
+    country: maySee("country") ? profile[0].country : null,
+    region: maySee("region") ? profile[0].region : null,
+    city: maySee("city") ? profile[0].city : null,
+    languages: maySee("languages") ? profile[0].languages : null,
+    maritalStatus: maySee("maritalStatus") ? profile[0].maritalStatus : null,
+    educationLevel: maySee("educationLevel") ? profile[0].educationLevel : null,
+    educationField: maySee("educationField") ? profile[0].educationField : null,
+    profession: maySee("profession") ? profile[0].profession : null,
+    employmentStatus: maySee("employmentStatus") ? profile[0].employmentStatus : null,
+    industry: maySee("industry") ? profile[0].industry : null,
+    about: maySee("about") ? profile[0].about : null,
+    personality: maySee("personality") ? profile[0].personality : null,
+    interests: maySee("interests") ? profile[0].interests : null,
+    hobbies: maySee("hobbies") ? profile[0].hobbies : null,
+    marriageTimeline: maySee("marriageTimeline") ? profile[0].marriageTimeline : null,
+    marriageIntent: maySee("marriageIntent") ? profile[0].marriageIntent : null,
+    marriageExpectations: maySee("marriageExpectations") ? profile[0].marriageExpectations : null,
+    relocationWillingness: maySee("relocationWillingness") ? profile[0].relocationWillingness : null,
+    polygynyOpenness: maySee("polygynyOpenness") ? profile[0].polygynyOpenness : null,
+    hasChildren: maySee("hasChildren") ? profile[0].hasChildren : null,
+    desireChildren: maySee("desireChildren") ? profile[0].desireChildren : null,
+    familyInvolvementPreference: maySee("familyInvolvementPreference") ? profile[0].familyInvolvementPreference : null,
+    lifestyle: maySee("lifestyle") ? profile[0].lifestyle : null,
+    values: maySee("values") ? profile[0].values : null,
+    importantPrinciples: maySee("importantPrinciples") ? profile[0].importantPrinciples : null,
+    familyBackground: maySeeFamilyBackground ? profile[0].familyBackground : null,
   };
 }
 
@@ -262,6 +319,8 @@ export async function createInterest(senderProfileId: number, recipientProfileId
     )
     .limit(1);
   if (blocked[0]) throw new Error("This interaction is unavailable");
+  const recipientProfile = await db.select({ id: memberProfiles.id }).from(memberProfiles).where(and(eq(memberProfiles.id, recipientProfileId), eq(memberProfiles.profileStatus, "active"), eq(memberProfiles.searchVisible, true), ne(memberProfiles.profileVisibility, "hidden"), isNull(memberProfiles.deletedAt))).limit(1);
+  if (!recipientProfile[0]) throw new Error("This introduction is unavailable");
   await db.insert(interestRequests).values({ senderProfileId, recipientProfileId, message: message || null });
   const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, recipientProfileId)).limit(1);
   if (recipient[0]) await createNotification(recipient[0].userId, "interest", "A new introduction request", "Someone would like to be introduced to you.", "/app/matches", `interest:${senderProfileId}:${recipientProfileId}`);

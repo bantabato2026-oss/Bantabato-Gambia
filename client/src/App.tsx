@@ -5,10 +5,13 @@ import { AdminReportCasePage, AdminReportsQueuePage, AdminVerificationCasePage, 
 import Home from "@/pages/Home";
 import { ContactPage, FAQPage, PublicInfoPage, SignInPage } from "@/pages/PublicPages";
 import { MemberProfileDetailPage, MessageThreadPage } from "@/pages/MemberDetailPages";
-import { DiscoveryPage, FamilyPage, MatchesPage, MemberHomePage, MessagesPage, NotificationsPage, OnboardingPage, ProfilePage, SettingsPage } from "@/pages/MemberPages";
+import { FamilyPage, MatchesPage, MemberHomePage, MessagesPage, NotificationsPage, OnboardingPage, ProfilePage, SettingsPage } from "@/pages/MemberPages";
+import CuratedDiscoveryPage from "@/pages/CuratedDiscoveryPage";
 import NotFound from "@/pages/NotFound";
 import ProfileMediaPage from "@/pages/ProfileMediaPage";
 import VerificationCenter from "@/pages/VerificationCenter";
+import CompatibilityPreferencesPage from "@/pages/CompatibilityPreferencesPage";
+import ProfileDetailsPage from "@/pages/ProfileDetailsPage";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -28,9 +31,11 @@ function Router() {
     <Route path="/app" component={MemberHomePage} />
     <Route path="/app/onboarding" component={OnboardingPage} />
     <Route path="/app/profile" component={ProfilePage} />
+    <Route path="/app/profile/details" component={ProfileDetailsPage} />
+    <Route path="/app/compatibility" component={CompatibilityPreferencesPage} />
     <Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
     <Route path="/app/photos" component={ProfileMediaPage} />
-    <Route path="/app/discover" component={DiscoveryPage} />
+    <Route path="/app/discover" component={CuratedDiscoveryPage} />
     <Route path="/app/matches" component={MatchesPage} />
     <Route path="/app/messages" component={MessagesPage} />
     <Route path="/app/messages/:conversationId">{params => <MessageThreadPage conversationId={Number(params.conversationId)} />}</Route>

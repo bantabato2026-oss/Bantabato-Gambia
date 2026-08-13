@@ -22,6 +22,20 @@
       "when": 1786646064031,
       "tag": "0002_small_red_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786647663078,
+      "tag": "0003_good_old_lace",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786648453200,
+      "tag": "0004_cooing_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

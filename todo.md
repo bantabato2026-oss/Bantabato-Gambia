@@ -36,3 +36,17 @@
 - [x] Validate the administrator overview and operational queue interfaces at a mobile breakpoint, documenting and resolving any responsive issues.
 - [x] Add service-layer tests that exercise verification claim and decision transitions with audited safe member outcomes.
 - [x] Add service-layer tests that exercise report claim and resolution transitions with audited controlled actions.
+- [x] Audit the existing member profile, photo, visibility, preference, verification, discovery, and compatibility foundations without duplicating systems.
+- [x] Extend the profile model for optional compatibility-relevant personal, marriage, values, education, career, family, and lifestyle information with explicit field-level visibility.
+- [x] Build configurable compatibility preferences that distinguish hard requirements, preferences, neutral factors, and unimportant factors.
+- [x] Implement a deterministic, configurable, explainable compatibility-dimension engine without percentages, hidden ranking, discriminatory factors, or engagement optimization.
+- [x] Add curated discovery collections and ranking signals based on compatible preferences, verified status, profile completeness, location, active availability, and marriage-first intent.
+- [x] Build premium profile review, compatibility preference, explainability, and deliberate discovery interfaces without swipe or infinite-feed mechanics.
+- [x] Ensure profile presentation respects verified-state data, family and contact privacy, field-level visibility, and existing safety/blocks/mutual-match constraints.
+- [x] Add tests for compatibility dimensions, hard filters, fairness exclusions, visibility, and discovery ordering; validate desktop and mobile member routes.
+- [x] Extend profile, filter, preference, and compatibility support for married members with voluntary polygyny and family-expectation information.
+- [x] Add member controls for children and desire-for-children preferences, including configurable importance levels where applicable.
+- [x] Evaluate desire-for-children preference within the deterministic compatibility engine and cover the married-member and children flows with regression tests.
+- [x] Add married to the existing onboarding marital-status selector and visible curated-discovery marital-status filter.
+- [x] Add explicit regression coverage for the has-children compatibility preference dimension.
+- [x] Save the final Phase 3 checkpoint and report completed work, privacy/fairness controls, tests, limitations, and the next recommended phase.

@@ -1,0 +1,1 @@
+ALTER TABLE `member_profiles` MODIFY COLUMN `maritalStatus` enum('never_married','married','divorced','widowed');

@@ -30,6 +30,7 @@ export const memberProfiles = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    firstName: varchar("firstName", { length: 80 }),
     displayName: varchar("displayName", { length: 80 }),
     profileStatus: mysqlEnum("profileStatus", ["draft", "under_review", "active", "paused", "suspended"])
       .default("draft")
@@ -42,17 +43,36 @@ export const memberProfiles = mysqlTable(
     tribe: varchar("tribe", { length: 100 }),
     residenceType: mysqlEnum("residenceType", ["gambia", "diaspora"]).default("gambia").notNull(),
     country: varchar("country", { length: 100 }),
+    region: varchar("region", { length: 100 }),
     city: varchar("city", { length: 100 }),
-    maritalStatus: mysqlEnum("maritalStatus", ["never_married", "divorced", "widowed"]),
+    nationality: varchar("nationality", { length: 100 }),
+    languages: json("languages"),
+    maritalStatus: mysqlEnum("maritalStatus", ["never_married", "married", "divorced", "widowed"]),
     educationLevel: varchar("educationLevel", { length: 100 }),
+    educationField: varchar("educationField", { length: 120 }),
+    educationInstitution: varchar("educationInstitution", { length: 160 }),
     profession: varchar("profession", { length: 160 }),
+    employmentStatus: mysqlEnum("employmentStatus", ["employed", "self_employed", "student", "seeking_work", "retired", "prefer_not_to_say"]),
+    industry: varchar("industry", { length: 120 }),
+    personality: text("personality"),
+    interests: json("interests"),
+    hobbies: json("hobbies"),
     marriageTimeline: varchar("marriageTimeline", { length: 100 }),
+    marriageIntent: varchar("marriageIntent", { length: 255 }),
+    marriageExpectations: text("marriageExpectations"),
+    reasonSeekingMarriage: text("reasonSeekingMarriage"),
     relocationWillingness: mysqlEnum("relocationWillingness", ["open", "within_gambia", "not_open", "discuss"]),
     polygynyOpenness: mysqlEnum("polygynyOpenness", ["open", "not_open", "discuss", "not_applicable"]),
     hasChildren: boolean("hasChildren").default(false).notNull(),
+    desireChildren: mysqlEnum("desireChildren", ["yes", "no", "open", "private"]),
+    familyInvolvementPreference: mysqlEnum("familyInvolvementPreference", ["active", "limited", "optional", "private"]),
+    smokingPreference: mysqlEnum("smokingPreference", ["no", "occasionally", "yes", "private"]),
+    alcoholPreference: mysqlEnum("alcoholPreference", ["no", "occasionally", "yes", "private"]),
     about: text("about"),
     familyBackground: text("familyBackground"),
     lifestyle: text("lifestyle"),
+    values: text("values"),
+    importantPrinciples: text("importantPrinciples"),
     profileVisibility: mysqlEnum("profileVisibility", ["public", "members_only", "hidden"])
       .default("members_only")
       .notNull(),
@@ -83,15 +103,44 @@ export const memberPreferences = mysqlTable(
     minAge: int("minAge"),
     maxAge: int("maxAge"),
     preferredReligions: json("preferredReligions"),
+    preferredGenders: json("preferredGenders"),
     preferredLocations: json("preferredLocations"),
+    preferredMaritalStatuses: json("preferredMaritalStatuses"),
+    childrenPreference: mysqlEnum("childrenPreference", ["open", "prefer_no_children", "open_to_children", "not_important"]),
+    desiredChildrenPreference: mysqlEnum("desiredChildrenPreference", ["yes", "no", "open", "not_important"]),
+    preferredRelocation: json("preferredRelocation"),
     preferredTribes: json("preferredTribes"),
     preferredEducationLevels: json("preferredEducationLevels"),
+    preferredMarriageTimelines: json("preferredMarriageTimelines"),
+    preferredPolygynyOpenness: json("preferredPolygynyOpenness"),
+    preferredFamilyInvolvement: json("preferredFamilyInvolvement"),
+    lifestylePreferences: json("lifestylePreferences"),
+    preferenceImportance: json("preferenceImportance"),
     marriageIntent: text("marriageIntent"),
     mustHaves: text("mustHaves"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [uniqueIndex("member_preferences_profile_unique").on(table.profileId)],
+);
+
+/** Per-field profile audiences; absent rows use the privacy-preserving service defaults. */
+export const profileFieldVisibilities = mysqlTable(
+  "profile_field_visibilities",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    fieldKey: varchar("fieldKey", { length: 80 }).notNull(),
+    audience: mysqlEnum("audience", ["public", "verified_members", "potential_matches", "matched_members", "family_circle", "private", "admin_restricted"])
+      .default("potential_matches")
+      .notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    uniqueIndex("profile_field_visibility_unique").on(table.profileId, table.fieldKey),
+    index("profile_field_visibility_lookup_idx").on(table.profileId, table.audience),
+  ],
 );
 
 export const profilePhotos = mysqlTable(
