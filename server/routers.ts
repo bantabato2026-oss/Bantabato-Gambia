@@ -35,6 +35,7 @@ import { FAMILY_PERMISSIONS, acceptFamilyInvitation, createFamilyInvitation, dec
 import { blockConversationMember, deleteOwnVoiceNote, getConversationPrompts, getVoiceNoteUrl, listConversations, listMessages, reportMessage, sendText, setConversationModerationState, setConversationPreference, setConversationState, uploadVoiceNote } from "./messagingService";
 import { addConnectionReviewNote, claimConnectionReviewCase, decideConnectionReview, escalateConnectionReviewCase, flagConnectionIntegrityConcern, getConnectionReviewCase, getReadinessForMember, grantConnectionConsent, listConnectionReviewQueue, revokeConnectionForConversation, revokeConnectionForProfilePair, revokeConnectionsForProfile, revokeHardIncompatibleConnectionsForProfile, withdrawConnectionConsent } from "./readinessService";
 import { getRecommendationExplanation, getRecommendationSettings, getRecommendationsForMember, listRecommendationPolicies, recordRecommendationInterest, saveRecommendationPolicy, saveRecommendationSettings, submitRecommendationFeedback, withdrawRecommendationsForProfile, withdrawRecommendationsForProfilePair } from "./recommendationService";
+import { cancelSubscriptionRenewal, getMemberBilling, hasEntitlement, initiatePayment, listBillingConfiguration, listFinanceTransactions, listMembershipOptions, listReconciliationQueue, requestRefund, saveBillingPlanConfiguration, saveMemberBillingSettings, savePaymentProviderAvailability } from "./billingService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -171,6 +172,14 @@ export const appRouter = router({
 	    saveSettings: protectedProcedure.input(z.object({ recommendationsEnabled: z.boolean(), showVerifiedCategory: z.boolean(), showNearbyCategory: z.boolean(), showRecentCategory: z.boolean() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); return saveRecommendationSettings(profile.id, ctx.user.id, input); }),
 	    startInterest: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), message: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId); await createInterest(profile.id, recommendation.candidateProfileId, input.message); return { success: true }; }),
 	  }),
+	  billing: router({
+	    options: protectedProcedure.input(z.object({ currency: z.string().trim().length(3).optional() }).optional()).query(async ({ input }) => listMembershipOptions(input?.currency ?? "GMD")),
+	    summary: protectedProcedure.query(async ({ ctx }) => getMemberBilling((await requireProfile(ctx.user.id)).id)),
+	    saveSettings: protectedProcedure.input(z.object({ preferredCurrency: z.string().trim().length(3), receiptEmail: z.string().email().optional().nullable() })).mutation(async ({ ctx, input }) => saveMemberBillingSettings((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
+	    initiate: protectedProcedure.input(z.object({ membershipPriceId: z.number().int().positive(), provider: z.string().trim().min(2).max(80), idempotencyKey: z.string().trim().min(16).max(96), acknowledgedTerms: z.literal(true), returnUrl: z.string().url().max(500).optional() })).mutation(async ({ ctx, input }) => initiatePayment((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
+	    cancelRenewal: protectedProcedure.input(z.object({ subscriptionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => cancelSubscriptionRenewal((await requireProfile(ctx.user.id)).id, ctx.user.id, input.subscriptionId)),
+	    entitlement: protectedProcedure.input(z.object({ entitlementKey: z.enum(["advanced_discovery", "expanded_discovery_controls", "profile_visibility_controls", "enhanced_recommendation_controls", "profile_management_convenience"]) })).query(async ({ ctx, input }) => ({ active: await hasEntitlement((await requireProfile(ctx.user.id)).id, input.entitlementKey) })),
+	  }),
   matches: router({
     list: protectedProcedure.query(async ({ ctx }) => getMatchesForProfile((await requireProfile(ctx.user.id)).id)),
   }),
@@ -221,7 +230,7 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => getNotificationsForUser(ctx.user.id)),
     read: protectedProcedure.input(z.object({ notificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => markNotificationRead(ctx.user.id, input.notificationId)),
   }),
-  admin: router({
+	  admin: router({
     overview: protectedProcedure.query(async ({ ctx }) => {
       const scopes = await requireOperationalAccess(ctx.user, ["verification_reviewer", "trust_safety", "support_agent", "subscription_manager", "platform_admin"]);
       return getScopedAdminOverview(scopes);
@@ -310,6 +319,12 @@ export const appRouter = router({
 	    }),
 	    recommendationPolicies: protectedProcedure.query(async ({ ctx }) => { await requireOperationalAccess(ctx.user, ["platform_admin"]); return listRecommendationPolicies(); }),
 	    saveRecommendationPolicy: protectedProcedure.input(z.object({ policyVersion: z.string().trim().min(3).max(64), categories: z.array(z.enum(["recommended_for_you", "strong_compatibility", "nearby_potential_matches", "similar_marriage_goals", "recently_joined", "verified_members", "worth_exploring"])).min(1).max(7), weights: z.object({ compatibility: z.number().min(0).max(10), verification: z.number().min(0).max(5), completeness: z.number().min(0).max(5), recency: z.number().min(0).max(3) }), requireDiscoveryEligibility: z.boolean(), excludeIntegrityHeld: z.boolean(), maxPerLocationGroup: z.number().int().min(1).max(5), activate: z.boolean() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["platform_admin"]); return saveRecommendationPolicy(ctx.user.id, input, input.activate); }),
+	    paymentTransactions: protectedProcedure.query(async ({ ctx }) => { await requireOperationalAccess(ctx.user, ["subscription_manager", "platform_admin"]); return listFinanceTransactions(); }),
+	    paymentReconciliationQueue: protectedProcedure.query(async ({ ctx }) => { await requireOperationalAccess(ctx.user, ["subscription_manager", "platform_admin"]); return listReconciliationQueue(); }),
+	    requestPaymentRefund: protectedProcedure.input(z.object({ transactionId: z.number().int().positive(), amountMinor: z.number().int().positive(), reason: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["subscription_manager", "platform_admin"]); return requestRefund(ctx.user.id, input.transactionId, input.amountMinor, input.reason); }),
+	    billingConfiguration: protectedProcedure.query(async ({ ctx }) => { await requireOperationalAccess(ctx.user, ["subscription_manager", "platform_admin"]); return listBillingConfiguration(); }),
+	    saveBillingPlan: protectedProcedure.input(z.object({ planCode: z.string().trim().min(3).max(64), displayName: z.string().trim().min(3).max(120), description: z.string().trim().max(1200).optional(), versionCode: z.string().trim().min(3).max(80), featureKeys: z.array(z.enum(["advanced_discovery", "expanded_discovery_controls", "profile_visibility_controls", "enhanced_recommendation_controls", "profile_management_convenience"])).min(1).max(5), renewalTerms: z.string().trim().max(1200).optional(), gracePeriodDays: z.number().int().min(0).max(60), graceEntitlementsActive: z.boolean(), cancelAtPeriodEndAllowed: z.boolean(), currency: z.string().trim().length(3), amountMinor: z.number().int().min(0).max(100_000_000), taxMinor: z.number().int().min(0).max(100_000_000), billingInterval: z.enum(["monthly", "quarterly", "annual", "one_time"]), provider: z.string().trim().max(80).optional().nullable(), providerPriceReference: z.string().trim().max(255).optional().nullable(), activate: z.boolean() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["subscription_manager", "platform_admin"]); return saveBillingPlanConfiguration(ctx.user.id, input); }),
+	    savePaymentProviderAvailability: protectedProcedure.input(z.object({ provider: z.string().trim().min(2).max(80), enabled: z.boolean(), supportedCurrencies: z.array(z.string().trim().length(3)).max(12), supportedMethods: z.array(z.string().trim().min(1).max(80)).max(12), configurationNote: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["subscription_manager", "platform_admin"]); return savePaymentProviderAvailability(ctx.user.id, input); }),
 	  }),
 });
 

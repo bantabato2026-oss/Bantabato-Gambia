@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bell, Camera, ChevronRight, CircleUserRound, Compass, HeartHandshake, Home, Lightbulb, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
+import { Bell, Camera, ChevronRight, CircleUserRound, Compass, CreditCard, HeartHandshake, Home, Lightbulb, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 
@@ -20,6 +20,7 @@ const secondaryLinks = [
   { label: "Compatibility", href: "/app/compatibility", icon: SlidersHorizontal },
   { label: "Profile photos", href: "/app/photos", icon: Camera },
   { label: "Family circle", href: "/app/family", icon: UsersRound },
+	  { label: "Membership & billing", href: "/app/billing", icon: CreditCard },
   { label: "Verification", href: "/app/verification", icon: ShieldCheck },
   { label: "Settings", href: "/app/settings", icon: Settings },
 ];

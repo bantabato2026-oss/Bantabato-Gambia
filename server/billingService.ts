@@ -1,0 +1,270 @@
+import { and, asc, desc, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { nanoid } from "nanoid";
+import { memberBillingSettings, memberProfiles, membershipPlans, membershipPlanVersions, membershipPrices, paymentProviderConfigurations, paymentReconciliations, paymentRefunds, paymentTransactions, paymentWebhookEvents, subscriptionEntitlements, subscriptions } from "../drizzle/schema";
+import { createAuditLog, createNotification, getDb } from "./db";
+import { assertPaymentTransition, entitlementIsActive, normalizeCurrency, safeBillingSummary, safePaymentFailureMessage, subscriptionStatusAfterPaymentFailure, type EntitlementKey, type PaymentStatus, type SubscriptionStatus } from "./domain/paymentPolicy";
+import { getPaymentProvider, payloadHash, requireConfiguredProvider } from "./paymentProvider";
+
+export const PAYMENT_PROVIDERS = ["paystack", "flutterwave"] as const;
+export type PaymentProviderKey = (typeof PAYMENT_PROVIDERS)[number] | string;
+
+async function profileUser(profileId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).limit(1);
+  return rows[0]?.userId ?? null;
+}
+
+async function activePlanVersion(db: any, membershipPriceId: number) {
+  const price = await db.select().from(membershipPrices).where(eq(membershipPrices.id, membershipPriceId)).limit(1);
+  if (!price[0] || price[0].status !== "active") throw new Error("This membership price is not available.");
+  const version = await db.select().from(membershipPlanVersions).where(eq(membershipPlanVersions.id, price[0].membershipPlanVersionId)).limit(1);
+  if (!version[0] || version[0].status !== "active") throw new Error("This membership version is not available.");
+  const plan = await db.select().from(membershipPlans).where(eq(membershipPlans.id, version[0].membershipPlanId)).limit(1);
+  if (!plan[0] || plan[0].status !== "active") throw new Error("This membership plan is not available.");
+  return { price: price[0], version: version[0], plan: plan[0] };
+}
+
+export async function listMembershipOptions(currency = "GMD") {
+  const db = await getDb();
+  if (!db) return [];
+  const normalizedCurrency = normalizeCurrency(currency);
+  const plans = await db.select().from(membershipPlans).where(eq(membershipPlans.status, "active")).orderBy(asc(membershipPlans.displayName));
+  const versions = await db.select().from(membershipPlanVersions).where(eq(membershipPlanVersions.status, "active"));
+  const planIds = new Set(plans.map(plan => plan.id));
+  const activeVersions = versions.filter(version => planIds.has(version.membershipPlanId));
+  const versionIds = activeVersions.map(version => version.id);
+  const prices = versionIds.length ? await db.select().from(membershipPrices).where(and(inArray(membershipPrices.membershipPlanVersionId, versionIds), eq(membershipPrices.currency, normalizedCurrency), eq(membershipPrices.status, "active"))) : [];
+  return plans.flatMap(plan => activeVersions.filter(version => version.membershipPlanId === plan.id).flatMap(version => prices.filter(price => price.membershipPlanVersionId === version.id).map(price => ({ plan: { code: plan.code, displayName: plan.displayName, membershipLevel: plan.membershipLevel, description: plan.description }, version: { id: version.id, versionCode: version.versionCode, featureKeys: version.featureKeys, renewalTerms: version.renewalTerms, cancelAtPeriodEndAllowed: version.cancelAtPeriodEndAllowed }, price: { id: price.id, amountMinor: price.amountMinor, taxMinor: price.taxMinor, currency: price.currency, billingInterval: price.billingInterval, provider: price.provider } }))));
+}
+
+export async function getMemberBilling(profileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const [settings, subscriptionsForProfile, transactions] = await Promise.all([
+    db.select().from(memberBillingSettings).where(eq(memberBillingSettings.profileId, profileId)).limit(1),
+    db.select().from(subscriptions).where(eq(subscriptions.profileId, profileId)).orderBy(desc(subscriptions.createdAt)).limit(20),
+    db.select().from(paymentTransactions).where(eq(paymentTransactions.profileId, profileId)).orderBy(desc(paymentTransactions.createdAt)).limit(50),
+  ]);
+  const active = subscriptionsForProfile.find((subscription: any) => ["trial", "active", "past_due", "grace_period"].includes(subscription.status)) ?? null;
+  return {
+    membership: active ? { subscriptionId: active.id, level: active.plan === "premium" ? "premium" : "free", status: active.status, currentPeriodEndsAt: active.currentPeriodEndsAt, gracePeriodEndsAt: active.gracePeriodEndsAt, cancelAtPeriodEnd: active.cancelAtPeriodEnd, autoRenew: active.autoRenew } : { subscriptionId: null, level: "free", status: "active", currentPeriodEndsAt: null, gracePeriodEndsAt: null, cancelAtPeriodEnd: false, autoRenew: false },
+    billingSettings: settings[0] ?? { preferredCurrency: "GMD", receiptEmail: null },
+    transactions: transactions.map((transaction: any) => safeBillingSummary(transaction)),
+  };
+}
+
+export async function saveMemberBillingSettings(profileId: number, actorUserId: number, input: { preferredCurrency: string; receiptEmail?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const preferredCurrency = normalizeCurrency(input.preferredCurrency);
+  const receiptEmail = input.receiptEmail?.trim() || null;
+  await db.insert(memberBillingSettings).values({ profileId, preferredCurrency, receiptEmail }).onDuplicateKeyUpdate({ set: { preferredCurrency, receiptEmail } });
+  await createAuditLog(actorUserId, "billing.settings_updated", "member_billing_settings", String(profileId), { preferredCurrency, receiptEmailConfigured: Boolean(receiptEmail) });
+  return { preferredCurrency, receiptEmail };
+}
+
+/** Creates only a server-side pending transaction. No entitlement exists until a provider result is independently verified. */
+export async function initiatePayment(profileId: number, actorUserId: number, input: { membershipPriceId: number; provider: PaymentProviderKey; idempotencyKey: string; acknowledgedTerms: boolean; returnUrl?: string }) {
+  if (!input.acknowledgedTerms) throw new Error("Please confirm the plan, price, renewal, and cancellation terms before continuing.");
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const existing = await db.select().from(paymentTransactions).where(eq(paymentTransactions.idempotencyKey, input.idempotencyKey)).limit(1);
+  if (existing[0]) return { transaction: safeBillingSummary(existing[0]), redirectUrl: undefined, providerAvailable: Boolean(getPaymentProvider(existing[0].provider)) };
+  const { price, version, plan } = await activePlanVersion(db, input.membershipPriceId);
+  if (plan.membershipLevel !== "premium") throw new Error("This plan is not available for checkout.");
+  const providerConfig = await db.select().from(paymentProviderConfigurations).where(and(eq(paymentProviderConfigurations.provider, input.provider), eq(paymentProviderConfigurations.enabled, true))).limit(1);
+  const internalReference = `bnt_${nanoid(20)}`;
+  const inserted = await db.insert(paymentTransactions).values({ profileId, membershipPriceId: price.id, provider: input.provider, internalReference, idempotencyKey: input.idempotencyKey, transactionType: "initial", status: "created", amountMinor: price.amountMinor, currency: price.currency, taxMinor: price.taxMinor }).$returningId();
+  const transactionId = Number(inserted[0]?.id ?? 0);
+  await createAuditLog(actorUserId, "billing.payment_initiated", "payment_transaction", String(transactionId), { provider: input.provider, membershipPriceId: price.id, currency: price.currency, amountMinor: price.amountMinor, planVersion: version.versionCode });
+  const adapter = getPaymentProvider(input.provider);
+  if (!providerConfig[0] || !adapter) return { transaction: { amountMinor: price.amountMinor, currency: price.currency, status: "created" as const, reference: internalReference, createdAt: new Date(), completedAt: null }, redirectUrl: undefined, providerAvailable: false, message: "This payment method is not configured for live payments yet. No charge or Premium entitlement has been created." };
+  const providerResult = await adapter.createPayment({ amountMinor: price.amountMinor, currency: price.currency, internalReference, returnUrl: input.returnUrl });
+  assertPaymentTransition("created", providerResult.status);
+  await db.update(paymentTransactions).set({ providerTransactionId: providerResult.providerTransactionId, status: providerResult.status, failureCode: providerResult.failureCode ?? null, failureMessage: providerResult.failureMessage ?? null }).where(eq(paymentTransactions.id, transactionId));
+  return { transaction: { amountMinor: price.amountMinor, currency: price.currency, status: providerResult.status, reference: internalReference, createdAt: new Date(), completedAt: null }, redirectUrl: providerResult.redirectUrl, providerAvailable: true };
+}
+
+async function activateTransaction(db: any, transaction: any, actorUserId: number | null, providerTransactionId?: string, completedAt = new Date()) {
+  if (transaction.status === "successful") return { alreadyProcessed: true, subscriptionId: transaction.subscriptionId };
+  assertPaymentTransition(transaction.status, "successful");
+  const { price, version, plan } = await activePlanVersion(db, transaction.membershipPriceId);
+  const existing = await db.select().from(subscriptions).where(and(eq(subscriptions.profileId, transaction.profileId), eq(subscriptions.membershipPlanVersionId, version.id), inArray(subscriptions.status, ["active", "trial", "past_due", "grace_period"]))).limit(1);
+  const periodEnd = new Date(completedAt.getTime() + intervalMilliseconds(price.billingInterval));
+  const subscriptionId = existing[0]?.id ?? Number((await db.insert(subscriptions).values({ profileId: transaction.profileId, membershipPlanVersionId: version.id, plan: plan.membershipLevel === "premium" ? "premium" : "free", status: "active", provider: transaction.provider, startsAt: completedAt, endsAt: periodEnd, currentPeriodStartsAt: completedAt, currentPeriodEndsAt: periodEnd, autoRenew: true }).$returningId())[0]?.id ?? 0);
+  if (existing[0]) await db.update(subscriptions).set({ status: "active", currentPeriodStartsAt: completedAt, currentPeriodEndsAt: periodEnd, endsAt: periodEnd, gracePeriodEndsAt: null, autoRenew: true, cancelAtPeriodEnd: false }).where(eq(subscriptions.id, subscriptionId));
+  const featureKeys = Array.isArray(version.featureKeys) ? version.featureKeys.filter((value: unknown): value is EntitlementKey => typeof value === "string" && ["advanced_discovery", "expanded_discovery_controls", "profile_visibility_controls", "enhanced_recommendation_controls", "profile_management_convenience"].includes(value)) : [];
+  for (const entitlementKey of featureKeys) await db.insert(subscriptionEntitlements).values({ subscriptionId, entitlementKey, status: "active", startsAt: completedAt, endsAt: periodEnd }).onDuplicateKeyUpdate({ set: { status: "active", startsAt: completedAt, endsAt: periodEnd, revokedAt: null } });
+  await db.update(paymentTransactions).set({ subscriptionId, providerTransactionId: providerTransactionId ?? transaction.providerTransactionId, status: "successful", completedAt, providerVerifiedAt: completedAt, failureCode: null, failureMessage: null }).where(eq(paymentTransactions.id, transaction.id));
+  const userId = transaction.profileId ? await profileUser(transaction.profileId) : null;
+  if (userId) await createNotification(userId, "billing", "Premium membership activated", "Your payment was confirmed securely and your available membership conveniences are now active. Safety, privacy, matching, and consent rules are unchanged.", "/app/billing", `billing-activated:${transaction.id}`);
+  await createAuditLog(actorUserId, "billing.payment_confirmed", "payment_transaction", String(transaction.id), { subscriptionId, provider: transaction.provider, currency: transaction.currency, amountMinor: transaction.amountMinor });
+  await createAuditLog(actorUserId, "billing.entitlements_granted", "subscription", String(subscriptionId), { entitlementCount: featureKeys.length, planVersion: version.versionCode });
+  return { alreadyProcessed: false, subscriptionId };
+}
+
+/** A redirect is never authoritative: a configured provider adapter must independently verify a reference first. */
+export async function verifyPaymentServerSide(actorUserId: number | null, transactionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const transaction = await db.select().from(paymentTransactions).where(eq(paymentTransactions.id, transactionId)).limit(1);
+  if (!transaction[0]) throw new Error("Payment transaction not found.");
+  if (transaction[0].status === "successful") return activateTransaction(db, transaction[0], actorUserId);
+  if (!transaction[0].providerTransactionId) throw new Error("This payment has not been confirmed by a provider.");
+  const provider = requireConfiguredProvider(transaction[0].provider);
+  const result = await provider.verifyPayment({ providerTransactionId: transaction[0].providerTransactionId });
+  if (result.status !== "successful") return markPaymentFailed(db, transaction[0], result.failureCode, result.failureMessage, actorUserId);
+  return activateTransaction(db, transaction[0], actorUserId, result.providerTransactionId, result.completedAt ?? new Date());
+}
+
+async function markPaymentFailed(db: any, transaction: any, failureCode?: string, failureMessage?: string, actorUserId: number | null = null) {
+  if (!["created", "pending", "processing"].includes(transaction.status)) return { status: transaction.status };
+  assertPaymentTransition(transaction.status, "failed");
+  await db.update(paymentTransactions).set({ status: "failed", failureCode: failureCode ?? null, failureMessage: failureMessage ?? safePaymentFailureMessage() }).where(eq(paymentTransactions.id, transaction.id));
+  if (transaction.subscriptionId) {
+    const subscription = await db.select().from(subscriptions).where(eq(subscriptions.id, transaction.subscriptionId)).limit(1);
+    if (subscription[0]) {
+      const version = subscription[0].membershipPlanVersionId ? await db.select().from(membershipPlanVersions).where(eq(membershipPlanVersions.id, subscription[0].membershipPlanVersionId)).limit(1) : [];
+      const next = subscriptionStatusAfterPaymentFailure(new Date(), version[0]?.gracePeriodDays ?? 0);
+      await db.update(subscriptions).set({ status: next.status, gracePeriodEndsAt: next.gracePeriodEndsAt }).where(eq(subscriptions.id, subscription[0].id));
+    }
+  }
+  const userId = transaction.profileId ? await profileUser(transaction.profileId) : null;
+  if (userId) await createNotification(userId, "billing", "Payment needs attention", safePaymentFailureMessage(), "/app/billing", `billing-failed:${transaction.id}`);
+  await createAuditLog(actorUserId, "billing.payment_failed", "payment_transaction", String(transaction.id), { provider: transaction.provider, failureCode: failureCode ?? null });
+  return { status: "failed" as const };
+}
+
+export async function processProviderWebhook(input: { provider: string; rawPayload: string; signature?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const provider = requireConfiguredProvider(input.provider);
+  const event = await provider.verifyWebhook({ rawPayload: input.rawPayload, signature: input.signature });
+  const existing = await db.select().from(paymentWebhookEvents).where(and(eq(paymentWebhookEvents.provider, input.provider), eq(paymentWebhookEvents.providerEventId, event.providerEventId))).limit(1);
+  if (existing[0]) return { duplicate: true, processed: existing[0].status === "processed" };
+  if (!event.valid) {
+    await db.insert(paymentWebhookEvents).values({ provider: input.provider, providerEventId: event.providerEventId, eventType: event.eventType, payloadHash: event.payloadHash || payloadHash(input.rawPayload), signatureValid: false, status: "rejected" });
+    await createAuditLog(null, "billing.webhook_rejected", "payment_webhook", event.providerEventId, { provider: input.provider, eventType: event.eventType });
+    throw new Error("Payment webhook signature could not be verified.");
+  }
+  const transaction = event.providerTransactionId ? await db.select().from(paymentTransactions).where(and(eq(paymentTransactions.provider, input.provider), eq(paymentTransactions.providerTransactionId, event.providerTransactionId))).limit(1) : [];
+  const inserted = await db.insert(paymentWebhookEvents).values({ provider: input.provider, providerEventId: event.providerEventId, eventType: event.eventType, payloadHash: event.payloadHash || payloadHash(input.rawPayload), signatureValid: true, status: "verified", paymentTransactionId: transaction[0]?.id ?? null }).$returningId();
+  const webhookId = Number(inserted[0]?.id ?? 0);
+  if (!transaction[0] || !event.status) { await db.update(paymentWebhookEvents).set({ status: "failed" }).where(eq(paymentWebhookEvents.id, webhookId)); return { duplicate: false, processed: false, reason: "transaction_not_found" }; }
+  if (event.status === "successful") await activateTransaction(db, transaction[0], null, event.providerTransactionId, event.completedAt ?? new Date());
+  else if (["failed", "cancelled", "expired"].includes(event.status)) await markPaymentFailed(db, transaction[0], undefined, undefined, null);
+  await db.update(paymentWebhookEvents).set({ status: "processed", processedAt: new Date() }).where(eq(paymentWebhookEvents.id, webhookId));
+  await createAuditLog(null, "billing.webhook_processed", "payment_webhook", event.providerEventId, { provider: input.provider, transactionId: transaction[0].id, status: event.status });
+  return { duplicate: false, processed: true };
+}
+
+export async function hasEntitlement(profileId: number, entitlementKey: EntitlementKey, now = new Date()) {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db.select({ entitlementStatus: subscriptionEntitlements.status, startsAt: subscriptionEntitlements.startsAt, endsAt: subscriptionEntitlements.endsAt, subscriptionStatus: subscriptions.status, graceEntitlementsActive: membershipPlanVersions.graceEntitlementsActive }).from(subscriptionEntitlements).innerJoin(subscriptions, eq(subscriptionEntitlements.subscriptionId, subscriptions.id)).innerJoin(membershipPlanVersions, eq(subscriptions.membershipPlanVersionId, membershipPlanVersions.id)).where(and(eq(subscriptions.profileId, profileId), eq(subscriptionEntitlements.entitlementKey, entitlementKey)));
+  return rows.some((row: any) => entitlementIsActive({ subscriptionStatus: row.subscriptionStatus, entitlementStatus: row.entitlementStatus, startsAt: row.startsAt, endsAt: row.endsAt, graceEntitlementsActive: row.graceEntitlementsActive, now }));
+}
+
+export async function cancelSubscriptionRenewal(profileId: number, actorUserId: number, subscriptionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const record = await db.select().from(subscriptions).where(and(eq(subscriptions.id, subscriptionId), eq(subscriptions.profileId, profileId))).limit(1);
+  if (!record[0]) throw new Error("Subscription not found.");
+  if (!["active", "trial", "past_due", "grace_period"].includes(record[0].status)) throw new Error("This subscription is not eligible for renewal cancellation.");
+  await db.update(subscriptions).set({ cancelAtPeriodEnd: true, autoRenew: false, cancelledAt: new Date() }).where(eq(subscriptions.id, subscriptionId));
+  await createAuditLog(actorUserId, "billing.renewal_cancelled", "subscription", String(subscriptionId), { cancelAtPeriodEnd: true });
+  return { cancelAtPeriodEnd: true, currentPeriodEndsAt: record[0].currentPeriodEndsAt };
+}
+
+export async function expireDueSubscriptions(now = new Date()) {
+  const db = await getDb();
+  if (!db) return { expired: 0 };
+  const due = await db.select().from(subscriptions).where(or(and(eq(subscriptions.status, "grace_period"), lte(subscriptions.gracePeriodEndsAt, now)), and(eq(subscriptions.cancelAtPeriodEnd, true), lte(subscriptions.currentPeriodEndsAt, now))));
+  for (const subscription of due) {
+    await db.update(subscriptions).set({ status: "expired", endedAt: now }).where(eq(subscriptions.id, subscription.id));
+    await db.update(subscriptionEntitlements).set({ status: "expired", revokedAt: now }).where(and(eq(subscriptionEntitlements.subscriptionId, subscription.id), eq(subscriptionEntitlements.status, "active")));
+    const userId = subscription.profileId ? await profileUser(subscription.profileId) : null;
+    if (userId) await createNotification(userId, "billing", "Membership conveniences ended", "Your membership conveniences have ended. Your profile, safety protections, and existing account data remain available under the usual rules.", "/app/billing", `billing-expired:${subscription.id}:${now.getTime()}`);
+    await createAuditLog(null, "billing.subscription_expired", "subscription", String(subscription.id), {});
+  }
+  return { expired: due.length };
+}
+
+export async function requestRefund(actorUserId: number, transactionId: number, amountMinor: number, reason?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const transaction = await db.select().from(paymentTransactions).where(eq(paymentTransactions.id, transactionId)).limit(1);
+  if (!transaction[0] || !["successful", "partially_refunded"].includes(transaction[0].status)) throw new Error("Only confirmed payments can enter the refund workflow.");
+  if (!Number.isInteger(amountMinor) || amountMinor <= 0 || amountMinor > transaction[0].amountMinor) throw new Error("Refund amount must be within the confirmed payment amount.");
+  const refunded = await db.select({ amountMinor: paymentRefunds.amountMinor, status: paymentRefunds.status }).from(paymentRefunds).where(eq(paymentRefunds.paymentTransactionId, transactionId));
+  const alreadyRefunded = refunded.filter((row: any) => ["requested", "processing", "succeeded"].includes(row.status)).reduce((sum: number, row: any) => sum + row.amountMinor, 0);
+  if (alreadyRefunded + amountMinor > transaction[0].amountMinor) throw new Error("Refunds cannot exceed the confirmed payment amount.");
+  const inserted = await db.insert(paymentRefunds).values({ paymentTransactionId: transactionId, amountMinor, reason: reason?.trim() || null, requestedByUserId: actorUserId, status: "requested" }).$returningId();
+  const refundId = Number(inserted[0]?.id ?? 0);
+  await db.update(paymentTransactions).set({ status: alreadyRefunded + amountMinor === transaction[0].amountMinor ? "refunded" : "partially_refunded" }).where(eq(paymentTransactions.id, transactionId));
+  await createAuditLog(actorUserId, "billing.refund_requested", "payment_refund", String(refundId), { transactionId, amountMinor });
+  return { refundId, status: "requested" as const };
+}
+
+export async function listFinanceTransactions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: paymentTransactions.id, provider: paymentTransactions.provider, internalReference: paymentTransactions.internalReference, status: paymentTransactions.status, amountMinor: paymentTransactions.amountMinor, currency: paymentTransactions.currency, createdAt: paymentTransactions.createdAt, completedAt: paymentTransactions.completedAt, profileId: paymentTransactions.profileId, providerTransactionId: paymentTransactions.providerTransactionId }).from(paymentTransactions).orderBy(desc(paymentTransactions.createdAt)).limit(100);
+}
+
+export async function listReconciliationQueue() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(paymentReconciliations).where(inArray(paymentReconciliations.status, ["open", "needs_review"])).orderBy(asc(paymentReconciliations.createdAt)).limit(100);
+}
+
+export async function listBillingConfiguration() {
+  const db = await getDb();
+  if (!db) return { plans: [], providers: [] };
+  const [plans, versions, prices, providers] = await Promise.all([db.select().from(membershipPlans).orderBy(asc(membershipPlans.code)), db.select().from(membershipPlanVersions).orderBy(desc(membershipPlanVersions.createdAt)), db.select().from(membershipPrices).orderBy(desc(membershipPrices.createdAt)), db.select().from(paymentProviderConfigurations).orderBy(asc(paymentProviderConfigurations.provider))]);
+  return { plans: plans.map((plan: any) => ({ ...plan, versions: versions.filter((version: any) => version.membershipPlanId === plan.id).map((version: any) => ({ ...version, prices: prices.filter((price: any) => price.membershipPlanVersionId === version.id) })) })), providers };
+}
+
+/** Finance-scoped configuration creates a new version and price rather than silently rewriting historical member terms. */
+export async function saveBillingPlanConfiguration(actorUserId: number, input: { planCode: string; displayName: string; description?: string; versionCode: string; featureKeys: EntitlementKey[]; renewalTerms?: string; gracePeriodDays: number; graceEntitlementsActive: boolean; cancelAtPeriodEndAllowed: boolean; currency: string; amountMinor: number; taxMinor: number; billingInterval: "monthly" | "quarterly" | "annual" | "one_time"; provider?: string | null; providerPriceReference?: string | null; activate: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  if (!input.planCode.trim() || !input.versionCode.trim() || !input.displayName.trim()) throw new Error("Plan, version, and display names are required.");
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor < 0 || !Number.isInteger(input.taxMinor) || input.taxMinor < 0) throw new Error("Price amounts must be non-negative minor units.");
+  const code = input.planCode.trim().toLowerCase();
+  const existingPlan = await db.select().from(membershipPlans).where(eq(membershipPlans.code, code)).limit(1);
+  const planId = existingPlan[0]?.id ?? Number((await db.insert(membershipPlans).values({ code, displayName: input.displayName.trim(), membershipLevel: "premium", status: input.activate ? "active" : "draft", description: input.description?.trim() || null }).$returningId())[0]?.id ?? 0);
+  if (existingPlan[0]) await db.update(membershipPlans).set({ displayName: input.displayName.trim(), description: input.description?.trim() || null, status: input.activate ? "active" : existingPlan[0].status }).where(eq(membershipPlans.id, planId));
+  const existingVersion = await db.select().from(membershipPlanVersions).where(eq(membershipPlanVersions.versionCode, input.versionCode.trim())).limit(1);
+  if (existingVersion[0]) throw new Error("A plan version with this code already exists. Create a new version code instead of changing historical terms.");
+  const versionId = Number((await db.insert(membershipPlanVersions).values({ membershipPlanId: planId, versionCode: input.versionCode.trim(), status: input.activate ? "active" : "draft", featureKeys: input.featureKeys, renewalTerms: input.renewalTerms?.trim() || null, gracePeriodDays: input.gracePeriodDays, graceEntitlementsActive: input.graceEntitlementsActive, cancelAtPeriodEndAllowed: input.cancelAtPeriodEndAllowed, createdByUserId: actorUserId, activatedAt: input.activate ? new Date() : null }).$returningId())[0]?.id ?? 0);
+  await db.insert(membershipPrices).values({ membershipPlanVersionId: versionId, currency: normalizeCurrency(input.currency), amountMinor: input.amountMinor, taxMinor: input.taxMinor, billingInterval: input.billingInterval, provider: input.provider?.trim() || null, providerPriceReference: input.providerPriceReference?.trim() || null, status: input.activate ? "active" : "archived" });
+  await createAuditLog(actorUserId, "billing.plan_version_created", "membership_plan_version", String(versionId), { planCode: code, versionCode: input.versionCode.trim(), currency: normalizeCurrency(input.currency), amountMinor: input.amountMinor, billingInterval: input.billingInterval, activate: input.activate });
+  return { planId, versionId };
+}
+
+/** Availability metadata intentionally excludes provider credentials and webhook secrets. */
+export async function savePaymentProviderAvailability(actorUserId: number, input: { provider: string; enabled: boolean; supportedCurrencies: string[]; supportedMethods: string[]; configurationNote?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const provider = input.provider.trim().toLowerCase();
+  if (!provider) throw new Error("Provider name is required.");
+  const supportedCurrencies = Array.from(new Set(input.supportedCurrencies.map(normalizeCurrency)));
+  const supportedMethods = input.supportedMethods.map(method => method.trim()).filter(Boolean);
+  await db.insert(paymentProviderConfigurations).values({ provider, enabled: input.enabled, supportedCurrencies, supportedMethods, configurationNote: input.configurationNote?.trim() || null, updatedByUserId: actorUserId }).onDuplicateKeyUpdate({ set: { enabled: input.enabled, supportedCurrencies, supportedMethods, configurationNote: input.configurationNote?.trim() || null, updatedByUserId: actorUserId } });
+  await createAuditLog(actorUserId, "billing.provider_availability_updated", "payment_provider_configuration", provider, { enabled: input.enabled, supportedCurrencies, methodCount: supportedMethods.length });
+  return { provider, enabled: input.enabled, supportedCurrencies };
+}
+
+/** Account closure stops renewal and detaches future product access while intentionally preserving necessary transaction evidence. */
+export async function handleBillingAccountClosure(profileId: number, actorUserId: number | null) {
+  const db = await getDb();
+  if (!db) return { subscriptionsCancelled: 0 };
+  const active = await db.select().from(subscriptions).where(and(eq(subscriptions.profileId, profileId), inArray(subscriptions.status, ["trial", "active", "past_due", "grace_period"])));
+  for (const subscription of active) await db.update(subscriptions).set({ autoRenew: false, cancelAtPeriodEnd: true, cancelledAt: new Date() }).where(eq(subscriptions.id, subscription.id));
+  await createAuditLog(actorUserId, "billing.account_closure_handled", "member_profile", String(profileId), { subscriptionsCancelled: active.length });
+  return { subscriptionsCancelled: active.length };
+}
+
+function intervalMilliseconds(interval: "monthly" | "quarterly" | "annual" | "one_time") { return ({ monthly: 30, quarterly: 91, annual: 365, one_time: 0 } as Record<string, number>)[interval] * 86_400_000; }

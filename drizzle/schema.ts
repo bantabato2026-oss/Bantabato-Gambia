@@ -615,21 +615,213 @@ export const blocks = mysqlTable(
   table => [uniqueIndex("blocks_direction_unique").on(table.blockerProfileId, table.blockedProfileId)],
 );
 
+/** Commercial plans describe product functionality, never matrimonial suitability, safety, or consent. */
+export const membershipPlans = mysqlTable(
+  "membership_plans",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    code: varchar("code", { length: 64 }).notNull(),
+    displayName: varchar("displayName", { length: 120 }).notNull(),
+    membershipLevel: mysqlEnum("membershipLevel", ["free", "premium"]).notNull(),
+    status: mysqlEnum("status", ["draft", "active", "archived"]).default("draft").notNull(),
+    description: text("description"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("membership_plans_code_unique").on(table.code), index("membership_plans_level_status_idx").on(table.membershipLevel, table.status)],
+);
+
+/** Versioned plan terms preserve historical price and entitlement context for existing subscriptions. */
+export const membershipPlanVersions = mysqlTable(
+  "membership_plan_versions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    membershipPlanId: int("membershipPlanId").notNull().references(() => membershipPlans.id, { onDelete: "restrict" }),
+    versionCode: varchar("versionCode", { length: 80 }).notNull(),
+    status: mysqlEnum("status", ["draft", "active", "retired"]).default("draft").notNull(),
+    featureKeys: json("featureKeys").notNull(),
+    renewalTerms: text("renewalTerms"),
+    gracePeriodDays: int("gracePeriodDays").default(0).notNull(),
+    graceEntitlementsActive: boolean("graceEntitlementsActive").default(false).notNull(),
+    cancelAtPeriodEndAllowed: boolean("cancelAtPeriodEndAllowed").default(true).notNull(),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    activatedAt: timestamp("activatedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("membership_plan_versions_code_unique").on(table.versionCode), index("membership_plan_versions_plan_status_idx").on(table.membershipPlanId, table.status)],
+);
+
+/** Monetary amounts are stored only as minor integer units; client-side currency conversion is never authoritative. */
+export const membershipPrices = mysqlTable(
+  "membership_prices",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    membershipPlanVersionId: int("membershipPlanVersionId").notNull().references(() => membershipPlanVersions.id, { onDelete: "restrict" }),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    amountMinor: int("amountMinor").notNull(),
+    taxMinor: int("taxMinor").default(0).notNull(),
+    billingInterval: mysqlEnum("billingInterval", ["monthly", "quarterly", "annual", "one_time"]).notNull(),
+    provider: varchar("provider", { length: 80 }),
+    providerPriceReference: varchar("providerPriceReference", { length: 255 }),
+    status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("membership_prices_version_currency_interval_unique").on(table.membershipPlanVersionId, table.currency, table.billingInterval, table.provider), index("membership_prices_availability_idx").on(table.currency, table.status, table.billingInterval)],
+);
+
 export const subscriptions = mysqlTable(
   "subscriptions",
   {
     id: int("id").autoincrement().primaryKey(),
-    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    profileId: int("profileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+    membershipPlanVersionId: int("membershipPlanVersionId").references(() => membershipPlanVersions.id, { onDelete: "restrict" }),
     plan: mysqlEnum("plan", ["free", "premium", "profile_review"]).default("free").notNull(),
-    status: mysqlEnum("status", ["inactive", "active", "past_due", "cancelled", "expired"]).default("inactive").notNull(),
+    status: mysqlEnum("status", ["trial", "active", "past_due", "grace_period", "cancelled", "expired", "suspended", "refunded", "inactive"]).default("inactive").notNull(),
     provider: varchar("provider", { length: 80 }),
     providerReference: varchar("providerReference", { length: 255 }),
+    providerCustomerReference: varchar("providerCustomerReference", { length: 255 }),
+    autoRenew: boolean("autoRenew").default(true).notNull(),
+    cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").default(false).notNull(),
     startsAt: timestamp("startsAt"),
     endsAt: timestamp("endsAt"),
+    currentPeriodStartsAt: timestamp("currentPeriodStartsAt"),
+    currentPeriodEndsAt: timestamp("currentPeriodEndsAt"),
+    gracePeriodEndsAt: timestamp("gracePeriodEndsAt"),
+    cancelledAt: timestamp("cancelledAt"),
+    endedAt: timestamp("endedAt"),
+    suspendedAt: timestamp("suspendedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("subscriptions_profile_idx").on(table.profileId, table.status)],
+  table => [index("subscriptions_profile_idx").on(table.profileId, table.status), index("subscriptions_plan_status_idx").on(table.membershipPlanVersionId, table.status)],
+);
+
+/** Provider-independent lifecycle record. It stores references and status only—never card numbers, CVVs, passwords, or secrets. */
+export const paymentTransactions = mysqlTable(
+  "payment_transactions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    profileId: int("profileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+    subscriptionId: int("subscriptionId").references(() => subscriptions.id, { onDelete: "set null" }),
+    membershipPriceId: int("membershipPriceId").references(() => membershipPrices.id, { onDelete: "set null" }),
+    provider: varchar("provider", { length: 80 }).notNull(),
+    internalReference: varchar("internalReference", { length: 96 }).notNull(),
+    providerTransactionId: varchar("providerTransactionId", { length: 255 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 96 }).notNull(),
+    transactionType: mysqlEnum("transactionType", ["initial", "renewal", "recovery", "manual_adjustment"]).default("initial").notNull(),
+    status: mysqlEnum("status", ["created", "pending", "processing", "successful", "failed", "cancelled", "expired", "refunded", "partially_refunded", "disputed"]).default("created").notNull(),
+    amountMinor: int("amountMinor").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    taxMinor: int("taxMinor").default(0).notNull(),
+    feeMinor: int("feeMinor").default(0).notNull(),
+    discountMinor: int("discountMinor").default(0).notNull(),
+    failureCode: varchar("failureCode", { length: 120 }),
+    failureMessage: varchar("failureMessage", { length: 500 }),
+    completedAt: timestamp("completedAt"),
+    providerVerifiedAt: timestamp("providerVerifiedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("payment_transactions_internal_reference_unique").on(table.internalReference), uniqueIndex("payment_transactions_idempotency_unique").on(table.idempotencyKey), uniqueIndex("payment_transactions_provider_reference_unique").on(table.provider, table.providerTransactionId), index("payment_transactions_profile_history_idx").on(table.profileId, table.createdAt), index("payment_transactions_reconcile_idx").on(table.provider, table.status, table.createdAt)],
+);
+
+export const paymentRefunds = mysqlTable(
+  "payment_refunds",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    paymentTransactionId: int("paymentTransactionId").notNull().references(() => paymentTransactions.id, { onDelete: "restrict" }),
+    providerRefundReference: varchar("providerRefundReference", { length: 255 }),
+    status: mysqlEnum("status", ["requested", "processing", "succeeded", "failed", "cancelled"]).default("requested").notNull(),
+    amountMinor: int("amountMinor").notNull(),
+    reason: varchar("reason", { length: 500 }),
+    requestedByUserId: int("requestedByUserId").references(() => users.id, { onDelete: "set null" }),
+    processedAt: timestamp("processedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("payment_refunds_provider_reference_unique").on(table.providerRefundReference), index("payment_refunds_transaction_status_idx").on(table.paymentTransactionId, table.status)],
+);
+
+/** Centralized product entitlements; these cannot grant an exception to safety, compatibility, consent, or readiness policy. */
+export const subscriptionEntitlements = mysqlTable(
+  "subscription_entitlements",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    subscriptionId: int("subscriptionId").notNull().references(() => subscriptions.id, { onDelete: "cascade" }),
+    entitlementKey: mysqlEnum("entitlementKey", ["advanced_discovery", "expanded_discovery_controls", "profile_visibility_controls", "enhanced_recommendation_controls", "profile_management_convenience"]).notNull(),
+    status: mysqlEnum("status", ["active", "revoked", "expired"]).default("active").notNull(),
+    startsAt: timestamp("startsAt").defaultNow().notNull(),
+    endsAt: timestamp("endsAt"),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("subscription_entitlements_unique").on(table.subscriptionId, table.entitlementKey), index("subscription_entitlements_active_idx").on(table.entitlementKey, table.status, table.endsAt)],
+);
+
+/** Signed provider event metadata allows idempotent reconciliation without storing raw payment payloads or secrets. */
+export const paymentWebhookEvents = mysqlTable(
+  "payment_webhook_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    provider: varchar("provider", { length: 80 }).notNull(),
+    providerEventId: varchar("providerEventId", { length: 255 }).notNull(),
+    eventType: varchar("eventType", { length: 120 }).notNull(),
+    payloadHash: varchar("payloadHash", { length: 128 }).notNull(),
+    signatureValid: boolean("signatureValid").default(false).notNull(),
+    status: mysqlEnum("status", ["received", "verified", "processed", "rejected", "failed"]).default("received").notNull(),
+    paymentTransactionId: int("paymentTransactionId").references(() => paymentTransactions.id, { onDelete: "set null" }),
+    receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+    processedAt: timestamp("processedAt"),
+  },
+  table => [uniqueIndex("payment_webhook_events_provider_event_unique").on(table.provider, table.providerEventId), index("payment_webhook_events_status_idx").on(table.provider, table.status, table.receivedAt)],
+);
+
+export const paymentReconciliations = mysqlTable(
+  "payment_reconciliations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    paymentTransactionId: int("paymentTransactionId").notNull().references(() => paymentTransactions.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", ["open", "reconciled", "needs_review"]).default("open").notNull(),
+    providerObservedStatus: varchar("providerObservedStatus", { length: 120 }),
+    note: varchar("note", { length: 500 }),
+    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("payment_reconciliations_status_idx").on(table.status, table.createdAt), uniqueIndex("payment_reconciliations_transaction_unique").on(table.paymentTransactionId)],
+);
+
+/** Availability metadata deliberately excludes provider credentials and can differ by provider, currency, and method. */
+export const paymentProviderConfigurations = mysqlTable(
+  "payment_provider_configurations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    provider: varchar("provider", { length: 80 }).notNull(),
+    enabled: boolean("enabled").default(false).notNull(),
+    supportedCurrencies: json("supportedCurrencies").notNull(),
+    supportedMethods: json("supportedMethods").notNull(),
+    configurationNote: varchar("configurationNote", { length: 500 }),
+    updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("payment_provider_configurations_provider_unique").on(table.provider)],
+);
+
+export const memberBillingSettings = mysqlTable(
+  "member_billing_settings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    preferredCurrency: varchar("preferredCurrency", { length: 3 }).default("GMD").notNull(),
+    receiptEmail: varchar("receiptEmail", { length: 320 }),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("member_billing_settings_profile_unique").on(table.profileId)],
 );
 
 export const notifications = mysqlTable(
@@ -637,7 +829,7 @@ export const notifications = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection", "recommendation"])
+    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection", "recommendation", "billing"])
       .notNull(),
     title: varchar("title", { length: 160 }).notNull(),
     body: varchar("body", { length: 500 }).notNull(),

@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Brand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
-import { ArrowLeft, ClipboardCheck, Flag, LayoutDashboard, Settings2, ShieldCheck, Sparkles, UsersRound, Video } from "lucide-react";
+import { ArrowLeft, CircleDollarSign, ClipboardCheck, Flag, LayoutDashboard, Settings2, ShieldCheck, Sparkles, UsersRound, Video } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 const adminNavigation = [
@@ -12,6 +12,7 @@ const adminNavigation = [
 	  { icon: Video, label: "Connection review", href: "/admin/connections" },
 	  { icon: UsersRound, label: "Family Circle", href: "/admin/family" },
 	  { icon: Sparkles, label: "Recommendation policy", href: "/admin/recommendations" },
+	  { icon: CircleDollarSign, label: "Billing operations", href: "/admin/billing" },
 	  { icon: UsersRound, label: "Members", href: "/admin" },
   { icon: ShieldCheck, label: "Trust & Safety", href: "/admin/reports" },
   { icon: Settings2, label: "Settings", href: "/admin" },
