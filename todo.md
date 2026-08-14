@@ -82,3 +82,12 @@
 - [x] Add stateful service-flow tests for consent grant and withdrawal, permission availability, readiness-review creation and decisions, and revocation side effects.
 - [x] Validate the member readiness panel with an eligible completed-profile conversation through a non-production rendering regression, without creating synthetic member records in the live database.
 - [x] Save the final Phase 5 checkpoint and report completed work, fairness and consent controls, tests, limitations, and recommended future work.
+- [x] Audit existing Family Circle invitations, profile privacy, family contacts, Trust & Safety, notifications, audit logging, authentication, and authorization boundaries without duplicating systems.
+- [x] Extend the Family Circle data model for Parent and Wali/Guardian invitations, purpose-specific family identities, per-participant permissions, shared potential matches, acknowledgments, feedback, events, and controlled verification states.
+- [x] Implement member-owned invitation, acceptance, decline, permission, sharing, acknowledgment, feedback, withdrawal, removal, restriction, and report workflows with prompt server-side revocation.
+- [x] Enforce that family participants cannot access private conversations, voice notes, verification documents, internal safety data, call consent, member profiles beyond permissioned fields, or member-to-member matching decisions.
+- [x] Integrate Family Circle notifications, audit events, and scoped Trust & Safety administration without creating a parallel moderation system or exposing private content.
+- [x] Build accessible, responsive member Family Circle, purpose-specific family participant, and scoped administrator interfaces using Parent and Wali/Guardian terminology only.
+- [x] Add regression coverage for invitations, roles, multiple participants, permissions, revocation, sharing, acknowledgments, feedback, privacy protections, server-side authorization, Trust & Safety, audit logging, and responsive route behavior.
+- [x] Add explicit regression coverage for multiple concurrent Family Circle participants with independent permissions, shared-match visibility, and revocation isolation.
+- [x] Save the final Phase 6 checkpoint and report completed work, privacy and consent controls, tests, limitations, and recommended Phase 7 work.

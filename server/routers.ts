@@ -31,6 +31,7 @@ import {
 } from "./db";
 import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase, getActiveAdminScopes, getReportCase, getReportQueue, getScopedAdminOverview, getVerificationCase, getVerificationDocumentForAuthorizedReview, getVerificationQueue, requireOperationalScope } from "./operations";
 import { getCompatibilityExplanation, getCompatibilityPreferences, getCuratedDiscovery, listProfileFieldVisibilities, saveCompatibilityPreferences, saveProfileFieldVisibilities } from "./compatibilityService";
+import { FAMILY_PERMISSIONS, acceptFamilyInvitation, createFamilyInvitation, declineFamilyInvitation, getFamilyParticipantDashboard, listFamilyMetadataForOperations, listMemberFamilyCircle, removeFamilyParticipant, reportFamilyParticipant, requestFamilyAcknowledgment, respondToFamilyAcknowledgment, restrictFamilyParticipant, reviewWaliGuardianVerification, setFamilyPermission, sharePotentialMatch, submitFamilyFeedback, withdrawFamilyShare } from "./familyService";
 import { blockConversationMember, deleteOwnVoiceNote, getConversationPrompts, getVoiceNoteUrl, listConversations, listMessages, reportMessage, sendText, setConversationModerationState, setConversationPreference, setConversationState, uploadVoiceNote } from "./messagingService";
 import { addConnectionReviewNote, claimConnectionReviewCase, decideConnectionReview, escalateConnectionReviewCase, flagConnectionIntegrityConcern, getConnectionReviewCase, getReadinessForMember, grantConnectionConsent, listConnectionReviewQueue, revokeConnectionForConversation, revokeConnectionForProfilePair, revokeConnectionsForProfile, revokeHardIncompatibleConnectionsForProfile, withdrawConnectionConsent } from "./readinessService";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -179,10 +180,23 @@ export const appRouter = router({
     grantConsent: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), capability: z.enum(["voice", "video"]) })).mutation(async ({ ctx, input }) => grantConnectionConsent((await requireProfile(ctx.user.id)).id, input.conversationId, input.capability)),
     withdrawConsent: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), capability: z.enum(["voice", "video"]) })).mutation(async ({ ctx, input }) => withdrawConnectionConsent((await requireProfile(ctx.user.id)).id, input.conversationId, input.capability)),
   }),
-  family: router({
-    list: protectedProcedure.query(async ({ ctx }) => listFamilyLinks((await requireProfile(ctx.user.id)).id)),
-    invite: protectedProcedure.input(z.object({ relationship: z.enum(["parent", "wali_guardian"]), contactName: z.string().min(2).max(160), contactEmail: z.string().email().optional(), contactPhone: z.string().max(40).optional(), canReceiveMatchNotifications: z.boolean() }).refine(value => Boolean(value.contactEmail || value.contactPhone), { message: "Provide an email address or phone number." })).mutation(async ({ ctx, input }) => upsertFamilyLink((await requireProfile(ctx.user.id)).id, input)),
-  }),
+	family: router({
+	  list: protectedProcedure.query(async ({ ctx }) => listMemberFamilyCircle((await requireProfile(ctx.user.id)).id)),
+	  invite: protectedProcedure.input(z.object({ relationship: z.enum(["parent", "wali_guardian"]), contactName: z.string().trim().min(2).max(160), contactEmail: z.string().email(), contactPhone: z.string().trim().max(40).optional(), preferredContactMethod: z.enum(["email", "phone"]) })).mutation(async ({ ctx, input }) => createFamilyInvitation((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
+	  setPermission: protectedProcedure.input(z.object({ familyLinkId: z.number().int().positive(), permission: z.enum(FAMILY_PERMISSIONS), isGranted: z.boolean() })).mutation(async ({ ctx, input }) => setFamilyPermission((await requireProfile(ctx.user.id)).id, ctx.user.id, input.familyLinkId, input.permission, input.isGranted)),
+	  sharePotentialMatch: protectedProcedure.input(z.object({ familyLinkId: z.number().int().positive(), potentialMatchProfileId: z.number().int().positive() })).mutation(async ({ ctx, input }) => sharePotentialMatch((await requireProfile(ctx.user.id)).id, ctx.user.id, input.familyLinkId, input.potentialMatchProfileId)),
+	  withdrawShare: protectedProcedure.input(z.object({ familyShareId: z.number().int().positive() })).mutation(async ({ ctx, input }) => withdrawFamilyShare((await requireProfile(ctx.user.id)).id, ctx.user.id, input.familyShareId)),
+	  requestAcknowledgment: protectedProcedure.input(z.object({ familyShareId: z.number().int().positive() })).mutation(async ({ ctx, input }) => requestFamilyAcknowledgment((await requireProfile(ctx.user.id)).id, ctx.user.id, input.familyShareId)),
+	  remove: protectedProcedure.input(z.object({ familyLinkId: z.number().int().positive() })).mutation(async ({ ctx, input }) => removeFamilyParticipant((await requireProfile(ctx.user.id)).id, ctx.user.id, input.familyLinkId)),
+	  report: protectedProcedure.input(z.object({ familyLinkId: z.number().int().positive(), reason: z.enum(["harassment", "scam", "safety_concern", "other"]), details: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => reportFamilyParticipant((await requireProfile(ctx.user.id)).id, ctx.user.id, input.familyLinkId, input.reason, input.details)),
+	}),
+	familyParticipant: router({
+	  acceptInvitation: protectedProcedure.input(z.object({ invitationCode: z.string().min(20).max(128) })).mutation(async ({ ctx, input }) => acceptFamilyInvitation(ctx.user.id, ctx.user.email, input.invitationCode)),
+	  declineInvitation: protectedProcedure.input(z.object({ invitationCode: z.string().min(20).max(128) })).mutation(async ({ ctx, input }) => declineFamilyInvitation(ctx.user.id, ctx.user.email, input.invitationCode)),
+	  dashboard: protectedProcedure.query(async ({ ctx }) => getFamilyParticipantDashboard(ctx.user.id)),
+	  respondAcknowledgment: protectedProcedure.input(z.object({ acknowledgmentId: z.number().int().positive(), response: z.enum(["acknowledged", "declined"]) })).mutation(async ({ ctx, input }) => respondToFamilyAcknowledgment(ctx.user.id, input.acknowledgmentId, input.response)),
+	  submitFeedback: protectedProcedure.input(z.object({ familyShareId: z.number().int().positive(), response: z.enum(["acknowledged", "interested_to_learn_more", "has_concerns", "decline_to_comment"]), note: z.string().trim().max(1200).optional() })).mutation(async ({ ctx, input }) => submitFamilyFeedback(ctx.user.id, input.familyShareId, input.response, input.note)),
+	}),
   verification: router({
     summary: protectedProcedure.query(async ({ ctx }) => getVerificationSummary((await requireProfile(ctx.user.id)).id)),
     submitIdentity: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]) })).mutation(async ({ ctx, input }) => submitIdentityVerification((await requireProfile(ctx.user.id)).id, input.documentType)),
@@ -265,12 +279,24 @@ export const appRouter = router({
 	    addConnectionReviewNote: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), body: z.string().trim().min(1).max(2000) })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); await addConnectionReviewNote(ctx.user.id, input.reviewId, input.body); return { success: true }; }),
 	    escalateConnectionReview: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); await escalateConnectionReviewCase(ctx.user.id, input.reviewId, input.internalNote); return { success: true }; }),
 	    flagConnectionIntegrity: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]); return flagConnectionIntegrityConcern(ctx.user.id, input.conversationId, input.internalNote); }),
-    decideConnectionReview: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), decision: z.enum(["approved_voice", "approved_video", "declined", "restricted", "revoked"]), memberMessage: z.string().max(500).optional(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => {
-      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
-      await decideConnectionReview(ctx.user.id, input.reviewId, input.decision, input.memberMessage, input.internalNote);
-      return { success: true };
-    }),
-  }),
+	    decideConnectionReview: protectedProcedure.input(z.object({ reviewId: z.number().int().positive(), decision: z.enum(["approved_voice", "approved_video", "declined", "restricted", "revoked"]), memberMessage: z.string().max(500).optional(), internalNote: z.string().max(2000).optional() })).mutation(async ({ ctx, input }) => {
+	      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+	      await decideConnectionReview(ctx.user.id, input.reviewId, input.decision, input.memberMessage, input.internalNote);
+	      return { success: true };
+	    }),
+	    familyMetadata: protectedProcedure.query(async ({ ctx }) => {
+	      await requireOperationalAccess(ctx.user, ["trust_safety", "support_agent", "platform_admin"]);
+	      return listFamilyMetadataForOperations();
+	    }),
+	    restrictFamilyParticipant: protectedProcedure.input(z.object({ familyLinkId: z.number().int().positive(), reason: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => {
+	      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
+	      return restrictFamilyParticipant(ctx.user.id, input.familyLinkId, input.reason);
+	    }),
+	    reviewWaliGuardian: protectedProcedure.input(z.object({ familyLinkId: z.number().int().positive(), decision: z.enum(["verified", "unverified"]) })).mutation(async ({ ctx, input }) => {
+	      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
+	      return reviewWaliGuardianVerification(ctx.user.id, input.familyLinkId, input.decision);
+	    }),
+	  }),
 });
 
 export type AppRouter = typeof appRouter;

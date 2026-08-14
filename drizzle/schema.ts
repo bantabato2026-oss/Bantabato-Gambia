@@ -206,15 +206,96 @@ export const familyLinks = mysqlTable(
     contactName: varchar("contactName", { length: 160 }).notNull(),
     contactEmail: varchar("contactEmail", { length: 320 }),
     contactPhone: varchar("contactPhone", { length: 40 }),
-    status: mysqlEnum("status", ["draft", "invited", "accepted", "revoked"]).default("draft").notNull(),
+    preferredContactMethod: mysqlEnum("preferredContactMethod", ["email", "phone"]).default("email").notNull(),
+    familyParticipantUserId: int("familyParticipantUserId").references(() => users.id, { onDelete: "set null" }),
+    status: mysqlEnum("status", ["draft", "invited", "accepted", "declined", "pending_verification", "verified", "unverified", "suspended", "removed", "revoked"]).default("draft").notNull(),
+    waliVerificationStatus: mysqlEnum("waliVerificationStatus", ["not_required", "pending", "verified", "unverified"]).default("not_required").notNull(),
+    invitationCodeHash: varchar("invitationCodeHash", { length: 128 }),
+    invitationExpiresAt: timestamp("invitationExpiresAt"),
     canReceiveMatchNotifications: boolean("canReceiveMatchNotifications").default(false).notNull(),
     consentedAt: timestamp("consentedAt"),
     invitedAt: timestamp("invitedAt"),
+    acceptedAt: timestamp("acceptedAt"),
+    declinedAt: timestamp("declinedAt"),
+    restrictedAt: timestamp("restrictedAt"),
+    removedAt: timestamp("removedAt"),
     revokedAt: timestamp("revokedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("family_links_profile_idx").on(table.memberProfileId, table.status)],
+  table => [index("family_links_profile_idx").on(table.memberProfileId, table.status), uniqueIndex("family_links_invite_code_unique").on(table.invitationCodeHash), index("family_links_participant_idx").on(table.familyParticipantUserId, table.status)],
+);
+
+export const familyPermissions = mysqlTable(
+  "family_permissions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    familyLinkId: int("familyLinkId").notNull().references(() => familyLinks.id, { onDelete: "cascade" }),
+    permission: mysqlEnum("permission", ["profile_basics", "profile_photo", "marriage_intentions", "compatibility_summary", "family_context", "potential_match", "acknowledgment_status"]).notNull(),
+    isGranted: boolean("isGranted").default(false).notNull(),
+    grantedAt: timestamp("grantedAt"),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("family_permissions_link_permission_unique").on(table.familyLinkId, table.permission), index("family_permissions_link_idx").on(table.familyLinkId, table.isGranted)],
+);
+
+export const familyShares = mysqlTable(
+  "family_shares",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    familyLinkId: int("familyLinkId").notNull().references(() => familyLinks.id, { onDelete: "cascade" }),
+    sharedProfileId: int("sharedProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", ["active", "withdrawn", "expired"]).default("active").notNull(),
+    expiresAt: timestamp("expiresAt"),
+    withdrawnAt: timestamp("withdrawnAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("family_shares_link_idx").on(table.familyLinkId, table.status), uniqueIndex("family_shares_active_pair_unique").on(table.familyLinkId, table.sharedProfileId, table.status)],
+);
+
+export const familyAcknowledgments = mysqlTable(
+  "family_acknowledgments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    familyShareId: int("familyShareId").notNull().references(() => familyShares.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", ["requested", "acknowledged", "declined", "withdrawn", "expired"]).default("requested").notNull(),
+    requestedAt: timestamp("requestedAt").defaultNow().notNull(),
+    respondedAt: timestamp("respondedAt"),
+    withdrawnAt: timestamp("withdrawnAt"),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("family_acknowledgments_share_idx").on(table.familyShareId, table.status)],
+);
+
+export const familyFeedback = mysqlTable(
+  "family_feedback",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    familyShareId: int("familyShareId").notNull().references(() => familyShares.id, { onDelete: "cascade" }),
+    familyLinkId: int("familyLinkId").notNull().references(() => familyLinks.id, { onDelete: "cascade" }),
+    response: mysqlEnum("response", ["acknowledged", "interested_to_learn_more", "has_concerns", "decline_to_comment"]).notNull(),
+    note: varchar("note", { length: 1200 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("family_feedback_share_idx").on(table.familyShareId, table.createdAt)],
+);
+
+export const familyEvents = mysqlTable(
+  "family_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    familyLinkId: int("familyLinkId").notNull().references(() => familyLinks.id, { onDelete: "cascade" }),
+    actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+    eventType: mysqlEnum("eventType", ["invitation_sent", "invitation_accepted", "invitation_declined", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted", "report_submitted"]).notNull(),
+    details: json("details"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("family_events_link_idx").on(table.familyLinkId, table.createdAt)],
 );
 
 export const interestRequests = mysqlTable(
@@ -481,9 +562,10 @@ export const reports = mysqlTable(
   "reports",
   {
     id: int("id").autoincrement().primaryKey(),
-    reporterProfileId: int("reporterProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
-    reportedProfileId: int("reportedProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
-    conversationId: int("conversationId").references(() => conversations.id, { onDelete: "set null" }),
+	    reporterProfileId: int("reporterProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+	    reportedProfileId: int("reportedProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+	    reportedFamilyLinkId: int("reportedFamilyLinkId").references(() => familyLinks.id, { onDelete: "set null" }),
+	    conversationId: int("conversationId").references(() => conversations.id, { onDelete: "set null" }),
     messageId: int("messageId").references(() => messages.id, { onDelete: "set null" }),
     reason: mysqlEnum("reason", ["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]).notNull(),
     details: text("details"),
@@ -500,10 +582,11 @@ export const reports = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [
-    index("reports_queue_idx").on(table.status, table.priority, table.createdAt),
-    index("reports_assignee_idx").on(table.assignedModeratorUserId, table.status),
-  ],
+	  table => [
+	    index("reports_queue_idx").on(table.status, table.priority, table.createdAt),
+	    index("reports_assignee_idx").on(table.assignedModeratorUserId, table.status),
+	    index("reports_family_link_idx").on(table.reportedFamilyLinkId, table.status),
+	  ],
 );
 
 /** Internal-only operational notes. Case IDs are intentionally polymorphic to avoid duplicating note structures. */

@@ -3,9 +3,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import AdminPage from "@/pages/AdminPage";
 import { AdminReportCasePage, AdminReportsQueuePage, AdminVerificationCasePage, AdminVerificationQueuePage } from "@/pages/AdminOperations";
 import AdminConnectionReviewsPage from "@/pages/AdminConnectionReviews";
+import AdminFamilyCirclePage from "@/pages/AdminFamilyCircle";
 import Home from "@/pages/Home";
 import { ContactPage, FAQPage, PublicInfoPage, SignInPage } from "@/pages/PublicPages";
 import { MemberProfileDetailPage, MessageThreadPage } from "@/pages/MemberDetailPages";
+import { FamilyCirclePage, FamilyParticipantPage } from "@/pages/FamilyCirclePages";
 import { FamilyPage, MatchesPage, MemberHomePage, MessagesPage, NotificationsPage, OnboardingPage, ProfilePage, SettingsPage } from "@/pages/MemberPages";
 import CuratedDiscoveryPage from "@/pages/CuratedDiscoveryPage";
 import NotFound from "@/pages/NotFound";
@@ -40,7 +42,8 @@ function Router() {
     <Route path="/app/matches" component={MatchesPage} />
     <Route path="/app/messages" component={MessagesPage} />
     <Route path="/app/messages/:conversationId">{params => <MessageThreadPage conversationId={Number(params.conversationId)} />}</Route>
-    <Route path="/app/family" component={FamilyPage} />
+	    <Route path="/app/family" component={FamilyCirclePage} />
+	    <Route path="/family" component={FamilyParticipantPage} />
     <Route path="/app/verification" component={VerificationCenter} />
     <Route path="/app/settings" component={SettingsPage} />
     <Route path="/app/notifications" component={NotificationsPage} />
@@ -49,7 +52,8 @@ function Router() {
     <Route path="/admin/verification/:caseId">{params => <AdminVerificationCasePage caseId={Number(params.caseId)} />}</Route>
     <Route path="/admin/reports" component={AdminReportsQueuePage} />
     <Route path="/admin/reports/:caseId">{params => <AdminReportCasePage caseId={Number(params.caseId)} />}</Route>
-    <Route path="/admin/connections" component={AdminConnectionReviewsPage} />
+	    <Route path="/admin/connections" component={AdminConnectionReviewsPage} />
+	    <Route path="/admin/family" component={AdminFamilyCirclePage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;

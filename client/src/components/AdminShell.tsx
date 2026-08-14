@@ -8,9 +8,10 @@ import { Link, useLocation } from "wouter";
 const adminNavigation = [
   { icon: LayoutDashboard, label: "Overview", href: "/admin" },
   { icon: ClipboardCheck, label: "Verification", href: "/admin/verification" },
-  { icon: Flag, label: "Reports", href: "/admin/reports" },
-  { icon: Video, label: "Connection review", href: "/admin/connections" },
-  { icon: UsersRound, label: "Members", href: "/admin" },
+	  { icon: Flag, label: "Reports", href: "/admin/reports" },
+	  { icon: Video, label: "Connection review", href: "/admin/connections" },
+	  { icon: UsersRound, label: "Family Circle", href: "/admin/family" },
+	  { icon: UsersRound, label: "Members", href: "/admin" },
   { icon: ShieldCheck, label: "Trust & Safety", href: "/admin/reports" },
   { icon: Settings2, label: "Settings", href: "/admin" },
 ];
