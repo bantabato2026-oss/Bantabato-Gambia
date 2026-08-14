@@ -34,6 +34,7 @@ import { getCompatibilityExplanation, getCompatibilityPreferences, getCuratedDis
 import { FAMILY_PERMISSIONS, acceptFamilyInvitation, createFamilyInvitation, declineFamilyInvitation, getFamilyParticipantDashboard, listFamilyMetadataForOperations, listMemberFamilyCircle, removeFamilyParticipant, reportFamilyParticipant, requestFamilyAcknowledgment, respondToFamilyAcknowledgment, restrictFamilyParticipant, reviewWaliGuardianVerification, setFamilyPermission, sharePotentialMatch, submitFamilyFeedback, withdrawFamilyShare } from "./familyService";
 import { blockConversationMember, deleteOwnVoiceNote, getConversationPrompts, getVoiceNoteUrl, listConversations, listMessages, reportMessage, sendText, setConversationModerationState, setConversationPreference, setConversationState, uploadVoiceNote } from "./messagingService";
 import { addConnectionReviewNote, claimConnectionReviewCase, decideConnectionReview, escalateConnectionReviewCase, flagConnectionIntegrityConcern, getConnectionReviewCase, getReadinessForMember, grantConnectionConsent, listConnectionReviewQueue, revokeConnectionForConversation, revokeConnectionForProfilePair, revokeConnectionsForProfile, revokeHardIncompatibleConnectionsForProfile, withdrawConnectionConsent } from "./readinessService";
+import { getRecommendationExplanation, getRecommendationSettings, getRecommendationsForMember, listRecommendationPolicies, recordRecommendationInterest, saveRecommendationPolicy, saveRecommendationSettings, submitRecommendationFeedback, withdrawRecommendationsForProfile, withdrawRecommendationsForProfilePair } from "./recommendationService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -127,7 +128,10 @@ export const appRouter = router({
     }),
 	    save: protectedProcedure.input(profileInput).mutation(async ({ ctx, input }) => {
 	      const profile = await saveMemberProfile(ctx.user.id, { ...input, birthDate: input.birthDate ? new Date(input.birthDate) : undefined });
-	      if (profile) await revokeHardIncompatibleConnectionsForProfile(profile.id);
+	      if (profile) {
+	        await revokeHardIncompatibleConnectionsForProfile(profile.id);
+	        await withdrawRecommendationsForProfile(profile.id, profile.profileVisibility === "hidden" || !profile.searchVisible || profile.profileStatus !== "active" ? "profile_hidden" : "profile_changed");
+	      }
 	      return profile;
 	    }),
     view: protectedProcedure.input(z.object({ profileId: z.number().int().positive() })).query(async ({ ctx, input }) => {
@@ -135,7 +139,7 @@ export const appRouter = router({
       return getProfileForMember(viewer.id, input.profileId);
     }),
     fieldVisibilities: protectedProcedure.query(async ({ ctx }) => listProfileFieldVisibilities((await requireProfile(ctx.user.id)).id)),
-    saveFieldVisibilities: protectedProcedure.input(fieldVisibilityInput).mutation(async ({ ctx, input }) => saveProfileFieldVisibilities((await requireProfile(ctx.user.id)).id, input.fields)),
+	    saveFieldVisibilities: protectedProcedure.input(fieldVisibilityInput).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveProfileFieldVisibilities(profile.id, input.fields); await withdrawRecommendationsForProfile(profile.id, "profile_changed"); return saved; }),
   }),
   uploads: router({
     profilePhotos: protectedProcedure.query(async ({ ctx }) => listOwnProfilePhotos((await requireProfile(ctx.user.id)).id)),
@@ -151,14 +155,22 @@ export const appRouter = router({
   }),
   compatibility: router({
     preferences: protectedProcedure.query(async ({ ctx }) => getCompatibilityPreferences((await requireProfile(ctx.user.id)).id)),
-	    savePreferences: protectedProcedure.input(preferenceInput).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveCompatibilityPreferences(profile.id, input); await revokeHardIncompatibleConnectionsForProfile(profile.id); return saved; }),
+	    savePreferences: protectedProcedure.input(preferenceInput).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveCompatibilityPreferences(profile.id, input); await revokeHardIncompatibleConnectionsForProfile(profile.id); await withdrawRecommendationsForProfile(profile.id, "profile_changed"); return saved; }),
     explain: protectedProcedure.input(z.object({ profileId: z.number().int().positive() })).query(async ({ ctx, input }) => getCompatibilityExplanation((await requireProfile(ctx.user.id)).id, input.profileId)),
   }),
-  interests: router({
-    incoming: protectedProcedure.query(async ({ ctx }) => listIncomingInterests((await requireProfile(ctx.user.id)).id)),
-    send: protectedProcedure.input(z.object({ recipientProfileId: z.number().int().positive(), message: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => createInterest((await requireProfile(ctx.user.id)).id, input.recipientProfileId, input.message)),
-    respond: protectedProcedure.input(z.object({ interestId: z.number().int().positive(), response: z.enum(["accepted", "declined"]) })).mutation(async ({ ctx, input }) => respondToInterest((await requireProfile(ctx.user.id)).id, input.interestId, input.response)),
-  }),
+	  interests: router({
+	    incoming: protectedProcedure.query(async ({ ctx }) => listIncomingInterests((await requireProfile(ctx.user.id)).id)),
+	    send: protectedProcedure.input(z.object({ recipientProfileId: z.number().int().positive(), message: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => createInterest((await requireProfile(ctx.user.id)).id, input.recipientProfileId, input.message)),
+	    respond: protectedProcedure.input(z.object({ interestId: z.number().int().positive(), response: z.enum(["accepted", "declined"]) })).mutation(async ({ ctx, input }) => respondToInterest((await requireProfile(ctx.user.id)).id, input.interestId, input.response)),
+	  }),
+	  recommendations: router({
+	    list: protectedProcedure.input(z.object({ cursor: z.number().int().positive().optional(), limit: z.number().int().min(1).max(18).optional(), category: z.enum(["recommended_for_you", "strong_compatibility", "nearby_potential_matches", "similar_marriage_goals", "recently_joined", "verified_members", "worth_exploring"]).optional() }).optional()).query(async ({ ctx, input }) => getRecommendationsForMember((await requireProfile(ctx.user.id)).id, input)),
+	    explain: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive() })).query(async ({ ctx, input }) => getRecommendationExplanation((await requireProfile(ctx.user.id)).id, input.recommendationId)),
+	    feedback: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), response: z.enum(["not_interested", "not_relevant", "already_considered", "hide_profile"]) })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); return submitRecommendationFeedback(profile.id, ctx.user.id, input.recommendationId, input.response); }),
+	    settings: protectedProcedure.query(async ({ ctx }) => getRecommendationSettings((await requireProfile(ctx.user.id)).id)),
+	    saveSettings: protectedProcedure.input(z.object({ recommendationsEnabled: z.boolean(), showVerifiedCategory: z.boolean(), showNearbyCategory: z.boolean(), showRecentCategory: z.boolean() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); return saveRecommendationSettings(profile.id, ctx.user.id, input); }),
+	    startInterest: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), message: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId); await createInterest(profile.id, recommendation.candidateProfileId, input.message); return { success: true }; }),
+	  }),
   matches: router({
     list: protectedProcedure.query(async ({ ctx }) => getMatchesForProfile((await requireProfile(ctx.user.id)).id)),
   }),
@@ -202,8 +214,8 @@ export const appRouter = router({
     submitIdentity: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]) })).mutation(async ({ ctx, input }) => submitIdentityVerification((await requireProfile(ctx.user.id)).id, input.documentType)),
   }),
   safety: router({
-    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await createReport(profile.id, input); if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason)) { if (input.conversationId) await revokeConnectionForConversation(input.conversationId, "open_report", { profileId: profile.id }); if (input.reportedProfileId) await revokeConnectionForProfilePair(profile.id, input.reportedProfileId, "open_report", { profileId: profile.id }); } return { success: true }; }),
-    block: protectedProcedure.input(z.object({ blockedProfileId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await blockProfile(profile.id, input.blockedProfileId, input.reason); await revokeConnectionForProfilePair(profile.id, input.blockedProfileId, "block", { profileId: profile.id }); return { success: true }; }),
+	    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await createReport(profile.id, input); if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason)) { if (input.conversationId) await revokeConnectionForConversation(input.conversationId, "open_report", { profileId: profile.id }); if (input.reportedProfileId) { await revokeConnectionForProfilePair(profile.id, input.reportedProfileId, "open_report", { profileId: profile.id }); await withdrawRecommendationsForProfilePair(profile.id, input.reportedProfileId, "report"); } } return { success: true }; }),
+	    block: protectedProcedure.input(z.object({ blockedProfileId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await blockProfile(profile.id, input.blockedProfileId, input.reason); await revokeConnectionForProfilePair(profile.id, input.blockedProfileId, "block", { profileId: profile.id }); await withdrawRecommendationsForProfilePair(profile.id, input.blockedProfileId, "block"); return { success: true }; }),
   }),
   notifications: router({
     list: protectedProcedure.query(async ({ ctx }) => getNotificationsForUser(ctx.user.id)),
@@ -261,7 +273,7 @@ export const appRouter = router({
 	    decideReport: protectedProcedure.input(z.object({ reportId: z.number().int().positive(), status: z.enum(["in_review", "action_required", "resolved", "dismissed", "escalated"]), priority: z.enum(["low", "normal", "high", "critical"]).optional(), memberAction: z.enum(["none", "warn", "restrict", "temporary_suspend"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), resolution: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
 	      await requireOperationalAccess(ctx.user, ["trust_safety", "platform_admin"]);
 	      const outcome = await decideReportCase({ actorUserId: ctx.user.id, ...input });
-	      if (outcome.reportedProfileId && ["restrict", "temporary_suspend"].includes(outcome.memberAction)) await revokeConnectionsForProfile(outcome.reportedProfileId, outcome.memberAction === "temporary_suspend" ? "account_suspended" : "safety_restriction", { userId: ctx.user.id });
+	      if (outcome.reportedProfileId && ["restrict", "temporary_suspend"].includes(outcome.memberAction)) { await revokeConnectionsForProfile(outcome.reportedProfileId, outcome.memberAction === "temporary_suspend" ? "account_suspended" : "safety_restriction", { userId: ctx.user.id }); await withdrawRecommendationsForProfile(outcome.reportedProfileId, "safety_restriction"); }
 	      return { success: true };
     }),
     setConversationModeration: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), state: z.enum(["restricted", "active"]), reason: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => {
@@ -296,6 +308,8 @@ export const appRouter = router({
 	      await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
 	      return reviewWaliGuardianVerification(ctx.user.id, input.familyLinkId, input.decision);
 	    }),
+	    recommendationPolicies: protectedProcedure.query(async ({ ctx }) => { await requireOperationalAccess(ctx.user, ["platform_admin"]); return listRecommendationPolicies(); }),
+	    saveRecommendationPolicy: protectedProcedure.input(z.object({ policyVersion: z.string().trim().min(3).max(64), categories: z.array(z.enum(["recommended_for_you", "strong_compatibility", "nearby_potential_matches", "similar_marriage_goals", "recently_joined", "verified_members", "worth_exploring"])).min(1).max(7), weights: z.object({ compatibility: z.number().min(0).max(10), verification: z.number().min(0).max(5), completeness: z.number().min(0).max(5), recency: z.number().min(0).max(3) }), requireDiscoveryEligibility: z.boolean(), excludeIntegrityHeld: z.boolean(), maxPerLocationGroup: z.number().int().min(1).max(5), activate: z.boolean() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["platform_admin"]); return saveRecommendationPolicy(ctx.user.id, input, input.activate); }),
 	  }),
 });
 

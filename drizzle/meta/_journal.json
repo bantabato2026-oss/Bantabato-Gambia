@@ -78,6 +78,13 @@
       "when": 1786740801221,
       "tag": "0010_deep_deathbird",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1786742586673,
+      "tag": "0011_naive_slayback",
+      "breakpoints": true
     }
   ]
 }

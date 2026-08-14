@@ -35,6 +35,8 @@ describe("admin operational authorization", () => {
 	    await expect(caller.admin.familyMetadata()).rejects.toMatchObject({ code: "FORBIDDEN" });
 	    await expect(caller.admin.restrictFamilyParticipant({ familyLinkId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
 	    await expect(caller.admin.reviewWaliGuardian({ familyLinkId: 1, decision: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+	    await expect(caller.admin.recommendationPolicies()).rejects.toMatchObject({ code: "FORBIDDEN" });
+	    await expect(caller.admin.saveRecommendationPolicy({ policyVersion: "recommendation-test", categories: ["recommended_for_you"], weights: { compatibility: 4, verification: 1, completeness: 1, recency: 1 }, requireDiscoveryEligibility: true, excludeIntegrityHeld: true, maxPerLocationGroup: 2, activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
 	  });
 
   it("rejects a base administrator without an active operational scope", async () => {
@@ -49,5 +51,7 @@ describe("admin operational authorization", () => {
 	    await expect(caller.admin.familyMetadata()).rejects.toMatchObject({ code: "FORBIDDEN" });
 	    await expect(caller.admin.restrictFamilyParticipant({ familyLinkId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
 	    await expect(caller.admin.reviewWaliGuardian({ familyLinkId: 1, decision: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+	    await expect(caller.admin.recommendationPolicies()).rejects.toMatchObject({ code: "FORBIDDEN" });
+	    await expect(caller.admin.saveRecommendationPolicy({ policyVersion: "recommendation-test", categories: ["recommended_for_you"], weights: { compatibility: 4, verification: 1, completeness: 1, recency: 1 }, requireDiscoveryEligibility: true, excludeIntegrityHeld: true, maxPerLocationGroup: 2, activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
 	  });
 });

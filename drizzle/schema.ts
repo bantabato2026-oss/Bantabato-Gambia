@@ -637,7 +637,7 @@ export const notifications = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection"])
+    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection", "recommendation"])
       .notNull(),
     title: varchar("title", { length: 160 }).notNull(),
     body: varchar("body", { length: 500 }).notNull(),
@@ -650,6 +650,87 @@ export const notifications = mysqlTable(
     uniqueIndex("notifications_event_unique").on(table.userId, table.eventKey),
     index("notifications_user_unread_idx").on(table.userId, table.readAt, table.createdAt),
   ],
+);
+
+/** Policy-controlled configuration only; it contains no member-level scoring or protected-characteristic rules. */
+export const recommendationPolicies = mysqlTable(
+  "recommendation_policies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    policyVersion: varchar("policyVersion", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["draft", "active", "retired"]).default("draft").notNull(),
+    categories: json("categories").notNull(),
+    dimensionWeights: json("dimensionWeights").notNull(),
+    eligibilityRules: json("eligibilityRules").notNull(),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    activatedAt: timestamp("activatedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("recommendation_policy_version_unique").on(table.policyVersion), index("recommendation_policy_status_idx").on(table.status, table.activatedAt)],
+);
+
+/** Member-controlled presentation settings; search visibility remains the authoritative discovery eligibility control. */
+export const memberRecommendationSettings = mysqlTable(
+  "member_recommendation_settings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    recommendationsEnabled: boolean("recommendationsEnabled").default(true).notNull(),
+    showVerifiedCategory: boolean("showVerifiedCategory").default(true).notNull(),
+    showNearbyCategory: boolean("showNearbyCategory").default(true).notNull(),
+    showRecentCategory: boolean("showRecentCategory").default(true).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("member_recommendation_settings_profile_unique").on(table.profileId)],
+);
+
+/** A recommendation persists only its lifecycle and member-safe explanation keys, never a numeric score or private reason. */
+export const recommendations = mysqlTable(
+  "recommendations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    candidateProfileId: int("candidateProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    recommendationPolicyId: int("recommendationPolicyId").notNull().references(() => recommendationPolicies.id, { onDelete: "restrict" }),
+    categoryKey: varchar("categoryKey", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["active", "dismissed", "hidden", "withdrawn", "expired"]).default("active").notNull(),
+    explanationKeys: json("explanationKeys").notNull(),
+    considerationKeys: json("considerationKeys").notNull(),
+    generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+    lastEvaluatedAt: timestamp("lastEvaluatedAt").defaultNow().notNull(),
+    withdrawnAt: timestamp("withdrawnAt"),
+    expiresAt: timestamp("expiresAt"),
+  },
+  table => [uniqueIndex("recommendations_profile_candidate_policy_unique").on(table.profileId, table.candidateProfileId, table.recommendationPolicyId), index("recommendations_member_feed_idx").on(table.profileId, table.status, table.categoryKey, table.generatedAt), index("recommendations_candidate_status_idx").on(table.candidateProfileId, table.status)],
+);
+
+/** Feedback changes the requester's discovery experience only; it never labels or scores the other member. */
+export const recommendationFeedback = mysqlTable(
+  "recommendation_feedback",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    recommendationId: int("recommendationId").notNull().references(() => recommendations.id, { onDelete: "cascade" }),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    response: mysqlEnum("response", ["not_interested", "not_relevant", "already_considered", "hide_profile"]).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("recommendation_feedback_profile_idx").on(table.profileId, table.createdAt), uniqueIndex("recommendation_feedback_unique").on(table.recommendationId, table.profileId)],
+);
+
+/** Metadata-only lifecycle evidence for audit and non-invasive analytics; no rank values or private preferences are recorded. */
+export const recommendationEvents = mysqlTable(
+  "recommendation_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    recommendationId: int("recommendationId").notNull().references(() => recommendations.id, { onDelete: "cascade" }),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    eventType: mysqlEnum("eventType", ["generated", "presented", "viewed", "withdrawn", "feedback_recorded", "interest_started"]).notNull(),
+    policyVersion: varchar("policyVersion", { length: 64 }).notNull(),
+    metadata: json("metadata"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("recommendation_events_recommendation_idx").on(table.recommendationId, table.createdAt), index("recommendation_events_profile_idx").on(table.profileId, table.eventType, table.createdAt)],
 );
 
 export const adminRoles = mysqlTable(

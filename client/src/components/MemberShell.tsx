@@ -4,13 +4,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bell, Camera, ChevronRight, CircleUserRound, Compass, HeartHandshake, Home, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
+import { Bell, Camera, ChevronRight, CircleUserRound, Compass, HeartHandshake, Home, Lightbulb, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 
 const primaryLinks = [
   { label: "Home", href: "/app", icon: Home },
   { label: "Discover", href: "/app/discover", icon: Compass },
+	  { label: "For you", href: "/app/recommendations", icon: Lightbulb },
   { label: "Introductions", href: "/app/matches", icon: HeartHandshake },
   { label: "Messages", href: "/app/messages", icon: MessageCircle },
 ];

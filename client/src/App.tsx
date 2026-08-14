@@ -15,6 +15,8 @@ import ProfileMediaPage from "@/pages/ProfileMediaPage";
 import VerificationCenter from "@/pages/VerificationCenter";
 import CompatibilityPreferencesPage from "@/pages/CompatibilityPreferencesPage";
 import ProfileDetailsPage from "@/pages/ProfileDetailsPage";
+import RecommendationsPage from "@/pages/RecommendationsPage";
+import AdminRecommendationPolicyPage from "@/pages/AdminRecommendationPolicy";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -39,6 +41,7 @@ function Router() {
     <Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
     <Route path="/app/photos" component={ProfileMediaPage} />
     <Route path="/app/discover" component={CuratedDiscoveryPage} />
+	    <Route path="/app/recommendations" component={RecommendationsPage} />
     <Route path="/app/matches" component={MatchesPage} />
     <Route path="/app/messages" component={MessagesPage} />
     <Route path="/app/messages/:conversationId">{params => <MessageThreadPage conversationId={Number(params.conversationId)} />}</Route>
@@ -54,6 +57,7 @@ function Router() {
     <Route path="/admin/reports/:caseId">{params => <AdminReportCasePage caseId={Number(params.caseId)} />}</Route>
 	    <Route path="/admin/connections" component={AdminConnectionReviewsPage} />
 	    <Route path="/admin/family" component={AdminFamilyCirclePage} />
+	    <Route path="/admin/recommendations" component={AdminRecommendationPolicyPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;
