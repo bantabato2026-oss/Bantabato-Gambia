@@ -21,6 +21,7 @@ import {
   verificationRecords,
 } from "../drizzle/schema";
 import { canonicalProfilePair } from "./domain/permissions";
+import { safeLocationDisplay } from "./domain/internationalPolicy";
 import { emitLegacyNotification } from "./notificationService";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { ENV } from "./_core/env";
@@ -170,9 +171,10 @@ export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
   minAge?: number;
   maxAge?: number;
   religion?: "muslim" | "christian";
-  residenceType?: "gambia" | "diaspora";
-  country?: string;
-  city?: string;
+	  residenceType?: "gambia" | "diaspora";
+	  country?: string;
+	  residenceCountryId?: number;
+	  city?: string;
   tribe?: string;
   educationLevel?: string;
 }) {
@@ -185,8 +187,9 @@ export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
     ne(memberProfiles.id, viewerProfileId),
   ];
   if (filters?.religion) conditions.push(eq(memberProfiles.religion, filters.religion));
-  if (filters?.residenceType) conditions.push(eq(memberProfiles.residenceType, filters.residenceType));
-  if (filters?.country) conditions.push(eq(memberProfiles.country, filters.country));
+	  if (filters?.residenceType) conditions.push(eq(memberProfiles.residenceType, filters.residenceType));
+	  if (filters?.country) conditions.push(eq(memberProfiles.country, filters.country));
+	  if (filters?.residenceCountryId) conditions.push(eq(memberProfiles.residenceCountryId, filters.residenceCountryId));
   if (filters?.city) conditions.push(eq(memberProfiles.city, filters.city));
   if (filters?.tribe) conditions.push(eq(memberProfiles.tribe, filters.tribe));
   if (filters?.educationLevel) conditions.push(eq(memberProfiles.educationLevel, filters.educationLevel));
@@ -205,8 +208,9 @@ export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
       religion: memberProfiles.religion,
       practiceLevel: memberProfiles.practiceLevel,
       tribe: memberProfiles.tribe,
-      residenceType: memberProfiles.residenceType,
-      country: memberProfiles.country,
+	    residenceType: memberProfiles.residenceType,
+	    country: memberProfiles.country,
+	    residenceCountryId: memberProfiles.residenceCountryId,
       city: memberProfiles.city,
       educationLevel: memberProfiles.educationLevel,
       profession: memberProfiles.profession,
@@ -265,6 +269,11 @@ export async function getProfileForMember(viewerProfileId: number, targetProfile
     return audience === "public" || audience === "potential_matches" || (audience === "verified_members" && Boolean(viewerVerification[0])) || (audience === "matched_members" && hasMutualMatch);
   };
   const maySeeFamilyBackground = (profile[0].familyVisibility === "visible" || (profile[0].familyVisibility === "matches" && hasMutualMatch)) && maySee("familyBackground", "private");
+  const locationRelationship = hasMutualMatch ? "matched" as const : "eligible" as const;
+  const hasLocationAudience = maySee("country") && (profile[0].locationVisibility === "eligible_members" || (profile[0].locationVisibility === "matches_only" && hasMutualMatch));
+  const locationDisplay = hasLocationAudience ? safeLocationDisplay({ visibility: profile[0].locationVisibility, detail: profile[0].locationDetailLevel, countryName: profile[0].country, region: profile[0].region, city: profile[0].city, relationship: locationRelationship }) : null;
+  const maySeeRegion = hasLocationAudience && ["region", "city"].includes(profile[0].locationDetailLevel);
+  const maySeeCity = hasLocationAudience && profile[0].locationDetailLevel === "city";
   return {
     id: profile[0].id,
     displayName: profile[0].displayName,
@@ -276,9 +285,10 @@ export async function getProfileForMember(viewerProfileId: number, targetProfile
     practiceLevel: maySee("practiceLevel") ? profile[0].practiceLevel : null,
     ethnicity: maySee("ethnicity", "private") ? profile[0].ethnicity : null,
     tribe: maySee("tribe", "private") ? profile[0].tribe : null,
-    country: maySee("country") ? profile[0].country : null,
-    region: maySee("region") ? profile[0].region : null,
-    city: maySee("city") ? profile[0].city : null,
+    country: hasLocationAudience ? profile[0].country : null,
+    region: maySeeRegion && maySee("region") ? profile[0].region : null,
+    city: maySeeCity && maySee("city") ? profile[0].city : null,
+    locationDisplay,
     languages: maySee("languages") ? profile[0].languages : null,
     maritalStatus: maySee("maritalStatus") ? profile[0].maritalStatus : null,
     educationLevel: maySee("educationLevel") ? profile[0].educationLevel : null,

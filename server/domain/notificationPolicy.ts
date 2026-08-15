@@ -33,6 +33,7 @@ const safeCopies: Record<string, { title: string; body: string }> = {
   subscription_update: { title: "Membership update", body: "Your membership has an update. Sign in to review your private billing record." },
   refund_update: { title: "Membership update", body: "There is a membership update to review securely in Bantabato." },
   account_security_event: { title: "Important account notification", body: "Please sign in to Bantabato to review an important account update." },
+  international_profile_update: { title: "International profile update", body: "Your location or international profile settings have changed. Sign in to review them securely." },
   product_update: { title: "Bantabato update", body: "There is an optional product update available in Bantabato." },
 };
 

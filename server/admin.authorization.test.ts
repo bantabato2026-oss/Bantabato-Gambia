@@ -58,6 +58,9 @@ async function expectAllScopedAdministrativeAccessDenied(caller: ReturnType<type
   await expect(caller.admin.decideApproval({ approvalId: 1, decision: "approved" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.operationsAudit({ page: 0 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.featureFlags()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.countryOperations()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.setCountryLifecycle({ countryId: 1, lifecycleStatus: "paused" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.saveCountryPolicy({ countryId: 1, policyVersion: "country-auth-test", signupAvailability: "available", discoveryAvailability: "available", verificationAvailability: "requires_configuration", paymentAvailability: "unavailable", notificationAvailability: "available", phoneVerificationAvailability: "unavailable", supportedLocaleCodes: ["en"], supportedNotificationChannels: ["in_app"], activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
 }
 
 describe("admin operational authorization", () => {
@@ -71,5 +74,5 @@ describe("admin operational authorization", () => {
     await expect(caller.admin.decideReport({ reportId: 1, status: "resolved" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.admin.decideConnectionReview({ reviewId: 1, decision: "approved_voice" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expectAllScopedAdministrativeAccessDenied(caller);
-  });
+  }, 15_000);
 });

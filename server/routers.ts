@@ -39,6 +39,7 @@ import { cancelSubscriptionRenewal, getMemberBilling, hasEntitlement, initiatePa
 import { dismissNotification, getNotificationCenter, getNotificationPreferences, listNotificationConfiguration, listNotificationOperations, markAllNotificationsRead, markNotificationReadState, processQueuedNotificationDeliveries, saveNotificationPreferences, saveNotificationProviderAvailability, saveNotificationTemplateConfiguration } from "./notificationService";
 import { addSafetyEvidence, approveSafetyEnforcement, createIntegritySignal, expireSafetyEnforcements, getMemberSafetyCenter, getSafetyCaseDetail, getSafetyEvidenceForReview, listSafetyOperations, requestSafetyEnforcement, reviewSafetyAppeal, revokeSafetyEnforcement, saveIntegrityPolicy, submitSafetyAppeal, triageIntegritySignal } from "./integrityService";
 import { acceptStaffInvitation, createOperationalApproval, createOperationalIncident, createStaffSessionControl, createSupportTicket, decideOperationalApproval, getEffectiveStaffAccess, inviteStaff, listCurrentStaffPermissions, listFeatureFlags, listOperationalApprovals, listOperationalAudit, listOperationalIncidents, listOperationsOverview, listStaffDirectory, listSupportTickets, proposeStaffChange, revokeStaffSession, searchOperationalMembers, updateOperationalIncident, updateSupportTicket } from "./adminOperationsService";
+import { getInternationalSettings, listCountryOperations, listInternationalCountries, saveCountryPolicy, saveInternationalSettings, setCountryLifecycle } from "./internationalService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -148,16 +149,21 @@ export const appRouter = router({
       const viewer = await requireProfile(ctx.user.id);
       return getProfileForMember(viewer.id, input.profileId);
     }),
-    fieldVisibilities: protectedProcedure.query(async ({ ctx }) => listProfileFieldVisibilities((await requireProfile(ctx.user.id)).id)),
-	    saveFieldVisibilities: protectedProcedure.input(fieldVisibilityInput).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveProfileFieldVisibilities(profile.id, input.fields); await withdrawRecommendationsForProfile(profile.id, "profile_changed"); return saved; }),
-  }),
-  uploads: router({
+	    fieldVisibilities: protectedProcedure.query(async ({ ctx }) => listProfileFieldVisibilities((await requireProfile(ctx.user.id)).id)),
+		    saveFieldVisibilities: protectedProcedure.input(fieldVisibilityInput).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveProfileFieldVisibilities(profile.id, input.fields); await withdrawRecommendationsForProfile(profile.id, "profile_changed"); return saved; }),
+	  }),
+	  international: router({
+	    countries: publicProcedure.query(() => listInternationalCountries()),
+	    settings: protectedProcedure.query(({ ctx }) => getInternationalSettings(ctx.user.id)),
+	    saveSettings: protectedProcedure.input(z.object({ residenceCountryId: z.number().int().positive(), region: z.string().trim().max(100).nullable().optional(), city: z.string().trim().max(100).nullable().optional(), timezone: z.string().trim().min(3).max(80), interfaceLocale: z.string().trim().min(2).max(16), locationVisibility: z.enum(["eligible_members", "matches_only", "family_circle", "hidden"]), locationDetailLevel: z.enum(["country", "region", "city"]), diasporaStatus: z.enum(["living_in_gambia", "living_outside_gambia", "gambian_diaspora", "international_member"]), phone: z.string().trim().max(40).nullable().optional(), phoneCountryId: z.number().int().positive().nullable().optional(), originCountryIds: z.array(z.number().int().positive()).max(8), preferredDiscoveryCountryIds: z.array(z.number().int().positive()).max(12), futureResidenceCountryIds: z.array(z.number().int().positive()).max(12), futureResidenceOptions: z.array(z.enum(["the_gambia", "senegal", "my_current_country", "partners_country", "another_country", "open_to_discussion"])).max(6), longDistancePreference: z.enum(["open", "prefer_nearby", "no_preference"]) })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const saved = await saveInternationalSettings(ctx.user.id, input); await revokeHardIncompatibleConnectionsForProfile(profile.id); await withdrawRecommendationsForProfile(profile.id, "profile_changed"); return saved; }),
+	  }),
+	  uploads: router({
     profilePhotos: protectedProcedure.query(async ({ ctx }) => listOwnProfilePhotos((await requireProfile(ctx.user.id)).id)),
     uploadProfilePhoto: protectedProcedure.input(z.object({ dataUrl: z.string().max(12_000_000) })).mutation(async ({ ctx, input }) => uploadProfilePhoto((await requireProfile(ctx.user.id)).id, input.dataUrl)),
     uploadIdentityDocument: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]), dataUrl: z.string().max(15_000_000) })).mutation(async ({ ctx, input }) => uploadIdentityDocument((await requireProfile(ctx.user.id)).id, input.documentType, input.dataUrl)),
   }),
   discovery: router({
-    list: protectedProcedure.input(z.object({ minAge: z.number().int().min(18).max(60).optional(), maxAge: z.number().int().min(18).max(60).optional(), religion: z.enum(["muslim", "christian"]).optional(), residenceType: z.enum(["gambia", "diaspora"]).optional(), country: z.string().max(100).optional(), city: z.string().max(100).optional(), tribe: z.string().max(100).optional(), educationLevel: z.string().max(100).optional() }).optional()).query(async ({ ctx, input }) => {
+	    list: protectedProcedure.input(z.object({ minAge: z.number().int().min(18).max(60).optional(), maxAge: z.number().int().min(18).max(60).optional(), religion: z.enum(["muslim", "christian"]).optional(), residenceType: z.enum(["gambia", "diaspora"]).optional(), country: z.string().max(100).optional(), residenceCountryId: z.number().int().positive().optional(), city: z.string().max(100).optional(), tribe: z.string().max(100).optional(), educationLevel: z.string().max(100).optional() }).optional()).query(async ({ ctx, input }) => {
       const profile = await requireProfile(ctx.user.id);
       return getDiscoveryProfiles(profile.id, input);
     }),
@@ -378,6 +384,9 @@ export const appRouter = router({
 	    decideApproval: staffOnlyProcedure.input(z.object({ approvalId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) })).mutation(async ({ ctx, input }) => decideOperationalApproval(ctx.user.id, input.approvalId, input.decision)),
 	    operationsAudit: staffOnlyProcedure.input(z.object({ action: z.string().trim().min(1).max(120).optional(), entityType: z.string().trim().min(1).max(80).optional(), page: z.number().int().min(0).max(100).default(0) })).query(async ({ ctx, input }) => listOperationalAudit(ctx.user.id, input)),
 	    featureFlags: staffOnlyProcedure.query(async ({ ctx }) => listFeatureFlags(ctx.user.id)),
+	    countryOperations: staffOnlyProcedure.query(async ({ ctx }) => listCountryOperations(ctx.user.id)),
+	    setCountryLifecycle: staffOnlyProcedure.input(z.object({ countryId: z.number().int().positive(), lifecycleStatus: z.enum(["draft", "configured", "review", "approved", "active", "paused", "deactivated"]) })).mutation(async ({ ctx, input }) => setCountryLifecycle(ctx.user.id, input.countryId, input.lifecycleStatus)),
+	    saveCountryPolicy: staffOnlyProcedure.input(z.object({ countryId: z.number().int().positive(), policyVersion: z.string().trim().min(3).max(64), signupAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), discoveryAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), verificationAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), paymentAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), notificationAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), phoneVerificationAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), supportedLocaleCodes: z.array(z.string().trim().min(2).max(16)).max(12), supportedNotificationChannels: z.array(z.enum(["in_app", "email", "sms", "push"])).max(4), privacyConfiguration: z.record(z.string(), z.string()).optional(), verificationConfiguration: z.record(z.string(), z.string()).optional(), paymentConfiguration: z.record(z.string(), z.string()).optional(), activate: z.boolean() })).mutation(async ({ ctx, input }) => { const { countryId, ...policy } = input; return saveCountryPolicy(ctx.user.id, countryId, policy); }),
 	  }),
 });
 

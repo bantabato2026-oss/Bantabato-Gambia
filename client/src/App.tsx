@@ -22,9 +22,11 @@ import AdminBillingPage from "@/pages/AdminBilling";
 import AdminNotificationsPage from "@/pages/AdminNotifications";
 import AdminSafetyOperationsPage from "@/pages/AdminSafetyOperations";
 import SafetyCenterPage from "@/pages/SafetyCenterPage";
+import InternationalPage from "@/pages/InternationalPage";
 import AdminSupportPage from "@/pages/AdminSupport";
 import { AdminApprovalsPage, AdminIncidentsPage } from "@/pages/AdminOperationalQueues";
 import { AdminAuditPage, AdminConfigurationPage, AdminMembersPage, AdminStaffPage } from "@/pages/AdminOperationsManagement";
+import AdminCountriesPage from "@/pages/AdminCountries";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -45,7 +47,8 @@ function Router() {
     <Route path="/app/onboarding" component={OnboardingPage} />
     <Route path="/app/profile" component={ProfilePage} />
     <Route path="/app/profile/details" component={ProfileDetailsPage} />
-    <Route path="/app/compatibility" component={CompatibilityPreferencesPage} />
+	    <Route path="/app/compatibility" component={CompatibilityPreferencesPage} />
+	    <Route path="/app/international" component={InternationalPage} />
     <Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
     <Route path="/app/photos" component={ProfileMediaPage} />
     <Route path="/app/discover" component={CuratedDiscoveryPage} />
@@ -78,6 +81,7 @@ function Router() {
 	      <Route path="/admin/staff" component={AdminStaffPage} />
 	      <Route path="/admin/audit" component={AdminAuditPage} />
 	      <Route path="/admin/configuration" component={AdminConfigurationPage} />
+	      <Route path="/admin/countries" component={AdminCountriesPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;

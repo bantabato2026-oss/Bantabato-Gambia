@@ -3,6 +3,7 @@ import { blocks, memberPreferences, memberProfiles, profileFieldVisibilities, ve
 import { evaluatePair, type CompatibilityPreferences, type CompatibilityProfile, type PreferenceImportance } from "./domain/compatibility";
 import { compareCuratedOrder, isEligibleForDiscovery } from "./domain/discoveryPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
+import { safeLocationDisplay } from "./domain/internationalPolicy";
 import { getDb } from "./db";
 
 export type CompatibilityPreferenceInput = {
@@ -188,13 +189,19 @@ function profileCompletenessSignals(candidate: typeof memberProfiles.$inferSelec
 
 function presentDiscoveryItem(item: { candidate: typeof memberProfiles.$inferSelect; compatibility: ReturnType<typeof evaluatePair>; identityVerified: boolean; visibility: Map<string, string> }) {
   const field = <T>(key: string, value: T, fallback: T | null = null): T | null => canViewerSeeProfileField(item.visibility.get(key), { viewerIdentityVerified: false, hasMutualMatch: false }) ? value : fallback;
+  const locationAllowed = canViewerSeeProfileField(item.visibility.get("country"), { viewerIdentityVerified: false, hasMutualMatch: false }) && item.candidate.locationVisibility === "eligible_members";
+  const locationDisplay = locationAllowed ? safeLocationDisplay({ visibility: item.candidate.locationVisibility, detail: item.candidate.locationDetailLevel, countryName: item.candidate.country, region: item.candidate.region, city: item.candidate.city, relationship: "eligible" }) : null;
+  const maySeeRegion = locationAllowed && ["region", "city"].includes(item.candidate.locationDetailLevel);
+  const maySeeCity = locationAllowed && item.candidate.locationDetailLevel === "city";
   const compatible = item.compatibility.dimensions.filter(dimension => dimension.result === "compatible").slice(0, 3).map(dimension => dimension.explanation);
   const considerations = item.compatibility.dimensions.filter(dimension => dimension.result === "consideration").slice(0, 2).map(dimension => dimension.explanation);
   return {
     id: item.candidate.id,
     displayName: item.candidate.displayName,
-    city: field("city", item.candidate.city),
-    country: field("country", item.candidate.country),
+    city: maySeeCity ? field("city", item.candidate.city) : null,
+    region: maySeeRegion ? field("region", item.candidate.region) : null,
+    country: locationAllowed ? item.candidate.country : null,
+    locationDisplay,
     residenceType: item.candidate.residenceType,
     religion: field("religion", item.candidate.religion),
     educationLevel: field("educationLevel", item.candidate.educationLevel),

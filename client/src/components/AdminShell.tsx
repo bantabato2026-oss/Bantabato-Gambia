@@ -3,7 +3,7 @@ import { Brand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, BellRing, CircleDollarSign, ClipboardCheck, Flag, LayoutDashboard, Settings2, ShieldCheck, Sparkles, UsersRound, Video } from "lucide-react";
+import { ArrowLeft, BellRing, CircleDollarSign, ClipboardCheck, Flag, Globe2, LayoutDashboard, Settings2, ShieldCheck, Sparkles, UsersRound, Video } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 const adminNavigation = [
@@ -15,6 +15,7 @@ const adminNavigation = [
 	  { icon: ClipboardCheck, label: "Support", href: "/admin/support", permission: "support.view" }, { icon: ShieldCheck, label: "Approvals", href: "/admin/approvals", permission: "approvals.view" },
 	  { icon: Settings2, label: "Incidents", href: "/admin/incidents", permission: "incidents.view" }, { icon: UsersRound, label: "Staff & permissions", href: "/admin/staff", permission: "staff.view" },
 	  { icon: ClipboardCheck, label: "Audit logs", href: "/admin/audit", permission: "audit.view" }, { icon: Settings2, label: "Configuration", href: "/admin/configuration", permission: "settings.view" },
+	  { icon: Globe2, label: "Countries", href: "/admin/countries", permission: "settings.view" },
 ];
 
 export function AdminAccessGate({ children }: { children: React.ReactNode }) {

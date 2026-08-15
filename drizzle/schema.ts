@@ -26,6 +26,88 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+export const COUNTRY_LIFECYCLE_VALUES = ["draft", "configured", "review", "approved", "active", "paused", "deactivated"] as const;
+export const FEATURE_AVAILABILITY_VALUES = ["available", "unavailable", "coming_soon", "requires_configuration"] as const;
+
+/** Country records are policy metadata, not a member-quality or safety-ranking input. */
+export const countries = mysqlTable("countries", {
+  id: int("id").autoincrement().primaryKey(),
+  iso2: varchar("iso2", { length: 2 }).notNull(),
+  iso3: varchar("iso3", { length: 3 }).notNull(),
+  displayName: varchar("displayName", { length: 120 }).notNull(),
+  region: varchar("region", { length: 100 }).notNull(),
+  lifecycleStatus: mysqlEnum("lifecycleStatus", COUNTRY_LIFECYCLE_VALUES).default("draft").notNull(),
+  defaultTimezone: varchar("defaultTimezone", { length: 80 }).notNull(),
+  active: boolean("active").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("countries_iso2_unique").on(table.iso2), uniqueIndex("countries_iso3_unique").on(table.iso3), index("countries_lifecycle_idx").on(table.lifecycleStatus, table.active)]);
+
+/** Currency metadata allows honest configured display without exchange-rate conversion or live payment claims. */
+export const currencies = mysqlTable("currencies", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 3 }).notNull(),
+  displayName: varchar("displayName", { length: 120 }).notNull(),
+  symbol: varchar("symbol", { length: 12 }),
+  minorUnit: int("minorUnit").default(2).notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("currencies_code_unique").on(table.code)]);
+
+/** Supported locales are declarations only; missing copy falls back to English rather than exposing keys. */
+export const locales = mysqlTable("locales", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 16 }).notNull(),
+  displayName: varchar("displayName", { length: 120 }).notNull(),
+  direction: mysqlEnum("direction", ["ltr", "rtl"]).default("ltr").notNull(),
+  status: mysqlEnum("status", ["available", "coming_soon", "requires_configuration"]).default("coming_soon").notNull(),
+  fallbackLocaleCode: varchar("fallbackLocaleCode", { length: 16 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("locales_code_unique").on(table.code)]);
+
+export const countryCurrencies = mysqlTable("country_currencies", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull().references(() => countries.id, { onDelete: "cascade" }),
+  currencyId: int("currencyId").notNull().references(() => currencies.id, { onDelete: "cascade" }),
+  isDefault: boolean("isDefault").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("country_currency_unique").on(table.countryId, table.currencyId), index("country_currency_default_idx").on(table.countryId, table.isDefault)]);
+
+/** Versioned rollout configuration makes country availability explicit; none of these fields imply a live provider. */
+export const countryPolicies = mysqlTable("country_policies", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull().references(() => countries.id, { onDelete: "cascade" }),
+  policyVersion: varchar("policyVersion", { length: 64 }).notNull(),
+  status: mysqlEnum("status", ["draft", "active", "retired"]).default("draft").notNull(),
+  signupAvailability: mysqlEnum("signupAvailability", FEATURE_AVAILABILITY_VALUES).default("unavailable").notNull(),
+  discoveryAvailability: mysqlEnum("discoveryAvailability", FEATURE_AVAILABILITY_VALUES).default("unavailable").notNull(),
+  verificationAvailability: mysqlEnum("verificationAvailability", FEATURE_AVAILABILITY_VALUES).default("requires_configuration").notNull(),
+  paymentAvailability: mysqlEnum("paymentAvailability", FEATURE_AVAILABILITY_VALUES).default("unavailable").notNull(),
+  notificationAvailability: mysqlEnum("notificationAvailability", FEATURE_AVAILABILITY_VALUES).default("requires_configuration").notNull(),
+  phoneVerificationAvailability: mysqlEnum("phoneVerificationAvailability", FEATURE_AVAILABILITY_VALUES).default("requires_configuration").notNull(),
+  supportedLocaleCodes: json("supportedLocaleCodes").notNull(),
+  supportedNotificationChannels: json("supportedNotificationChannels").notNull(),
+  privacyConfiguration: json("privacyConfiguration").notNull(),
+  verificationConfiguration: json("verificationConfiguration").notNull(),
+  paymentConfiguration: json("paymentConfiguration").notNull(),
+  activatedAt: timestamp("activatedAt"),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("country_policy_version_unique").on(table.countryId, table.policyVersion), index("country_policy_status_idx").on(table.countryId, table.status, table.activatedAt)]);
+
+/** Append-oriented country lifecycle events contain operational metadata only, never legal or data-residency claims. */
+export const countryEvents = mysqlTable("country_events", {
+  id: int("id").autoincrement().primaryKey(),
+  countryId: int("countryId").notNull().references(() => countries.id, { onDelete: "cascade" }),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  eventType: mysqlEnum("eventType", ["created", "configured", "submitted_for_review", "approved", "activated", "paused", "deactivated", "policy_activated"]).notNull(),
+  safeMetadata: json("safeMetadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("country_events_country_idx").on(table.countryId, table.createdAt)]);
+
 export const memberProfiles = mysqlTable(
   "member_profiles",
   {
@@ -44,10 +126,15 @@ export const memberProfiles = mysqlTable(
     tribe: varchar("tribe", { length: 100 }),
     residenceType: mysqlEnum("residenceType", ["gambia", "diaspora"]).default("gambia").notNull(),
     country: varchar("country", { length: 100 }),
+    residenceCountryId: int("residenceCountryId").references(() => countries.id, { onDelete: "set null" }),
     region: varchar("region", { length: 100 }),
     city: varchar("city", { length: 100 }),
     nationality: varchar("nationality", { length: 100 }),
     languages: json("languages"),
+    timezone: varchar("timezone", { length: 80 }).default("Africa/Banjul").notNull(),
+    interfaceLocale: varchar("interfaceLocale", { length: 16 }).default("en").notNull(),
+    locationVisibility: mysqlEnum("locationVisibility", ["eligible_members", "matches_only", "family_circle", "hidden"]).default("eligible_members").notNull(),
+    locationDetailLevel: mysqlEnum("locationDetailLevel", ["country", "region", "city"]).default("country").notNull(),
     maritalStatus: mysqlEnum("maritalStatus", ["never_married", "married", "divorced", "widowed"]),
     educationLevel: varchar("educationLevel", { length: 100 }),
     educationField: varchar("educationField", { length: 120 }),
@@ -93,8 +180,47 @@ export const memberProfiles = mysqlTable(
     uniqueIndex("member_profiles_user_unique").on(table.userId),
     index("member_profiles_discovery_idx").on(table.profileStatus, table.searchVisible, table.religion, table.residenceType),
     index("member_profiles_location_idx").on(table.country, table.city),
+    index("member_profiles_residence_country_idx").on(table.residenceCountryId, table.profileStatus, table.searchVisible),
   ],
 );
+
+/** Origins may be multiple but remain private unless existing field-level visibility grants an audience. */
+export const memberProfileOrigins = mysqlTable("member_profile_origins", {
+  id: int("id").autoincrement().primaryKey(),
+  profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  countryId: int("countryId").notNull().references(() => countries.id, { onDelete: "restrict" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("member_origin_unique").on(table.profileId, table.countryId), index("member_origin_country_idx").on(table.countryId, table.profileId)]);
+
+/** Private international account settings hold phone normalization and optional self-identification, never a public phone directory. */
+export const memberInternationalSettings = mysqlTable("member_international_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  diasporaStatus: mysqlEnum("diasporaStatus", ["living_in_gambia", "living_outside_gambia", "gambian_diaspora", "international_member"]).default("living_in_gambia").notNull(),
+  normalizedPhone: varchar("normalizedPhone", { length: 32 }),
+  phoneCountryId: int("phoneCountryId").references(() => countries.id, { onDelete: "set null" }),
+  phoneVerificationStatus: mysqlEnum("phoneVerificationStatus", ["not_started", "unavailable", "pending", "verified"]).default("not_started").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("member_intl_settings_profile_unique").on(table.profileId), index("member_intl_phone_country_idx").on(table.phoneCountryId, table.phoneVerificationStatus)]);
+
+/** Cross-border preference data is voluntary and logistics-focused; it is not a prestige or member-ranking model. */
+export const memberInternationalPreferences = mysqlTable("member_international_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  longDistancePreference: mysqlEnum("longDistancePreference", ["open", "prefer_nearby", "no_preference"]).default("no_preference").notNull(),
+  futureResidenceOptions: json("futureResidenceOptions").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("member_intl_preferences_profile_unique").on(table.profileId)]);
+
+export const memberPreferredCountries = mysqlTable("member_preferred_countries", {
+  id: int("id").autoincrement().primaryKey(),
+  profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  countryId: int("countryId").notNull().references(() => countries.id, { onDelete: "restrict" }),
+  preferencePurpose: mysqlEnum("preferencePurpose", ["discovery", "future_residence"]).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("member_pref_country_unique").on(table.profileId, table.countryId, table.preferencePurpose), index("member_pref_country_lookup_idx").on(table.countryId, table.preferencePurpose)]);
 
 export const memberPreferences = mysqlTable(
   "member_preferences",
