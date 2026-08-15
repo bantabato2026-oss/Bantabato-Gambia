@@ -22,6 +22,9 @@ import AdminBillingPage from "@/pages/AdminBilling";
 import AdminNotificationsPage from "@/pages/AdminNotifications";
 import AdminSafetyOperationsPage from "@/pages/AdminSafetyOperations";
 import SafetyCenterPage from "@/pages/SafetyCenterPage";
+import AdminSupportPage from "@/pages/AdminSupport";
+import { AdminApprovalsPage, AdminIncidentsPage } from "@/pages/AdminOperationalQueues";
+import { AdminAuditPage, AdminConfigurationPage, AdminMembersPage, AdminStaffPage } from "@/pages/AdminOperationsManagement";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -68,6 +71,13 @@ function Router() {
       <Route path="/admin/billing" component={AdminBillingPage} />
 	      <Route path="/admin/notifications" component={AdminNotificationsPage} />
 	      <Route path="/admin/safety" component={AdminSafetyOperationsPage} />
+	      <Route path="/admin/members" component={AdminMembersPage} />
+	      <Route path="/admin/support" component={AdminSupportPage} />
+	      <Route path="/admin/approvals" component={AdminApprovalsPage} />
+	      <Route path="/admin/incidents" component={AdminIncidentsPage} />
+	      <Route path="/admin/staff" component={AdminStaffPage} />
+	      <Route path="/admin/audit" component={AdminAuditPage} />
+	      <Route path="/admin/configuration" component={AdminConfigurationPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;

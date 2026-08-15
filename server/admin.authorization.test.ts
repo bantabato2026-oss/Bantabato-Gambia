@@ -41,6 +41,23 @@ async function expectAllScopedAdministrativeAccessDenied(caller: ReturnType<type
   await expect(caller.admin.expireSafetyEnforcements({ limit: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.reviewSafetyAppeal({ appealId: 1, status: "upheld", decisionSummary: "The decision remains proportionate after separate review." })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.saveIntegrityPolicy({ policyVersion: "integrity-v2", activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.operationsAccess()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.operationsOverview()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.operationsMembers({ query: "member", page: 0 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.staffDirectory()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.staffPermissions()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.inviteStaff({ email: "staff@example.test", staffRole: "customer_support_officer", expiresInHours: 24 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.proposeStaffChange({ staffProfileId: 1, nextStatus: "suspended", reason: "A separate authorized review is required." })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.revokeStaffSession({ sessionControlId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.supportTickets({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.createSupportTicket({ memberProfileId: 1, category: "other", subject: "Support request", description: "A support-safe operational request.", priority: "normal" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.incidents()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.createIncident({ category: "service_degradation", severity: "medium", title: "Operational issue", summary: "A controlled incident description." })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.approvals()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.createApproval({ approvalType: "staff_role_change", resourceType: "staff_profile", resourceId: "1", requiredApproverRole: "platform_administrator", reason: "A separate approval is required.", impactSummary: "The requested staff role change is high impact.", expiresAt: new Date(Date.now() + 60_000) })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.decideApproval({ approvalId: 1, decision: "approved" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.operationsAudit({ page: 0 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.featureFlags()).rejects.toMatchObject({ code: "FORBIDDEN" });
 }
 
 describe("admin operational authorization", () => {

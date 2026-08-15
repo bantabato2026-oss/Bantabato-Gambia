@@ -1192,6 +1192,164 @@ export const adminRoles = mysqlTable(
   table => [uniqueIndex("admin_roles_user_scope_unique").on(table.userId, table.scope)],
 );
 
+export const STAFF_ROLE_VALUES = ["platform_administrator", "operations_manager", "trust_safety_officer", "verification_officer", "customer_support_officer", "finance_officer", "content_policy_manager", "read_only_auditor"] as const;
+export type StaffRole = (typeof STAFF_ROLE_VALUES)[number];
+
+/** Separate staff identities are linked to authenticated users; shared administrator accounts are not supported. */
+export const staffProfiles = mysqlTable("staff_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  staffRole: mysqlEnum("staffRole", STAFF_ROLE_VALUES).notNull(),
+  status: mysqlEnum("status", ["invited", "active", "suspended", "deactivated"]).default("invited").notNull(),
+  mfaRequired: boolean("mfaRequired").default(false).notNull(),
+  invitedByUserId: int("invitedByUserId").references(() => users.id, { onDelete: "set null" }),
+  activatedAt: timestamp("activatedAt"),
+  suspendedAt: timestamp("suspendedAt"),
+  deactivatedAt: timestamp("deactivatedAt"),
+  lastReauthenticatedAt: timestamp("lastReauthenticatedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("staff_profiles_user_unique").on(table.userId), index("staff_profiles_role_status_idx").on(table.staffRole, table.status)]);
+
+export const staffPermissions = mysqlTable("staff_permissions", {
+  id: int("id").autoincrement().primaryKey(),
+  permissionKey: varchar("permissionKey", { length: 120 }).notNull(),
+  module: varchar("module", { length: 64 }).notNull(),
+  description: varchar("description", { length: 300 }).notNull(),
+  highImpact: boolean("highImpact").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("staff_permissions_key_unique").on(table.permissionKey), index("staff_permissions_module_idx").on(table.module)]);
+
+export const staffRolePermissions = mysqlTable("staff_role_permissions", {
+  id: int("id").autoincrement().primaryKey(),
+  staffRole: mysqlEnum("staffRole", STAFF_ROLE_VALUES).notNull(),
+  permissionId: int("permissionId").notNull().references(() => staffPermissions.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("srp_role_permission_unique").on(table.staffRole, table.permissionId)]);
+
+/** Narrow, reviewable exceptions cannot be used for self-granted privilege escalation. */
+export const staffPermissionOverrides = mysqlTable("staff_permission_overrides", {
+  id: int("id").autoincrement().primaryKey(),
+  staffProfileId: int("staffProfileId").notNull().references(() => staffProfiles.id, { onDelete: "cascade" }),
+  permissionId: int("permissionId").notNull().references(() => staffPermissions.id, { onDelete: "cascade" }),
+  effect: mysqlEnum("effect", ["grant", "revoke"]).notNull(),
+  status: mysqlEnum("status", ["proposed", "active", "rejected", "revoked", "expired"]).default("proposed").notNull(),
+  reason: varchar("reason", { length: 500 }).notNull(),
+  requestedByUserId: int("requestedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  approvedByUserId: int("approvedByUserId").references(() => users.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  decidedAt: timestamp("decidedAt"),
+}, table => [index("spo_status_expiry_idx").on(table.status, table.expiresAt), index("spo_staff_idx").on(table.staffProfileId, table.status)]);
+
+/** Invitation secrets are stored as hashes and are never exposed through audit records or UI. */
+export const staffInvitations = mysqlTable("staff_invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(),
+  invitationCodeHash: varchar("invitationCodeHash", { length: 128 }).notNull(),
+  requestedRole: mysqlEnum("requestedRole", STAFF_ROLE_VALUES).notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "expired", "revoked"]).default("pending").notNull(),
+  invitedByUserId: int("invitedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  acceptedByUserId: int("acceptedByUserId").references(() => users.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  revokedAt: timestamp("revokedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("staff_invitation_hash_unique").on(table.invitationCodeHash), index("staff_invitation_status_expiry_idx").on(table.status, table.expiresAt)]);
+
+/** Session-control records permit server-side revocation without storing session secrets. */
+export const staffSessionControls = mysqlTable("staff_session_controls", {
+  id: int("id").autoincrement().primaryKey(),
+  staffProfileId: int("staffProfileId").notNull().references(() => staffProfiles.id, { onDelete: "cascade" }),
+  sessionReferenceHash: varchar("sessionReferenceHash", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["active", "revoked", "expired"]).default("active").notNull(),
+  issuedAt: timestamp("issuedAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  revokedAt: timestamp("revokedAt"),
+  revokedByUserId: int("revokedByUserId").references(() => users.id, { onDelete: "set null" }),
+  reauthenticatedAt: timestamp("reauthenticatedAt"),
+}, table => [uniqueIndex("ssc_reference_unique").on(table.sessionReferenceHash), index("ssc_staff_status_idx").on(table.staffProfileId, table.status, table.expiresAt)]);
+
+/** Support stays separate from Trust & Safety; escalation records a case link but never grants evidence access. */
+export const supportTickets = mysqlTable("support_tickets", {
+  id: int("id").autoincrement().primaryKey(),
+  memberProfileId: int("memberProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  category: mysqlEnum("category", ["account_access", "profile", "verification", "membership", "payment", "notifications", "family_circle", "technical_issue", "safety_concern", "other"]).notNull(),
+  subject: varchar("subject", { length: 200 }).notNull(),
+  description: text("description").notNull(),
+  status: mysqlEnum("status", ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated", "resolved", "closed"]).default("new").notNull(),
+  priority: mysqlEnum("priority", ["low", "normal", "high", "critical"]).default("normal").notNull(),
+  assignedStaffProfileId: int("assignedStaffProfileId").references(() => staffProfiles.id, { onDelete: "set null" }),
+  escalatedReportId: int("escalatedReportId").references(() => reports.id, { onDelete: "set null" }),
+  resolution: varchar("resolution", { length: 1000 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  resolvedAt: timestamp("resolvedAt"),
+  closedAt: timestamp("closedAt"),
+}, table => [index("support_ticket_queue_idx").on(table.status, table.priority, table.createdAt), index("support_ticket_member_idx").on(table.memberProfileId, table.createdAt)]);
+
+export const supportTicketEvents = mysqlTable("support_ticket_events", {
+  id: int("id").autoincrement().primaryKey(),
+  ticketId: int("ticketId").notNull().references(() => supportTickets.id, { onDelete: "cascade" }),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  eventType: mysqlEnum("eventType", ["created", "assigned", "status_changed", "note_added", "escalated", "resolved", "closed"]).notNull(),
+  safeMetadata: json("safeMetadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("ste_ticket_created_idx").on(table.ticketId, table.createdAt)]);
+
+export const operationalIncidents = mysqlTable("operational_incidents", {
+  id: int("id").autoincrement().primaryKey(),
+  category: mysqlEnum("category", ["notification_provider", "payment_provider", "authentication", "database", "safety_system", "service_degradation", "other"]).notNull(),
+  severity: mysqlEnum("severity", ["low", "medium", "high", "critical"]).default("medium").notNull(),
+  status: mysqlEnum("status", ["detected", "investigating", "mitigating", "monitoring", "resolved", "closed"]).default("detected").notNull(),
+  title: varchar("title", { length: 220 }).notNull(),
+  summary: varchar("summary", { length: 2000 }).notNull(),
+  assignedStaffProfileId: int("assignedStaffProfileId").references(() => staffProfiles.id, { onDelete: "set null" }),
+  detectedByUserId: int("detectedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  resolvedAt: timestamp("resolvedAt"),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("incident_queue_idx").on(table.status, table.severity, table.createdAt)]);
+
+export const operationalIncidentEvents = mysqlTable("operational_incident_events", {
+  id: int("id").autoincrement().primaryKey(),
+  incidentId: int("incidentId").notNull().references(() => operationalIncidents.id, { onDelete: "cascade" }),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  eventType: mysqlEnum("eventType", ["detected", "assigned", "note_added", "status_changed", "escalated", "resolved", "post_incident_review"]).notNull(),
+  safeMetadata: json("safeMetadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("oie_incident_created_idx").on(table.incidentId, table.createdAt)]);
+
+/** High-impact operational changes require a separately authorized approval, never requester self-approval. */
+export const operationalApprovals = mysqlTable("operational_approvals", {
+  id: int("id").autoincrement().primaryKey(),
+  approvalType: mysqlEnum("approvalType", ["safety_action", "refund", "staff_role_change", "permission_override", "policy_change", "configuration_change", "feature_flag"]).notNull(),
+  resourceType: varchar("resourceType", { length: 80 }).notNull(),
+  resourceId: varchar("resourceId", { length: 120 }).notNull(),
+  requestedByUserId: int("requestedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requiredApproverRole: mysqlEnum("requiredApproverRole", STAFF_ROLE_VALUES).notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "rejected", "cancelled", "expired"]).default("pending").notNull(),
+  reason: varchar("reason", { length: 1000 }).notNull(),
+  impactSummary: varchar("impactSummary", { length: 1000 }).notNull(),
+  approvedByUserId: int("approvedByUserId").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decidedAt"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("oa_queue_idx").on(table.status, table.approvalType, table.expiresAt)]);
+
+/** Metadata-only flags remain environment-aware, permission-controlled, and secret-free. */
+export const operationalFeatureFlags = mysqlTable("operational_feature_flags", {
+  id: int("id").autoincrement().primaryKey(),
+  flagKey: varchar("flagKey", { length: 120 }).notNull(),
+  environment: mysqlEnum("environment", ["development", "staging", "production"]).notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
+  status: mysqlEnum("status", ["draft", "approved", "archived"]).default("draft").notNull(),
+  configuration: json("configuration"),
+  updatedByUserId: int("updatedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("off_key_environment_unique").on(table.flagKey, table.environment)]);
+
 export const auditLogs = mysqlTable(
   "audit_logs",
   {
