@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { API_BODY_LIMIT, OAUTH_CALLBACK_RATE_RULE, applyNoStoreForApi, applySecurityHeaders, createFixedRateLimitMiddleware, createTrpcRateLimitMiddleware } from "../security";
+import { getServiceHealth } from "../health";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -40,6 +41,9 @@ async function startServer() {
   app.use(express.json({ limit: API_BODY_LIMIT }));
   app.use(express.urlencoded({ limit: API_BODY_LIMIT, extended: true }));
   app.use("/api", applyNoStoreForApi);
+  app.get("/api/healthz", (_req, res) => {
+    res.status(200).json(getServiceHealth());
+  });
   registerStorageProxy(app);
   app.use("/api/oauth/callback", createFixedRateLimitMiddleware(OAUTH_CALLBACK_RATE_RULE));
   registerOAuthRoutes(app);
