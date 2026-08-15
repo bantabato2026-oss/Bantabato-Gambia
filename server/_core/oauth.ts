@@ -4,6 +4,7 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { SESSION_MAX_AGE_MS } from "@shared/const";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -50,11 +51,11 @@ export function registerOAuthRoutes(app: Express) {
 
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS,
+        expiresInMs: SESSION_MAX_AGE_MS,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_MAX_AGE_MS });
 
       res.redirect(302, "/");
     } catch (error) {

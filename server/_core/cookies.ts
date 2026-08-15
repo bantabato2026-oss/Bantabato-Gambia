@@ -39,10 +39,14 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  const secure = isSecureRequest(req);
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    // Cross-site OAuth callback requires SameSite=None in HTTPS deployments;
+    // browsers reject that combination on local HTTP, where Lax is safer and
+    // keeps local sign-in behavior predictable.
+    sameSite: secure ? "none" : "lax",
+    secure,
   };
 }

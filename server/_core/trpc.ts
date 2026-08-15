@@ -5,6 +5,20 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  errorFormatter({ shape }) {
+    // Explicit TRPC errors contain reviewed member-facing guidance. Unexpected
+    // internal errors must never disclose storage, database, stack, or service
+    // details to a browser, including in development-style client responses.
+    const isUnexpected = shape.data.code === "INTERNAL_SERVER_ERROR";
+    return {
+      ...shape,
+      message: isUnexpected ? "We couldn’t complete that request. Please try again." : shape.message,
+      data: {
+        ...shape.data,
+        stack: undefined,
+      },
+    };
+  },
 });
 
 export const router = t.router;

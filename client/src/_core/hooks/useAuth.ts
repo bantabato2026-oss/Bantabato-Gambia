@@ -45,29 +45,34 @@ export function useAuth(options?: UseAuthOptions) {
       try {
         sessionStorage.removeItem("manus-cookie");
       } catch {}
+      try {
+        localStorage.removeItem("manus-runtime-user-info");
+      } catch {}
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
     }
   }, [logoutMutation, utils]);
 
-  const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
-    return {
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
-    };
-  }, [
+  const state = useMemo(() => ({
+    user: meQuery.data ?? null,
+    loading: meQuery.isLoading || logoutMutation.isPending,
+    error: meQuery.error ?? logoutMutation.error ?? null,
+    isAuthenticated: Boolean(meQuery.data),
+  }), [
     meQuery.data,
     meQuery.error,
     meQuery.isLoading,
     logoutMutation.error,
     logoutMutation.isPending,
   ]);
+
+  useEffect(() => {
+    // A historic runtime convenience key is not required for application state.
+    // Remove any stale value left by an earlier client version.
+    try {
+      localStorage.removeItem("manus-runtime-user-info");
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;

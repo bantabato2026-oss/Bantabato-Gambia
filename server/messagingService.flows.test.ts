@@ -43,7 +43,7 @@ describe("Phase 4 messaging service flows", () => {
   it("stores a validated private voice note through the same mutual-match gate and records a voice interaction", async () => {
     const harness = statefulHarness([...accessRows(), ...notificationRows()]);
     mocks.getDb.mockResolvedValue(harness.db);
-    await uploadVoiceNote(3, 10, "data:audio/webm;base64,AA==", 12);
+    await uploadVoiceNote(3, 10, "data:audio/webm;base64,GkXfow==", 12);
     expect(mocks.storagePut).toHaveBeenCalledWith(expect.stringContaining("members/3/conversations/10/voice/"), expect.any(Buffer), "audio/webm");
     expect(harness.inserts.some(entry => (entry.values as any).messageType === "voice")).toBe(true);
     expect(harness.inserts.some(entry => (entry.values as any).voiceNotesSent === undefined && (entry.values as any).profileId === 3)).toBe(true);

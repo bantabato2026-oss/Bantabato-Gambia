@@ -1,11 +1,20 @@
 import type { Express } from "express";
 import { ENV } from "./env";
 
+const PUBLIC_STORAGE_PREFIX = "public/";
+
+export function isPublicStorageKey(key: string) {
+  return key.startsWith(PUBLIC_STORAGE_PREFIX) && !key.includes("..") && !key.includes("\\");
+}
+
 export function registerStorageProxy(app: Express) {
   app.get("/manus-storage/*", async (req, res) => {
     const key = (req.params as Record<string, string>)[0];
-    if (!key) {
-      res.status(400).send("Missing storage key");
+    // The proxy is reserved for explicitly public deployment assets. Member
+    // photos, verification documents, safety evidence, and voice notes must
+    // use an authorized service path that returns a short-lived signed URL.
+    if (!key || !isPublicStorageKey(key)) {
+      res.status(404).send("Not found");
       return;
     }
 
@@ -28,13 +37,13 @@ export function registerStorageProxy(app: Express) {
       if (!forgeResp.ok) {
         const body = await forgeResp.text().catch(() => "");
         console.error(`[StorageProxy] forge error: ${forgeResp.status} ${body}`);
-        res.status(502).send("Storage backend error");
+        res.status(502).send("Storage backend is temporarily unavailable");
         return;
       }
 
       const { url } = (await forgeResp.json()) as { url: string };
       if (!url) {
-        res.status(502).send("Empty signed URL from backend");
+        res.status(502).send("Storage backend is temporarily unavailable");
         return;
       }
 
@@ -42,7 +51,7 @@ export function registerStorageProxy(app: Express) {
       res.redirect(307, url);
     } catch (err) {
       console.error("[StorageProxy] failed:", err);
-      res.status(502).send("Storage proxy error");
+      res.status(502).send("Storage backend is temporarily unavailable");
     }
   });
 }

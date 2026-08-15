@@ -95,7 +95,11 @@ export async function approveSafetyEnforcement(actorUserId: number, enforcementA
   const action = (await db.select().from(safetyEnforcementActions).where(eq(safetyEnforcementActions.id, enforcementActionId)).limit(1))[0];
   if (!action || action.status !== "proposed" || !action.requiresSecondApproval) throw new Error("This safety action is not awaiting second approval.");
   if (action.requestedByUserId === actorUserId) throw new Error("A separate reviewer must approve this high-impact safety action.");
-  await db.update(safetyEnforcementActions).set({ status: "active", approvedByUserId: actorUserId, effectiveAt: new Date() }).where(eq(safetyEnforcementActions.id, enforcementActionId));
+  const approvalResult = await db.update(safetyEnforcementActions).set({ status: "active", approvedByUserId: actorUserId, effectiveAt: new Date() }).where(and(eq(safetyEnforcementActions.id, enforcementActionId), eq(safetyEnforcementActions.status, "proposed")));
+  const approvalSummary = Array.isArray(approvalResult) ? approvalResult[0] : approvalResult;
+  if (typeof (approvalSummary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (approvalSummary as { affectedRows: number }).affectedRows === 0) {
+    throw new Error("This safety action was already decided or is no longer awaiting approval.");
+  }
   await activateSafetyEnforcement(actorUserId, enforcementActionId, true);
   await createAuditLog(actorUserId, "safety.enforcement_approved", "safety_enforcement_action", String(enforcementActionId), { separateApprover: true });
   return { enforcementActionId, status: "active" as const };

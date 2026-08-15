@@ -4,6 +4,8 @@ import { blocks, conversationEvents, conversationInteractionSignals, conversatio
 import { getCompatibilityExplanation } from "./compatibilityService";
 import { blockProfile, createAuditLog, createNotification, createReport, getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
+import { assertExpectedFileSignature } from "./fileValidation";
+import { normalizeOptionalUserText, normalizeUserText } from "./inputSecurity";
 import { safePromptForDimension, validateVoiceNoteMeta } from "./domain/messagingPolicy";
 import { createIntegritySignal } from "./integrityService";
 import { revokeConnectionForConversation } from "./readinessService";
@@ -72,7 +74,7 @@ export async function listMessages(profileId: number, conversationId: number, in
 }
 
 export async function sendText(profileId: number, conversationId: number, body: string, retryOfMessageId?: number) {
-  const clean = body.trim();
+  const clean = normalizeUserText(body).trim();
   if (!clean || clean.length > MAX_TEXT_LENGTH) throw new Error("Messages must contain up to 2,000 characters");
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
@@ -158,7 +160,7 @@ export async function reportMessage(profileId: number, conversationId: number, m
   const message = await db.select().from(messages).where(and(eq(messages.id, messageId), eq(messages.conversationId, conversationId), isNull(messages.deletedAt))).limit(1);
   if (!message[0]) throw new Error("Message is unavailable");
   const reportedProfileId = message[0].senderProfileId === profileId ? access.otherProfileId : message[0].senderProfileId;
-  const report = await createReport(profileId, { reportedProfileId, conversationId, messageId, reason, details });
+  const report = await createReport(profileId, { reportedProfileId, conversationId, messageId, reason, details: normalizeOptionalUserText(details) ?? undefined });
   await createIntegritySignal({ subjectProfileId: reportedProfileId, reportId: report.reportId, source: "messaging", category: reason === "financial_solicitation" ? "financial_solicitation" : "messaging_behavior", severity: ["scam", "harassment", "financial_solicitation", "safety_concern"].includes(reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `message-report:${report.reportId}` });
   await db.update(messages).set({ reportCount: sql`${messages.reportCount} + 1`, moderationStatus: "flagged" }).where(eq(messages.id, messageId));
   await db.update(conversations).set({ status: "reported", lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
@@ -251,6 +253,7 @@ function decodeVoice(dataUrl: string) {
   if (!ALLOWED_VOICE_MIME.includes(mimeType)) throw new Error("Use a supported compressed audio format");
   const buffer = Buffer.from(encoded, "base64");
   if (!buffer.length || buffer.length > MAX_VOICE_BYTES) throw new Error("Voice note is empty or exceeds the 6 MB limit");
+  assertExpectedFileSignature(buffer, mimeType);
   const extension = ({ "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3" } as Record<string, string>)[mimeType];
   return { buffer, mimeType, extension };
 }

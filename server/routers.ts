@@ -46,7 +46,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const staffOnlyProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "An authorized staff identity is required." });
-  try { await getEffectiveStaffAccess(ctx.user.id); } catch { throw new TRPCError({ code: "FORBIDDEN", message: "An active, permissioned staff identity is required." }); }
+  try { await getEffectiveStaffAccess(ctx.user.id, ctx.user.sessionReferenceHash); } catch { throw new TRPCError({ code: "FORBIDDEN", message: "An active, permissioned staff identity is required." }); }
   return next();
 });
 
@@ -111,9 +111,10 @@ async function requireProfile(userId: number) {
   return profile;
 }
 
-async function requireOperationalAccess(user: { id: number; role: string }, allowedScopes: Array<"verification_reviewer" | "trust_safety" | "support_agent" | "subscription_manager" | "platform_admin">) {
+async function requireOperationalAccess(user: { id: number; role: string; sessionReferenceHash?: string }, allowedScopes: Array<"verification_reviewer" | "trust_safety" | "support_agent" | "subscription_manager" | "platform_admin">) {
   if (user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Administrator access is required." });
   try {
+    await getEffectiveStaffAccess(user.id, user.sessionReferenceHash);
     return await requireOperationalScope(user.id, allowedScopes);
   } catch {
     throw new TRPCError({ code: "FORBIDDEN", message: "Your operational role does not permit this action." });

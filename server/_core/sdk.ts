@@ -7,6 +7,8 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
+import { SESSION_MAX_AGE_MS } from "@shared/const";
+import { createHash } from "node:crypto";
 import type {
   ExchangeTokenRequest,
   ExchangeTokenResponse,
@@ -182,7 +184,7 @@ class SDKServer {
     options: { expiresInMs?: number } = {}
   ): Promise<string> {
     const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const expiresInMs = options.expiresInMs ?? SESSION_MAX_AGE_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 
@@ -316,7 +318,10 @@ class SDKServer {
       lastSignedIn: signedInAt,
     });
 
-    return user;
+    return {
+      ...user,
+      sessionReferenceHash: createHash("sha256").update(sessionToken ?? "").digest("hex"),
+    };
   }
 }
 
@@ -326,6 +331,7 @@ const CRON_OPEN_ID_PREFIX = "cron_";
 export type AuthenticatedUser = User & {
   taskUid?: string;
   isCron?: boolean;
+  sessionReferenceHash?: string;
 };
 
 function buildCronUser(

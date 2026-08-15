@@ -1,7 +1,7 @@
 import { Brand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { Menu, ShieldCheck, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 
 const navigation = [
@@ -14,6 +14,7 @@ const navigation = [
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [location] = useLocation();
+  useEffect(() => { setMenuOpen(false); }, [location]);
   return (
     <div className="min-h-screen bg-cream text-ink">
       <header className="public-header">
@@ -21,7 +22,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           <Brand />
           <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary navigation">
             {navigation.map(item => (
-              <Link key={item.href} href={item.href} className={`nav-link ${location === item.href ? "nav-link-active" : ""}`}>
+              <Link key={item.href} href={item.href} aria-current={location === item.href ? "page" : undefined} className={`nav-link ${location === item.href ? "nav-link-active" : ""}`}>
                 {item.label}
               </Link>
             ))}
@@ -30,14 +31,14 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <Link href="/login" className="nav-link">Sign in</Link>
             <Button asChild className="btn-gold"><Link href="/register">Join Bantabato</Link></Button>
           </div>
-          <button onClick={() => setMenuOpen(open => !open)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/10 bg-white lg:hidden" aria-label="Toggle menu" aria-expanded={menuOpen}>
+          <button onClick={() => setMenuOpen(open => !open)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ink/10 bg-white lg:hidden" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"} aria-controls="mobile-navigation" aria-expanded={menuOpen}>
             {menuOpen ? <X size={19} /> : <Menu size={19} />}
           </button>
         </div>
         {menuOpen ? (
           <div className="border-t border-ink/10 bg-cream px-5 py-5 lg:hidden">
-            <nav className="container flex flex-col gap-1" aria-label="Mobile navigation">
-              {navigation.map(item => <Link onClick={() => setMenuOpen(false)} key={item.href} href={item.href} className="rounded-xl px-3 py-3 text-sm font-medium hover:bg-ink/5">{item.label}</Link>)}
+            <nav id="mobile-navigation" className="container flex flex-col gap-1" aria-label="Mobile navigation">
+              {navigation.map(item => <Link onClick={() => setMenuOpen(false)} key={item.href} href={item.href} aria-current={location === item.href ? "page" : undefined} className="rounded-xl px-3 py-3 text-sm font-medium hover:bg-ink/5">{item.label}</Link>)}
               <div className="my-2 border-t border-ink/10" />
               <Link onClick={() => setMenuOpen(false)} href="/login" className="rounded-xl px-3 py-3 text-sm font-medium hover:bg-ink/5">Sign in</Link>
               <Button asChild className="mt-2 w-full btn-gold"><Link onClick={() => setMenuOpen(false)} href="/register">Join Bantabato</Link></Button>

@@ -24,6 +24,9 @@ import { canonicalProfilePair } from "./domain/permissions";
 import { safeLocationDisplay } from "./domain/internationalPolicy";
 import { emitLegacyNotification } from "./notificationService";
 import { storageGetSignedUrl, storagePut } from "./storage";
+import { assertExpectedFileSignature } from "./fileValidation";
+import { normalizeOptionalUserText, normalizeTextRecord } from "./inputSecurity";
+import { resolveAuthorizedReportTarget } from "./domain/reportAccessPolicy";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -131,13 +134,14 @@ export type ProfileUpdate = Partial<{
 export async function saveMemberProfile(userId: number, input: ProfileUpdate) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const normalizedInput = normalizeTextRecord(input);
   const current = await getProfileByUserId(userId);
-  const next = { ...(current ?? {}), ...input };
+  const next = { ...(current ?? {}), ...normalizedInput };
   const completedAt = next.displayName && next.birthDate && next.gender && next.country && next.maritalStatus ? current?.completedAt ?? new Date() : current?.completedAt;
   if (!current) {
-    await db.insert(memberProfiles).values({ userId, ...input, completedAt });
+    await db.insert(memberProfiles).values({ userId, ...normalizedInput, completedAt });
   } else {
-    await db.update(memberProfiles).set({ ...input, completedAt }).where(eq(memberProfiles.id, current.id));
+    await db.update(memberProfiles).set({ ...normalizedInput, completedAt }).where(eq(memberProfiles.id, current.id));
   }
   return getProfileByUserId(userId);
 }
@@ -455,6 +459,7 @@ function decodeUpload(dataUrl: string, allowedMimeTypes: string[], maxBytes: num
   if (!allowedMimeTypes.includes(mimeType)) throw new Error("This file type is not allowed");
   const buffer = Buffer.from(encoded, "base64");
   if (!buffer.length || buffer.length > maxBytes) throw new Error("This file is empty or exceeds the permitted size");
+  assertExpectedFileSignature(buffer, mimeType);
   return { buffer, mimeType };
 }
 
@@ -511,7 +516,19 @@ export async function createNotification(userId: number, notificationType: "inte
 export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(reports).values({ reporterProfileId, ...input }).$returningId();
+  let reportedProfileId = input.reportedProfileId;
+  if (input.conversationId) {
+    const conversation = (await db.select({ id: conversations.id, memberOneProfileId: matches.memberOneProfileId, memberTwoProfileId: matches.memberTwoProfileId })
+      .from(conversations)
+      .innerJoin(matches, eq(conversations.matchId, matches.id))
+      .where(and(eq(conversations.id, input.conversationId), or(eq(matches.memberOneProfileId, reporterProfileId), eq(matches.memberTwoProfileId, reporterProfileId))))
+      .limit(1))[0];
+    reportedProfileId = resolveAuthorizedReportTarget({ reporterProfileId, requestedReportedProfileId: reportedProfileId, conversation });
+  }
+  reportedProfileId = resolveAuthorizedReportTarget({ reporterProfileId, requestedReportedProfileId: reportedProfileId });
+  const target = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(and(eq(memberProfiles.id, reportedProfileId), isNull(memberProfiles.deletedAt))).limit(1))[0];
+  if (!target) throw new Error("The selected member is unavailable for reporting");
+  const result = await db.insert(reports).values({ reporterProfileId, ...input, details: normalizeOptionalUserText(input.details), reportedProfileId }).$returningId();
   return { reportId: Number(result[0]?.id ?? 0) };
 }
 
@@ -519,7 +536,8 @@ export async function blockProfile(blockerProfileId: number, blockedProfileId: n
   if (blockerProfileId === blockedProfileId) throw new Error("You cannot block your own profile");
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(blocks).values({ blockerProfileId, blockedProfileId, reason: reason || null }).onDuplicateKeyUpdate({ set: { reason: reason || null } });
+  const normalizedReason = normalizeOptionalUserText(reason);
+  await db.insert(blocks).values({ blockerProfileId, blockedProfileId, reason: normalizedReason || null }).onDuplicateKeyUpdate({ set: { reason: normalizedReason || null } });
 }
 
 export async function createAuditLog(actorUserId: number | null, action: string, entityType: string, entityId?: string, metadata?: unknown) {

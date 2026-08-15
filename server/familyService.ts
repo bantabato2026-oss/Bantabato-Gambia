@@ -14,6 +14,7 @@ import {
 } from "../drizzle/schema";
 import { createAuditLog, createNotification, getDb } from "./db";
 import { createIntegritySignal } from "./integrityService";
+import { normalizeOptionalUserText } from "./inputSecurity";
 
 export const FAMILY_PERMISSIONS = ["profile_basics", "profile_photo", "marriage_intentions", "compatibility_summary", "family_context", "potential_match", "acknowledgment_status"] as const;
 export type FamilyPermission = (typeof FAMILY_PERMISSIONS)[number];
@@ -196,7 +197,7 @@ export async function submitFamilyFeedback(userId: number, familyShareId: number
   const row = rows[0];
   if (!row) throw new Error("Shared potential match is unavailable");
   await requireGrantedPermission(row.link.id, "potential_match");
-  const inserted = await db.insert(familyFeedback).values({ familyShareId, familyLinkId: row.link.id, response, note: note || null });
+  const inserted = await db.insert(familyFeedback).values({ familyShareId, familyLinkId: row.link.id, response, note: normalizeOptionalUserText(note) || null });
   const feedbackId = Number(inserted[0]?.insertId ?? 0);
   await recordEvent(row.link.id, userId, "feedback_submitted", { familyShareId, feedbackId, response });
   const owner = await memberUserId(row.link.memberProfileId);
@@ -214,7 +215,7 @@ export async function removeFamilyParticipant(memberProfileId: number, actorUser
 export async function reportFamilyParticipant(memberProfileId: number, actorUserId: number, familyLinkId: number, reason: "harassment" | "scam" | "safety_concern" | "other", details?: string) {
   const db = await requireDb();
   await ownedLink(memberProfileId, familyLinkId);
-  const inserted = await db.insert(reports).values({ reporterProfileId: memberProfileId, reportedFamilyLinkId: familyLinkId, reason, details: details || null });
+  const inserted = await db.insert(reports).values({ reporterProfileId: memberProfileId, reportedFamilyLinkId: familyLinkId, reason, details: normalizeOptionalUserText(details) || null });
   const reportId = Number(inserted[0]?.insertId ?? 0);
   await createIntegritySignal({ actorUserId, reportId, source: "family_circle", category: "family_circle_behavior", severity: ["scam", "safety_concern"].includes(reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `family-report:${reportId}` });
   await recordEvent(familyLinkId, actorUserId, "report_submitted", { reportId, reason });

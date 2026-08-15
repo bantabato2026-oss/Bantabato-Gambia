@@ -34,7 +34,7 @@ queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
     redirectToLoginIfUnauthorized(error);
-    console.error("[API Query Error]", error);
+    console.warn("[API Query Error]");
   }
 });
 
@@ -42,7 +42,7 @@ queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
     redirectToLoginIfUnauthorized(error);
-    console.error("[API Mutation Error]", error);
+    console.warn("[API Mutation Error]");
   }
 });
 
@@ -57,6 +57,8 @@ const trpcClient = trpc.createClient({
         // session into sessionStorage so we can forward it as a Bearer token.
         // The regular OAuth cookie flow keeps working and takes priority server-side.
         try {
+          const previewHost = window.location.hostname.endsWith(".manus.computer");
+          if (!previewHost) return {};
           const raw = sessionStorage.getItem("manus-cookie");
           if (raw) {
             const prefix = `${COOKIE_NAME}=`;

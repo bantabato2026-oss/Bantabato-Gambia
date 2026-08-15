@@ -15,11 +15,25 @@ function asId(result: unknown) { const row = Array.isArray(result) ? result[0] a
 function isHighImpactStaffRole(role: StaffRole) { return ["platform_administrator", "trust_safety_officer", "finance_officer"].includes(role); }
 const LEGACY_SCOPE_MAP: Partial<Record<StaffRole, "verification_reviewer" | "trust_safety" | "support_agent" | "subscription_manager" | "platform_admin">> = { platform_administrator: "platform_admin", trust_safety_officer: "trust_safety", verification_officer: "verification_reviewer", customer_support_officer: "support_agent", finance_officer: "subscription_manager" };
 
-export async function getEffectiveStaffAccess(userId: number) {
+async function requireUsableStaffSession(staffProfileId: number, sessionReferenceHash?: string) {
+  if (!sessionReferenceHash) return;
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const current = (await db.select().from(staffSessionControls).where(and(eq(staffSessionControls.staffProfileId, staffProfileId), eq(staffSessionControls.sessionReferenceHash, sessionReferenceHash))).limit(1))[0];
+  if (current) {
+    if (!staffSessionIsUsable(current.status, current.expiresAt)) throw new Error("This staff session is no longer active. Please sign in again.");
+    return;
+  }
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await db.insert(staffSessionControls).values({ staffProfileId, sessionReferenceHash, expiresAt, reauthenticatedAt: new Date() }).onDuplicateKeyUpdate({ set: {} });
+}
+
+export async function getEffectiveStaffAccess(userId: number, sessionReferenceHash?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const profile = (await db.select().from(staffProfiles).where(eq(staffProfiles.userId, userId)).limit(1))[0];
   if (profile?.status === "active") {
+    await requireUsableStaffSession(profile.id, sessionReferenceHash);
     const mapped = await db.select({ permissionKey: staffPermissions.permissionKey }).from(staffRolePermissions).innerJoin(staffPermissions, eq(staffRolePermissions.permissionId, staffPermissions.id)).where(eq(staffRolePermissions.staffRole, profile.staffRole));
     const defaults = DEFAULT_ROLE_PERMISSIONS[profile.staffRole];
     const overrideRows = await db.select({ permissionKey: staffPermissions.permissionKey, effect: staffPermissionOverrides.effect }).from(staffPermissionOverrides).innerJoin(staffPermissions, eq(staffPermissionOverrides.permissionId, staffPermissions.id)).where(and(eq(staffPermissionOverrides.staffProfileId, profile.id), eq(staffPermissionOverrides.status, "active")));
@@ -32,8 +46,8 @@ export async function getEffectiveStaffAccess(userId: number) {
   throw new Error("An active, permissioned staff identity is required.");
 }
 
-export async function requireOperationalPermission(userId: number, permission: PermissionKey, options?: { requireFresh?: boolean }) {
-  const access = await getEffectiveStaffAccess(userId);
+export async function requireOperationalPermission(userId: number, permission: PermissionKey, options?: { requireFresh?: boolean; sessionReferenceHash?: string }) {
+  const access = await getEffectiveStaffAccess(userId, options?.sessionReferenceHash);
   if (!access.permissions.includes(permission)) throw new Error("Your staff permissions do not permit this action.");
   if ((options?.requireFresh || permissionRequiresFreshReauthentication(permission)) && (!access.lastReauthenticatedAt || Date.now() - access.lastReauthenticatedAt.getTime() > 15 * 60 * 1000)) throw new Error("A fresh staff reauthentication is required before this sensitive action.");
   return access;
@@ -123,7 +137,11 @@ export async function decideOperationalApproval(actorUserId: number, approvalId:
   const access = await requireOperationalPermission(actorUserId, "approvals.decide", { requireFresh: true }); const db = await getDb(); if (!db) throw new Error("Database unavailable");
   const approval = (await db.select().from(operationalApprovals).where(eq(operationalApprovals.id, approvalId)).limit(1))[0];
   if (!approval || !canDecideApproval(approval.requestedByUserId, actorUserId, access.staffRole, approval.requiredApproverRole, approval.status, approval.expiresAt)) throw new Error("This approval cannot be decided by the current staff identity.");
-  await db.update(operationalApprovals).set({ status: decision, approvedByUserId: actorUserId, decidedAt: new Date() }).where(eq(operationalApprovals.id, approvalId));
+  const decisionResult = await db.update(operationalApprovals).set({ status: decision, approvedByUserId: actorUserId, decidedAt: new Date() }).where(and(eq(operationalApprovals.id, approvalId), eq(operationalApprovals.status, "pending")));
+  const decisionSummary = Array.isArray(decisionResult) ? decisionResult[0] : decisionResult;
+  if (typeof (decisionSummary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (decisionSummary as { affectedRows: number }).affectedRows === 0) {
+    throw new Error("This approval was already decided or is no longer available.");
+  }
   if (decision === "approved" && approval.approvalType === "staff_role_change" && approval.resourceType === "staff_profile") {
     const change = JSON.parse(approval.impactSummary) as { nextRole?: StaffRole; nextStatus?: StaffStatus }; const staffProfileId = Number(approval.resourceId);
     const target = (await db.select().from(staffProfiles).where(eq(staffProfiles.id, staffProfileId)).limit(1))[0]; if (!target) throw new Error("The requested staff identity is unavailable.");

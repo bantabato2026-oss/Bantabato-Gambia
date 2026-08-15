@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { API_BODY_LIMIT, OAUTH_CALLBACK_RATE_RULE, applyNoStoreForApi, applySecurityHeaders, createFixedRateLimitMiddleware, createTrpcRateLimitMiddleware } from "../security";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,14 +32,21 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.disable("x-powered-by");
+  app.set("trust proxy", 1);
+  app.use(applySecurityHeaders);
+  // The largest supported upload is a 10 MB verification document encoded as
+  // base64; 16 MB leaves envelope overhead without accepting unbounded bodies.
+  app.use(express.json({ limit: API_BODY_LIMIT }));
+  app.use(express.urlencoded({ limit: API_BODY_LIMIT, extended: true }));
+  app.use("/api", applyNoStoreForApi);
   registerStorageProxy(app);
+  app.use("/api/oauth/callback", createFixedRateLimitMiddleware(OAUTH_CALLBACK_RATE_RULE));
   registerOAuthRoutes(app);
   // tRPC API
   app.use(
     "/api/trpc",
+    createTrpcRateLimitMiddleware(),
     createExpressMiddleware({
       router: appRouter,
       createContext,
