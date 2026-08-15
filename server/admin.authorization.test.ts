@@ -24,6 +24,11 @@ async function expectAllScopedAdministrativeAccessDenied(caller: ReturnType<type
   await expect(caller.admin.paymentTransactions()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.paymentReconciliationQueue()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.requestPaymentRefund({ transactionId: 1, amountMinor: 100 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.notificationOperations()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.notificationConfiguration()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.processNotificationQueue({ limit: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.saveNotificationTemplate({ eventType: "product_update", channel: "in_app", locale: "en", templateVersion: "v1", subject: "Bantabato notification", body: "You have an update to review securely in Bantabato.", allowedVariables: [], activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.saveNotificationProviderAvailability({ provider: "provider", channel: "email", enabled: false, supportedLocales: ["en"] })).rejects.toMatchObject({ code: "FORBIDDEN" });
 }
 
 describe("admin operational authorization", () => {

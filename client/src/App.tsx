@@ -19,6 +19,7 @@ import RecommendationsPage from "@/pages/RecommendationsPage";
 import AdminRecommendationPolicyPage from "@/pages/AdminRecommendationPolicy";
 import BillingPage from "@/pages/BillingPage";
 import AdminBillingPage from "@/pages/AdminBilling";
+import AdminNotificationsPage from "@/pages/AdminNotifications";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -61,7 +62,8 @@ function Router() {
 	    <Route path="/admin/connections" component={AdminConnectionReviewsPage} />
 	    <Route path="/admin/family" component={AdminFamilyCirclePage} />
 	    <Route path="/admin/recommendations" component={AdminRecommendationPolicyPage} />
-	    <Route path="/admin/billing" component={AdminBillingPage} />
+      <Route path="/admin/billing" component={AdminBillingPage} />
+      <Route path="/admin/notifications" component={AdminNotificationsPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;

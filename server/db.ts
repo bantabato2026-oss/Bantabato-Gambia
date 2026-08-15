@@ -21,7 +21,7 @@ import {
   verificationRecords,
 } from "../drizzle/schema";
 import { canonicalProfilePair } from "./domain/permissions";
-import { routeTransactionalNotification } from "./domain/notificationDelivery";
+import { emitLegacyNotification } from "./notificationService";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { ENV } from "./_core/env";
 
@@ -495,10 +495,7 @@ export async function markNotificationRead(userId: number, notificationId: numbe
 }
 
 export async function createNotification(userId: number, notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family" | "connection" | "recommendation" | "billing", title: string, body: string, actionPath?: string, eventKey?: string) {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(notifications).values({ userId, notificationType, title, body, actionPath, eventKey: eventKey ?? null }).onDuplicateKeyUpdate({ set: { title, body, actionPath } });
-  await routeTransactionalNotification({ recipientUserId: userId, notificationType, subject: title, body, actionPath });
+  await emitLegacyNotification(userId, notificationType, title, body, actionPath, eventKey);
 }
 
 export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {

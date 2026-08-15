@@ -829,19 +829,162 @@ export const notifications = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection", "recommendation", "billing"])
+    notificationType: mysqlEnum("notificationType", ["interest", "match", "message", "verification", "safety", "family", "connection", "recommendation", "billing", "product", "security"])
       .notNull(),
     title: varchar("title", { length: 160 }).notNull(),
     body: varchar("body", { length: 500 }).notNull(),
     actionPath: varchar("actionPath", { length: 255 }),
     eventKey: varchar("eventKey", { length: 191 }),
+    eventType: varchar("eventType", { length: 100 }),
+    priority: mysqlEnum("priority", ["critical", "high", "normal", "low"]).default("normal").notNull(),
+    notificationClass: mysqlEnum("notificationClass", ["transactional", "marketing"]).default("transactional").notNull(),
+    templateVersion: varchar("templateVersion", { length: 64 }),
     readAt: timestamp("readAt"),
+    dismissedAt: timestamp("dismissedAt"),
+    expiresAt: timestamp("expiresAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [
     uniqueIndex("notifications_event_unique").on(table.userId, table.eventKey),
     index("notifications_user_unread_idx").on(table.userId, table.readAt, table.createdAt),
+    index("notifications_event_type_idx").on(table.userId, table.eventType, table.createdAt),
   ],
+);
+
+/** A privacy-safe application event record: never store raw messages, documents, contact data, or sensitive relationship details here. */
+export const notificationEvents = mysqlTable(
+  "notification_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    recipientUserId: int("recipientUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+    eventType: varchar("eventType", { length: 100 }).notNull(),
+    notificationType: varchar("notificationType", { length: 40 }).notNull(),
+    notificationClass: mysqlEnum("notificationClass", ["transactional", "marketing"]).default("transactional").notNull(),
+    priority: mysqlEnum("priority", ["critical", "high", "normal", "low"]).default("normal").notNull(),
+    sourceType: varchar("sourceType", { length: 80 }),
+    sourceId: varchar("sourceId", { length: 128 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    safeMetadata: json("safeMetadata"),
+    actionPath: varchar("actionPath", { length: 255 }),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("notification_events_idempotency_unique").on(table.recipientUserId, table.idempotencyKey), index("notification_events_recipient_idx").on(table.recipientUserId, table.createdAt), index("notification_events_type_idx").on(table.eventType, table.createdAt)],
+);
+
+/** Versioned, locale-ready copy only. Variables are limited to privacy-safe values resolved server-side. */
+export const notificationTemplates = mysqlTable(
+  "notification_templates",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    eventType: varchar("eventType", { length: 100 }).notNull(),
+    channel: mysqlEnum("channel", ["in_app", "email", "sms", "push"]).notNull(),
+    locale: varchar("locale", { length: 16 }).default("en").notNull(),
+    templateVersion: varchar("templateVersion", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["draft", "active", "retired"]).default("draft").notNull(),
+    subject: varchar("subject", { length: 160 }).notNull(),
+    body: varchar("body", { length: 500 }).notNull(),
+    allowedVariables: json("allowedVariables").notNull(),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    activatedAt: timestamp("activatedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("notification_templates_version_unique").on(table.eventType, table.channel, table.locale, table.templateVersion), index("notification_templates_active_idx").on(table.eventType, table.channel, table.status)],
+);
+
+/** One member-owned settings record covers timezone and quiet hours; channel/category controls are stored separately for explicit consent. */
+export const memberNotificationSettings = mysqlTable(
+  "member_notification_settings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    timezone: varchar("timezone", { length: 64 }).default("UTC").notNull(),
+    quietHoursEnabled: boolean("quietHoursEnabled").default(false).notNull(),
+    quietHoursStart: varchar("quietHoursStart", { length: 5 }),
+    quietHoursEnd: varchar("quietHoursEnd", { length: 5 }),
+    locale: varchar("locale", { length: 16 }).default("en").notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("member_notification_settings_user_unique").on(table.userId)],
+);
+
+export const notificationPreferences = mysqlTable(
+  "notification_preferences",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    category: mysqlEnum("category", ["messages", "family", "recommendations", "billing", "product_updates", "marketing", "security", "verification", "safety"]).notNull(),
+    inAppEnabled: boolean("inAppEnabled").default(true).notNull(),
+    emailEnabled: boolean("emailEnabled").default(true).notNull(),
+    smsEnabled: boolean("smsEnabled").default(false).notNull(),
+    pushEnabled: boolean("pushEnabled").default(false).notNull(),
+    marketingOptIn: boolean("marketingOptIn").default(false).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("notification_preferences_category_unique").on(table.userId, table.category)],
+);
+
+/** Delivery records are distinct from in-app read state and carry no rendered payload. */
+export const notificationDeliveries = mysqlTable(
+  "notification_deliveries",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    notificationId: int("notificationId").references(() => notifications.id, { onDelete: "cascade" }),
+    notificationEventId: int("notificationEventId").notNull().references(() => notificationEvents.id, { onDelete: "cascade" }),
+    recipientUserId: int("recipientUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    channel: mysqlEnum("channel", ["in_app", "email", "sms", "push"]).notNull(),
+    provider: varchar("provider", { length: 80 }),
+    templateVersion: varchar("templateVersion", { length: 64 }),
+    status: mysqlEnum("status", ["pending", "queued", "sending", "delivered", "failed", "retrying", "suppressed", "cancelled", "expired", "unavailable"]).default("pending").notNull(),
+    providerMessageId: varchar("providerMessageId", { length: 191 }),
+    failureReason: varchar("failureReason", { length: 500 }),
+    retryCount: int("retryCount").default(0).notNull(),
+    nextRetryAt: timestamp("nextRetryAt"),
+    scheduledAt: timestamp("scheduledAt"),
+    sentAt: timestamp("sentAt"),
+    deliveredAt: timestamp("deliveredAt"),
+    failedAt: timestamp("failedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("notification_deliveries_event_channel_unique").on(table.notificationEventId, table.channel), index("notification_deliveries_operations_idx").on(table.status, table.nextRetryAt, table.createdAt), index("notification_deliveries_recipient_idx").on(table.recipientUserId, table.channel, table.createdAt)],
+);
+
+/** Queue rows make retry, deferred quiet-hour release, and future digest delivery observable without an in-process timer. */
+export const notificationJobs = mysqlTable(
+  "notification_jobs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    notificationDeliveryId: int("notificationDeliveryId").notNull().references(() => notificationDeliveries.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", ["queued", "processing", "completed", "failed", "cancelled", "expired"]).default("queued").notNull(),
+    priority: mysqlEnum("priority", ["critical", "high", "normal", "low"]).default("normal").notNull(),
+    availableAt: timestamp("availableAt").defaultNow().notNull(),
+    attempts: int("attempts").default(0).notNull(),
+    maxAttempts: int("maxAttempts").default(3).notNull(),
+    lastError: varchar("lastError", { length: 500 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("notification_jobs_delivery_unique").on(table.notificationDeliveryId), index("notification_jobs_due_idx").on(table.status, table.availableAt, table.priority)],
+);
+
+/** Provider availability is operational metadata only; credentials stay in server-side secrets when an adapter is intentionally added. */
+export const notificationProviderConfigurations = mysqlTable(
+  "notification_provider_configurations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    provider: varchar("provider", { length: 80 }).notNull(),
+    channel: mysqlEnum("channel", ["email", "sms", "push"]).notNull(),
+    enabled: boolean("enabled").default(false).notNull(),
+    supportedLocales: json("supportedLocales").notNull(),
+    configurationNote: varchar("configurationNote", { length: 500 }),
+    updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("notification_provider_channel_unique").on(table.provider, table.channel)],
 );
 
 /** Policy-controlled configuration only; it contains no member-level scoring or protected-characteristic rules. */
