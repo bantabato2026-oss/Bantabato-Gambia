@@ -29,6 +29,18 @@ async function expectAllScopedAdministrativeAccessDenied(caller: ReturnType<type
   await expect(caller.admin.processNotificationQueue({ limit: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.saveNotificationTemplate({ eventType: "product_update", channel: "in_app", locale: "en", templateVersion: "v1", subject: "Bantabato notification", body: "You have an update to review securely in Bantabato.", allowedVariables: [], activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.saveNotificationProviderAvailability({ provider: "provider", channel: "email", enabled: false, supportedLocales: ["en"] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.safetyOperations()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.safetyCaseDetail({ reportId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.createIntegritySignal({ subjectProfileId: 1, source: "staff_observation", category: "account_security", severity: "medium", evidenceConfidence: "unverified", idempotencyKey: "integrity-auth-test" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.triageIntegritySignal({ signalId: 1, outcome: "investigate" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.addSafetyEvidence({ reportId: 1, evidenceType: "report_reference", sourceRecordType: "report", sourceRecordId: "1", evidenceConfidence: "unverified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.safetyEvidence({ reportId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.requestSafetyEnforcement({ reportId: 1, subjectProfileId: 1, actionType: "integrity_hold", scope: ["discovery"], reasonCode: "review_required", expiresAt: new Date(Date.now() + 60_000), idempotencyKey: "enforcement-auth-test" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.approveSafetyEnforcement({ enforcementActionId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.revokeSafetyEnforcement({ enforcementActionId: 1, reason: "reviewed" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.expireSafetyEnforcements({ limit: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.reviewSafetyAppeal({ appealId: 1, status: "upheld", decisionSummary: "The decision remains proportionate after separate review." })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.saveIntegrityPolicy({ policyVersion: "integrity-v2", activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
 }
 
 describe("admin operational authorization", () => {

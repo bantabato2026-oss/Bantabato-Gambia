@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  foreignKey,
   index,
   int,
   json,
@@ -562,15 +563,19 @@ export const reports = mysqlTable(
   "reports",
   {
     id: int("id").autoincrement().primaryKey(),
-	    reporterProfileId: int("reporterProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+	    reporterProfileId: int("reporterProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
 	    reportedProfileId: int("reportedProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
 	    reportedFamilyLinkId: int("reportedFamilyLinkId").references(() => familyLinks.id, { onDelete: "set null" }),
 	    conversationId: int("conversationId").references(() => conversations.id, { onDelete: "set null" }),
     messageId: int("messageId").references(() => messages.id, { onDelete: "set null" }),
-    reason: mysqlEnum("reason", ["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]).notNull(),
+    reason: mysqlEnum("reason", ["fake_profile", "impersonation", "scam", "harassment", "threatening_behavior", "inappropriate_content", "financial_solicitation", "misrepresentation", "unwanted_contact", "block_circumvention", "verification_concern", "multiple_account_concern", "suspicious_behavior", "safety_concern", "other"]).notNull(),
     details: text("details"),
-    status: mysqlEnum("status", ["open", "in_review", "action_required", "resolved", "dismissed", "escalated"]).default("open").notNull(),
+    status: mysqlEnum("status", ["open", "triage", "in_review", "investigating", "awaiting_information", "action_required", "decision_pending", "resolved", "dismissed", "escalated", "appealed", "reopened", "closed"]).default("open").notNull(),
     priority: mysqlEnum("priority", ["low", "normal", "high", "critical"]).default("normal").notNull(),
+	    caseSource: mysqlEnum("caseSource", ["member_report", "system_signal", "staff_observation"]).default("member_report").notNull(),
+	    policyVersion: varchar("policyVersion", { length: 64 }),
+	    appealEligible: boolean("appealEligible").default(false).notNull(),
+	    memberSafeSummary: varchar("memberSafeSummary", { length: 500 }),
     assignedModeratorUserId: int("assignedModeratorUserId").references(() => users.id, { onDelete: "set null" }),
     memberAction: mysqlEnum("memberAction", ["none", "warn", "restrict", "temporary_suspend"])
       .default("none")
@@ -601,6 +606,110 @@ export const caseNotes = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [index("case_notes_case_idx").on(table.caseType, table.caseId, table.createdAt)],
+);
+
+/** Versioned integrity configuration. It deliberately contains no member score, protected-characteristic rule, premium rule, or engagement weighting. */
+export const integrityPolicies = mysqlTable(
+  "integrity_policies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    policyVersion: varchar("policyVersion", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["draft", "active", "retired"]).default("draft").notNull(),
+    ruleConfiguration: json("ruleConfiguration").notNull(),
+    retentionConfiguration: json("retentionConfiguration").notNull(),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    activatedAt: timestamp("activatedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("integrity_policies_version_unique").on(table.policyVersion), index("integrity_policies_status_idx").on(table.status, table.activatedAt)],
+);
+
+/** Explainable operational signals are review prompts, not proof and never a composite risk score. */
+export const integritySignals = mysqlTable(
+  "integrity_signals",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    subjectProfileId: int("subjectProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
+    reportId: int("reportId").references(() => reports.id, { onDelete: "set null" }),
+    source: mysqlEnum("source", ["member_report", "staff_observation", "verification", "account_security", "messaging", "family_circle", "connection_readiness", "payment", "platform_rule", "policy_violation"]).notNull(),
+    category: mysqlEnum("category", ["account_behavior", "verification_anomaly", "messaging_behavior", "report_pattern", "block_pattern", "family_circle_behavior", "recommendation_abuse", "connection_readiness_abuse", "payment_abuse", "account_security", "session_anomaly", "multiple_account_indicator", "rapid_profile_change", "invitation_behavior", "repeated_policy_violation", "financial_solicitation", "other"]).notNull(),
+    severity: mysqlEnum("severity", ["informational", "low", "medium", "high", "critical"]).default("informational").notNull(),
+    evidenceConfidence: mysqlEnum("evidenceConfidence", ["unverified", "limited", "corroborated", "strong"]).default("unverified").notNull(),
+    status: mysqlEnum("status", ["new", "triaged", "monitoring", "investigating", "dismissed", "actioned"]).default("new").notNull(),
+    policyVersion: varchar("policyVersion", { length: 64 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    safeMetadata: json("safeMetadata"),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    reviewedAt: timestamp("reviewedAt"),
+  },
+  table => [uniqueIndex("integrity_signals_idempotency_unique").on(table.idempotencyKey), index("integrity_signals_subject_idx").on(table.subjectProfileId, table.status, table.createdAt), index("integrity_signals_case_idx").on(table.reportId, table.severity, table.createdAt)],
+);
+
+/** Controlled evidence points to authorized records instead of duplicating messages, documents, payment details, or family content. */
+export const safetyEvidence = mysqlTable(
+  "safety_evidence",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    reportId: int("reportId").notNull().references(() => reports.id, { onDelete: "cascade" }),
+    integritySignalId: int("integritySignalId").references(() => integritySignals.id, { onDelete: "set null" }),
+    evidenceType: mysqlEnum("evidenceType", ["report_reference", "message_reference", "account_event", "verification_event", "payment_event", "family_event", "security_event", "staff_note", "integrity_signal"]).notNull(),
+    sourceRecordType: varchar("sourceRecordType", { length: 80 }).notNull(),
+    sourceRecordId: varchar("sourceRecordId", { length: 120 }).notNull(),
+    evidenceConfidence: mysqlEnum("evidenceConfidence", ["unverified", "limited", "corroborated", "strong"]).default("unverified").notNull(),
+    integrityState: mysqlEnum("integrityState", ["recorded", "superseded", "revoked"]).default("recorded").notNull(),
+    capturedByUserId: int("capturedByUserId").references(() => users.id, { onDelete: "set null" }),
+    capturedAt: timestamp("capturedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("safety_evidence_reference_unique").on(table.reportId, table.evidenceType, table.sourceRecordType, table.sourceRecordId), index("safety_evidence_case_idx").on(table.reportId, table.createdAt), index("safety_evidence_signal_idx").on(table.integritySignalId, table.createdAt)],
+);
+
+/** Each enforcement record is linked to the existing report-case, scoped, auditable, and reversible when temporary. */
+export const safetyEnforcementActions = mysqlTable(
+  "safety_enforcement_actions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    reportId: int("reportId").notNull().references(() => reports.id, { onDelete: "cascade" }),
+    subjectProfileId: int("subjectProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    actionType: mysqlEnum("actionType", ["warning", "feature_restriction", "messaging_restriction", "connection_restriction", "temporary_suspension", "verification_hold", "integrity_hold", "permanent_account_removal"]).notNull(),
+    status: mysqlEnum("status", ["proposed", "active", "expired", "revoked", "rejected", "completed"]).default("proposed").notNull(),
+    scope: json("scope").notNull(),
+    reasonCode: varchar("reasonCode", { length: 120 }).notNull(),
+    memberSafeMessage: varchar("memberSafeMessage", { length: 500 }).notNull(),
+    policyVersion: varchar("policyVersion", { length: 64 }),
+    requiresSecondApproval: boolean("requiresSecondApproval").default(false).notNull(),
+    requestedByUserId: int("requestedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    approvedByUserId: int("approvedByUserId").references(() => users.id, { onDelete: "set null" }),
+    effectiveAt: timestamp("effectiveAt"),
+    expiresAt: timestamp("expiresAt"),
+    revokedAt: timestamp("revokedAt"),
+    revokedByUserId: int("revokedByUserId").references(() => users.id, { onDelete: "set null" }),
+    idempotencyKey: varchar("idempotencyKey", { length: 191 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("safety_enforcement_idempotency_unique").on(table.subjectProfileId, table.idempotencyKey), index("safety_enforcement_subject_idx").on(table.subjectProfileId, table.status, table.expiresAt), index("safety_enforcement_case_idx").on(table.reportId, table.status, table.createdAt)],
+);
+
+/** Appeals are member-owned submissions reviewed through a separate, auditable workflow and never disclose reporter identities or internal evidence. */
+export const safetyAppeals = mysqlTable(
+  "safety_appeals",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    reportId: int("reportId").notNull().references(() => reports.id, { onDelete: "cascade" }),
+    enforcementActionId: int("enforcementActionId").notNull(),
+    appellantUserId: int("appellantUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    status: mysqlEnum("status", ["submitted", "in_review", "information_requested", "upheld", "modified", "overturned", "withdrawn"]).default("submitted").notNull(),
+    reviewerUserId: int("reviewerUserId").references(() => users.id, { onDelete: "set null" }),
+    decisionSummary: varchar("decisionSummary", { length: 500 }),
+    submittedAt: timestamp("submittedAt").defaultNow().notNull(),
+    decidedAt: timestamp("decidedAt"),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [foreignKey({ columns: [table.enforcementActionId], foreignColumns: [safetyEnforcementActions.id], name: "safety_appeals_enforcement_fk" }).onDelete("cascade"), uniqueIndex("safety_appeals_action_appellant_unique").on(table.enforcementActionId, table.appellantUserId), index("safety_appeals_case_idx").on(table.reportId, table.status, table.submittedAt), index("safety_appeals_reviewer_idx").on(table.reviewerUserId, table.status)],
 );
 
 export const blocks = mysqlTable(

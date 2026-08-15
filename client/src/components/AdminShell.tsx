@@ -14,6 +14,7 @@ const adminNavigation = [
 	  { icon: Sparkles, label: "Recommendation policy", href: "/admin/recommendations" },
 	  { icon: CircleDollarSign, label: "Billing operations", href: "/admin/billing" },
 	  { icon: BellRing, label: "Notifications", href: "/admin/notifications" },
+	  { icon: ShieldCheck, label: "Safety Operations", href: "/admin/safety" },
 	  { icon: UsersRound, label: "Members", href: "/admin" },
   { icon: ShieldCheck, label: "Trust & Safety", href: "/admin/reports" },
   { icon: Settings2, label: "Settings", href: "/admin" },

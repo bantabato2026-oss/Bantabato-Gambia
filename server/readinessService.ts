@@ -3,6 +3,7 @@ import { blocks, communicationPermissions, communicationRevocations, connectionC
 import { getCompatibilityExplanation } from "./compatibilityService";
 import { createAuditLog, createNotification, getDb } from "./db";
 import { DEFAULT_READINESS_POLICY, evaluateConnectionReadiness, type ParticipantSignals, type ReadinessPolicy } from "./domain/readinessPolicy";
+import { createIntegritySignal } from "./integrityService";
 import { addCaseNote, getCaseNotes } from "./operations";
 
 const STAGE_CONFIG = ["mutual_interest", "text_conversation", "voice_note_conversation", "ready_for_review", "voice_call_eligible", "video_call_eligible"];
@@ -116,6 +117,7 @@ export async function flagConnectionIntegrityConcern(actorUserId: number, conver
 	  const existing = await db.select({ id: connectionReviews.id }).from(connectionReviews).where(and(eq(connectionReviews.connectionStateId, state.id), eq(connectionReviews.reason, "fraud_concern"), inArray(connectionReviews.status, ["pending", "escalated"]))).limit(1);
 	  const reviewId = existing[0]?.id ?? Number((await db.insert(connectionReviews).values({ connectionStateId: state.id, status: "pending", reason: "fraud_concern", assignedReviewerUserId: actorUserId }))[0].insertId);
 	  if (internalNote?.trim()) await addCaseNote(actorUserId, "connection_review", reviewId, internalNote);
+	  await createIntegritySignal({ actorUserId, source: "connection_readiness", category: "connection_readiness_abuse", severity: "medium", evidenceConfidence: "limited", idempotencyKey: `connection-review:${reviewId}` });
 	  await revokeConnectionState(state.id, "all", "other", { actorUserId });
 	  await createAuditLog(actorUserId, "connection.integrity_flagged", "connection_review", String(reviewId), { conversationId });
 	  return { reviewId };

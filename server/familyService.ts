@@ -13,6 +13,7 @@ import {
   users,
 } from "../drizzle/schema";
 import { createAuditLog, createNotification, getDb } from "./db";
+import { createIntegritySignal } from "./integrityService";
 
 export const FAMILY_PERMISSIONS = ["profile_basics", "profile_photo", "marriage_intentions", "compatibility_summary", "family_context", "potential_match", "acknowledgment_status"] as const;
 export type FamilyPermission = (typeof FAMILY_PERMISSIONS)[number];
@@ -215,6 +216,7 @@ export async function reportFamilyParticipant(memberProfileId: number, actorUser
   await ownedLink(memberProfileId, familyLinkId);
   const inserted = await db.insert(reports).values({ reporterProfileId: memberProfileId, reportedFamilyLinkId: familyLinkId, reason, details: details || null });
   const reportId = Number(inserted[0]?.insertId ?? 0);
+  await createIntegritySignal({ actorUserId, reportId, source: "family_circle", category: "family_circle_behavior", severity: ["scam", "safety_concern"].includes(reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `family-report:${reportId}` });
   await recordEvent(familyLinkId, actorUserId, "report_submitted", { reportId, reason });
   await createAuditLog(actorUserId, "family.participant_reported", "report", String(reportId), { familyLinkId, reason });
   return { reportId };

@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { adminRoles, caseNotes, memberProfiles, reports, users, verificationRecords } from "../drizzle/schema";
 import { createAuditLog, createNotification, getDb, getVerificationDocumentForReview } from "./db";
 import { canDecideVerification, hasOperationalScope } from "./domain/operationsPolicy";
+import { createIntegritySignal } from "./integrityService";
 import { ENV } from "./_core/env";
 
 export const ADMIN_SCOPES = ["verification_reviewer", "trust_safety", "support_agent", "subscription_manager", "platform_admin"] as const;
@@ -136,6 +137,7 @@ export async function decideVerificationCase(input: { actorUserId: number; verif
     escalatedAt: input.decision === "escalated" ? new Date() : null,
     closedAt: closed ? new Date() : null,
   }).where(eq(verificationRecords.id, input.verificationId));
+  if (["suspected_duplicate", "suspected_fraud", "requires_additional_review"].includes(input.reason ?? "") && ["escalated", "requires_resubmission", "rejected"].includes(input.decision)) await createIntegritySignal({ actorUserId: input.actorUserId, subjectProfileId: record[0].profileId, source: "verification", category: input.reason === "suspected_duplicate" ? "multiple_account_indicator" : "verification_anomaly", severity: input.reason === "suspected_fraud" ? "high" : "medium", evidenceConfidence: "limited", idempotencyKey: `verification-anomaly:${input.verificationId}:${input.decision}:${input.reason}` });
   if (input.internalNote?.trim()) await addCaseNote(input.actorUserId, "verification", input.verificationId, input.internalNote);
   const profile = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, record[0].profileId)).limit(1);
   if (profile[0]) await dependencies.createNotification(profile[0].userId, "verification", verificationTitle(input.decision), memberMessage, "/app/verification", `verification:${input.verificationId}:${input.decision}:${Date.now()}`);
@@ -216,7 +218,7 @@ async function enrichVerificationRecords<T extends { profileId: number; assigned
   return records.map(record => ({ ...record, member: profilesById.get(record.profileId) ?? null, assignedReviewer: record.assignedReviewerUserId ? staffById.get(record.assignedReviewerUserId) ?? null : null, reviewer: record.reviewedByUserId ? staffById.get(record.reviewedByUserId) ?? null : null }));
 }
 
-async function enrichReports<T extends { reporterProfileId: number; reportedProfileId?: number | null; assignedModeratorUserId?: number | null }>(records: T[]) {
+async function enrichReports<T extends { reporterProfileId: number | null; reportedProfileId?: number | null; assignedModeratorUserId?: number | null }>(records: T[]) {
   const db = await getDb();
   if (!db || !records.length) return records.map(record => ({ ...record, reporter: null, reportedMember: null, assignedModerator: null }));
   const profileIds = Array.from(new Set(records.flatMap(record => [record.reporterProfileId, record.reportedProfileId]).filter((id): id is number => Boolean(id))));
@@ -225,7 +227,7 @@ async function enrichReports<T extends { reporterProfileId: number; reportedProf
   const staff = staffIds.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, staffIds)) : [];
   const profilesById = new Map(profiles.map(profile => [profile.id, profile]));
   const staffById = new Map(staff.map(member => [member.id, member.name || "Operational staff"]));
-  return records.map(record => ({ ...record, reporter: profilesById.get(record.reporterProfileId) ?? null, reportedMember: record.reportedProfileId ? profilesById.get(record.reportedProfileId) ?? null : null, assignedModerator: record.assignedModeratorUserId ? staffById.get(record.assignedModeratorUserId) ?? null : null }));
+  return records.map(record => ({ ...record, reporter: record.reporterProfileId ? profilesById.get(record.reporterProfileId) ?? null : null, reportedMember: record.reportedProfileId ? profilesById.get(record.reportedProfileId) ?? null : null, assignedModerator: record.assignedModeratorUserId ? staffById.get(record.assignedModeratorUserId) ?? null : null }));
 }
 
 function defaultVerificationMessage(decision: VerificationDecision, reason?: VerificationReason) {

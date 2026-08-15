@@ -501,7 +501,8 @@ export async function createNotification(userId: number, notificationType: "inte
 export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(reports).values({ reporterProfileId, ...input });
+  const result = await db.insert(reports).values({ reporterProfileId, ...input }).$returningId();
+  return { reportId: Number(result[0]?.id ?? 0) };
 }
 
 export async function blockProfile(blockerProfileId: number, blockedProfileId: number, reason?: string) {

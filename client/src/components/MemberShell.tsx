@@ -21,8 +21,9 @@ const secondaryLinks = [
   { label: "Profile photos", href: "/app/photos", icon: Camera },
   { label: "Family circle", href: "/app/family", icon: UsersRound },
 	  { label: "Membership & billing", href: "/app/billing", icon: CreditCard },
-  { label: "Verification", href: "/app/verification", icon: ShieldCheck },
-  { label: "Settings", href: "/app/settings", icon: Settings },
+	  { label: "Verification", href: "/app/verification", icon: ShieldCheck },
+	  { label: "Safety Center", href: "/app/safety", icon: ShieldCheck },
+	  { label: "Settings", href: "/app/settings", icon: Settings },
 ];
 
 export function MemberShell({ children, eyebrow, title, description }: { children: React.ReactNode; eyebrow?: string; title: string; description?: string }) {

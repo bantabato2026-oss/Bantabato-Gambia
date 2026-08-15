@@ -20,6 +20,8 @@ import AdminRecommendationPolicyPage from "@/pages/AdminRecommendationPolicy";
 import BillingPage from "@/pages/BillingPage";
 import AdminBillingPage from "@/pages/AdminBilling";
 import AdminNotificationsPage from "@/pages/AdminNotifications";
+import AdminSafetyOperationsPage from "@/pages/AdminSafetyOperations";
+import SafetyCenterPage from "@/pages/SafetyCenterPage";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -53,7 +55,8 @@ function Router() {
 	    <Route path="/family" component={FamilyParticipantPage} />
     <Route path="/app/verification" component={VerificationCenter} />
     <Route path="/app/settings" component={SettingsPage} />
-    <Route path="/app/notifications" component={NotificationsPage} />
+	    <Route path="/app/notifications" component={NotificationsPage} />
+	    <Route path="/app/safety" component={SafetyCenterPage} />
     <Route path="/admin" component={AdminPage} />
     <Route path="/admin/verification" component={AdminVerificationQueuePage} />
     <Route path="/admin/verification/:caseId">{params => <AdminVerificationCasePage caseId={Number(params.caseId)} />}</Route>
@@ -63,7 +66,8 @@ function Router() {
 	    <Route path="/admin/family" component={AdminFamilyCirclePage} />
 	    <Route path="/admin/recommendations" component={AdminRecommendationPolicyPage} />
       <Route path="/admin/billing" component={AdminBillingPage} />
-      <Route path="/admin/notifications" component={AdminNotificationsPage} />
+	      <Route path="/admin/notifications" component={AdminNotificationsPage} />
+	      <Route path="/admin/safety" component={AdminSafetyOperationsPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch>;

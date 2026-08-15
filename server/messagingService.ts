@@ -5,6 +5,7 @@ import { getCompatibilityExplanation } from "./compatibilityService";
 import { blockProfile, createAuditLog, createNotification, createReport, getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { safePromptForDimension, validateVoiceNoteMeta } from "./domain/messagingPolicy";
+import { createIntegritySignal } from "./integrityService";
 import { revokeConnectionForConversation } from "./readinessService";
 
 const MAX_TEXT_LENGTH = 2_000;
@@ -157,7 +158,8 @@ export async function reportMessage(profileId: number, conversationId: number, m
   const message = await db.select().from(messages).where(and(eq(messages.id, messageId), eq(messages.conversationId, conversationId), isNull(messages.deletedAt))).limit(1);
   if (!message[0]) throw new Error("Message is unavailable");
   const reportedProfileId = message[0].senderProfileId === profileId ? access.otherProfileId : message[0].senderProfileId;
-  await createReport(profileId, { reportedProfileId, conversationId, messageId, reason, details });
+  const report = await createReport(profileId, { reportedProfileId, conversationId, messageId, reason, details });
+  await createIntegritySignal({ subjectProfileId: reportedProfileId, reportId: report.reportId, source: "messaging", category: reason === "financial_solicitation" ? "financial_solicitation" : "messaging_behavior", severity: ["scam", "harassment", "financial_solicitation", "safety_concern"].includes(reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `message-report:${report.reportId}` });
   await db.update(messages).set({ reportCount: sql`${messages.reportCount} + 1`, moderationStatus: "flagged" }).where(eq(messages.id, messageId));
   await db.update(conversations).set({ status: "reported", lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
   await recordEvent(conversationId, profileId, "safety_reported", { messageId, reason });
