@@ -6,9 +6,18 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { startLogin } from "./const";
+import { registerPwaServiceWorker } from "./lib/mobileExperience";
 import "./index.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: failureCount => (typeof navigator === "undefined" || navigator.onLine) && failureCount < 1,
+      refetchOnWindowFocus: false,
+    },
+    mutations: { retry: false },
+  },
+});
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
@@ -71,6 +80,12 @@ const trpcClient = trpc.createClient({
     }),
   ],
 });
+
+registerPwaServiceWorker();
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => { void queryClient.refetchQueries({ type: "active" }); });
+}
 
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>

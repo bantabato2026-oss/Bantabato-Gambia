@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#173a2d" />
+    <title>Offline — Bantabato</title>
+    <style>
+      :root { color-scheme: light; font-family: system-ui, sans-serif; background: #fcf8ef; color: #173a2d; }
+      body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+      main { max-width: 34rem; border: 1px solid rgba(23,58,45,.12); border-radius: 28px; padding: 32px; background: #fffdf8; box-shadow: 0 18px 48px rgba(23,58,45,.08); }
+      .mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: #173a2d; color: #fcf8ef; font-weight: 800; }
+      h1 { font-family: Georgia, serif; font-size: clamp(2rem, 7vw, 3rem); line-height: 1; margin: 22px 0 12px; }
+      p { color: #4b5e54; line-height: 1.65; }
+      button { min-height: 48px; border: 0; border-radius: 12px; padding: 0 18px; background: #173a2d; color: #fcf8ef; font: inherit; font-weight: 700; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">B</div>
+      <h1>You appear to be offline.</h1>
+      <p>Bantabato does not keep private messages, documents, payments, safety records, or account details available offline. Check your connection and try again when you are ready.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

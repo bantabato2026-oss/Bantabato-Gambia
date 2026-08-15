@@ -1,0 +1,16 @@
+{
+  "name": "Bantabato — Where Love Takes Root",
+  "short_name": "Bantabato",
+  "description": "A private, marriage-first space for Gambians at home and abroad.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fcf8ef",
+  "theme_color": "#173a2d",
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/pwa-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/pwa-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

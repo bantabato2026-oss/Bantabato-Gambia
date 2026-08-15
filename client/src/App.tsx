@@ -22,7 +22,8 @@ import AdminBillingPage from "@/pages/AdminBilling";
 import AdminNotificationsPage from "@/pages/AdminNotifications";
 import AdminSafetyOperationsPage from "@/pages/AdminSafetyOperations";
 import SafetyCenterPage from "@/pages/SafetyCenterPage";
-import InternationalPage from "@/pages/InternationalPage";
+import InternationalPage from "./pages/InternationalPage";
+import { DeviceExperiencePage } from "./pages/DeviceExperiencePage";
 import AdminSupportPage from "@/pages/AdminSupport";
 import { AdminApprovalsPage, AdminIncidentsPage } from "@/pages/AdminOperationalQueues";
 import { AdminAuditPage, AdminConfigurationPage, AdminMembersPage, AdminStaffPage } from "@/pages/AdminOperationsManagement";
@@ -48,7 +49,8 @@ function Router() {
     <Route path="/app/profile" component={ProfilePage} />
     <Route path="/app/profile/details" component={ProfileDetailsPage} />
 	    <Route path="/app/compatibility" component={CompatibilityPreferencesPage} />
-	    <Route path="/app/international" component={InternationalPage} />
+		<Route path="/app/international" component={InternationalPage} />
+		<Route path="/app/device" component={DeviceExperiencePage} />
     <Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
     <Route path="/app/photos" component={ProfileMediaPage} />
     <Route path="/app/discover" component={CuratedDiscoveryPage} />
