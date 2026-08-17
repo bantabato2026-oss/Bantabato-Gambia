@@ -9,7 +9,10 @@ type BetaEnvironment = "development" | "staging" | "production";
 type BetaInvitationStatus = "pending" | "accepted" | "expired" | "revoked";
 
 function hash(value: string) { return createHash("sha256").update(value).digest("hex"); }
-function currentEnvironment(): BetaEnvironment { return process.env.NODE_ENV === "production" ? "production" : "development"; }
+function currentEnvironment(): BetaEnvironment {
+  if (process.env.APP_ENV === "staging") return "staging";
+  return process.env.NODE_ENV === "production" ? "production" : "development";
+}
 function asId(result: unknown) {
   const row = Array.isArray(result) ? result[0] as { id?: number; insertId?: number } | undefined : undefined;
   return Number(row?.id ?? row?.insertId ?? 0);
@@ -90,25 +93,27 @@ export async function acceptBetaInvitation(userId: number, email: string | null 
 export async function listBetaOperations(actorUserId: number) {
   await requireOperationalPermission(actorUserId, "beta.view");
   const db = await getDb();
-  if (!db) return { controls: [], invitations: [], enrollments: [] };
+  const environment = currentEnvironment();
+  if (!db) return { environment, controls: [], invitations: [], enrollments: [] };
   const [controls, invitations, enrollments] = await Promise.all([
-    db.select({ environment: betaLaunchControls.environment, mode: betaLaunchControls.mode, updatedAt: betaLaunchControls.updatedAt }).from(betaLaunchControls).orderBy(asc(betaLaunchControls.environment)),
+    db.select({ environment: betaLaunchControls.environment, mode: betaLaunchControls.mode, updatedAt: betaLaunchControls.updatedAt }).from(betaLaunchControls).where(eq(betaLaunchControls.environment, environment)).orderBy(asc(betaLaunchControls.environment)),
     db.select({ id: betaInvitations.id, invitedEmail: betaInvitations.invitedEmail, status: betaInvitations.status, expiresAt: betaInvitations.expiresAt, acceptedAt: betaInvitations.acceptedAt, revokedAt: betaInvitations.revokedAt, createdAt: betaInvitations.createdAt }).from(betaInvitations).orderBy(asc(betaInvitations.expiresAt)).limit(100),
     db.select({ id: betaEnrollments.id, userId: betaEnrollments.userId, status: betaEnrollments.status, enrolledAt: betaEnrollments.enrolledAt, suspendedAt: betaEnrollments.suspendedAt, removedAt: betaEnrollments.removedAt }).from(betaEnrollments).orderBy(asc(betaEnrollments.updatedAt)).limit(100),
   ]);
   const now = Date.now();
-  return { controls, invitations: invitations.map(invitation => ({ ...invitation, status: invitation.status === "pending" && invitation.expiresAt.getTime() <= now ? "expired" as BetaInvitationStatus : invitation.status })), enrollments };
+  return { environment, controls, invitations: invitations.map(invitation => ({ ...invitation, status: invitation.status === "pending" && invitation.expiresAt.getTime() <= now ? "expired" as BetaInvitationStatus : invitation.status })), enrollments };
 }
 
-export async function setBetaMode(actorUserId: number, input: { environment: BetaEnvironment; mode: BetaMode }) {
+export async function setBetaMode(actorUserId: number, input: { mode: BetaMode }) {
   await requireOperationalPermission(actorUserId, "beta.manage", { requireFresh: true });
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(betaLaunchControls).values({ environment: input.environment, mode: input.mode, updatedByUserId: actorUserId }).onDuplicateKeyUpdate({ set: { mode: input.mode, updatedByUserId: actorUserId, updatedAt: new Date() } });
-  const control = (await db.select({ id: betaLaunchControls.id }).from(betaLaunchControls).where(eq(betaLaunchControls.environment, input.environment)).limit(1))[0];
-  await writeEvent({ actorUserId, eventType: input.mode === "shutdown" ? "emergency_shutdown" : "mode_changed", safeMetadata: { environment: input.environment, mode: input.mode } });
-  await createAuditLog(actorUserId, input.mode === "shutdown" ? "beta.emergency_shutdown" : "beta.mode_changed", "beta_launch_control", String(control?.id ?? input.environment), { environment: input.environment, mode: input.mode });
-  return { environment: input.environment, mode: input.mode };
+  const environment = currentEnvironment();
+  await db.insert(betaLaunchControls).values({ environment, mode: input.mode, updatedByUserId: actorUserId }).onDuplicateKeyUpdate({ set: { mode: input.mode, updatedByUserId: actorUserId, updatedAt: new Date() } });
+  const control = (await db.select({ id: betaLaunchControls.id }).from(betaLaunchControls).where(eq(betaLaunchControls.environment, environment)).limit(1))[0];
+  await writeEvent({ actorUserId, eventType: input.mode === "shutdown" ? "emergency_shutdown" : "mode_changed", safeMetadata: { environment, mode: input.mode } });
+  await createAuditLog(actorUserId, input.mode === "shutdown" ? "beta.emergency_shutdown" : "beta.mode_changed", "beta_launch_control", String(control?.id ?? environment), { environment, mode: input.mode });
+  return { environment, mode: input.mode };
 }
 
 export async function createBetaInvitation(actorUserId: number, input: { invitedEmail: string; expiresInHours: number }) {
