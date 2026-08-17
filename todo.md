@@ -175,3 +175,8 @@
 - [x] Prepare or update truthful staging, synthetic-account, beta, monitoring, backup/restore, storage recovery, access, security, session, mobile/PWA, cross-account, four-eyes, and test-reset evidence records without claiming unexecuted work.
 - [x] Add and run available staging-isolation, beta, session, authorization, cross-account, route, type-check, build, dependency-audit, and full-regression validation while preserving every existing test.
 - [x] Save the environment-provisioning checkpoint and deliver the requested environment, test-account, security, validation, blocker, and final readiness matrices; stop without starting another phase.
+- [x] Inspect the safest available authenticated test environment, authorized synthetic account availability, credentials, monitoring, backup, storage, and production safeguards before attempting any end-to-end smoke test.
+- [x] Execute only authorized controlled member, staff, administrator, Family Circle, beta, session, media, safety, billing-boundary, notification, mobile, PWA, and low-bandwidth smoke tests; record unavailable tests as BLOCKED — EXTERNAL ACTION REQUIRED.
+- [x] Run and preserve available automated security, authorization, IDOR, session-revocation, beta, rate-limit, audit, error-handling, private-media, mobile, PWA, TypeScript, build, dependency-audit, and full-regression validation.
+- [x] Create the mandatory authenticated smoke-test, security, infrastructure-blocker, environment, account, validation, and final readiness matrices using actual evidence and no fabricated execution outcomes.
+- [x] Save the authenticated smoke-testing and security-validation checkpoint, deliver the evidence-based decision, and stop without starting another phase.
