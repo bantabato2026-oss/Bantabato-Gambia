@@ -180,3 +180,7 @@
 - [x] Run and preserve available automated security, authorization, IDOR, session-revocation, beta, rate-limit, audit, error-handling, private-media, mobile, PWA, TypeScript, build, dependency-audit, and full-regression validation.
 - [x] Create the mandatory authenticated smoke-test, security, infrastructure-blocker, environment, account, validation, and final readiness matrices using actual evidence and no fabricated execution outcomes.
 - [x] Save the authenticated smoke-testing and security-validation checkpoint, deliver the evidence-based decision, and stop without starting another phase.
+- [x] Inventory existing logo, icon, manifest, metadata, public, member, and administrative brand references without re-inspecting the user-provided official image.
+- [x] Prepare the user-provided official Bantabato logo as a deployment-safe static asset and replace existing logo marks on appropriate responsive public, member, administrative, PWA, and metadata surfaces while preserving accessible text alternatives.
+- [x] Validate logo visibility, proportions, responsive behavior, accessibility, TypeScript, production build, and relevant regression coverage without changing existing security or launch-readiness controls.
+- [x] Save the official-logo checkpoint and deliver the live brand update.

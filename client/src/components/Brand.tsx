@@ -1,10 +1,18 @@
 import { Link } from "wouter";
 
+const OFFICIAL_BANTABATO_LOGO = "/manus-storage/public/bantabato-logo-official-f445863c.png";
+
 export function Brand({ inverse = false }: { inverse?: boolean }) {
-  const productionLogo = import.meta.env.VITE_APP_LOGO as string | undefined;
   return (
-    <Link href="/" className={`brand-wordmark ${inverse ? "text-cream" : "text-ink"}`} aria-label="Bantabato home">
-      {productionLogo ? <img src={productionLogo} alt="Bantabato" className="brand-logo-image" /> : <>Bantabato<span className="brand-dot">.</span></>}
+    <Link href="/" className={`brand-wordmark ${inverse ? "brand-wordmark-inverse" : ""}`} aria-label="Bantabato home">
+      <img
+        src={OFFICIAL_BANTABATO_LOGO}
+        alt="Bantabato"
+        width={1536}
+        height={1024}
+        decoding="async"
+        className="brand-logo-image"
+      />
     </Link>
   );
 }

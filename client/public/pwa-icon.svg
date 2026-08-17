@@ -1,8 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Bantabato</title>
-  <desc id="desc">Bantabato app icon</desc>
+  <desc id="desc">Official Bantabato logo on the Bantabato app icon</desc>
   <rect width="512" height="512" rx="104" fill="#173a2d"/>
-  <circle cx="256" cy="190" r="54" fill="#c89a3c"/>
-  <path d="M143 367c21-77 77-116 113-116s92 39 113 116" fill="none" stroke="#fcf8ef" stroke-width="38" stroke-linecap="round"/>
-  <path d="M200 174c18-25 39-37 56-37s38 12 56 37" fill="none" stroke="#fcf8ef" stroke-width="14" stroke-linecap="round"/>
+  <rect x="32" y="64" width="448" height="384" rx="72" fill="#fcf8ef"/>
+  <image href="/manus-storage/public/bantabato-logo-official-f445863c.png" x="45" y="107" width="422" height="281" preserveAspectRatio="xMidYMid meet"/>
 </svg>
