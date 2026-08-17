@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ getDb: vi.fn(), createAuditLog: vi.fn(), requi
 vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog }));
 vi.mock("./adminOperationsService", () => ({ requireOperationalPermission: mocks.requireOperationalPermission }));
 
-import { acceptBetaInvitation, requireBetaMemberAccess } from "./betaService";
+import { acceptBetaInvitation, requireBetaMemberAccess, setBetaMode } from "./betaService";
 
 function fakeDb(selectRows: unknown[][]) {
   const inserts: unknown[] = []; const updates: unknown[] = [];
@@ -66,5 +66,23 @@ describe("closed-beta invitation acceptance", () => {
   it("denies an enrolled account during emergency shutdown", async () => {
     const fake = fakeDb([[{ environment: "development", mode: "shutdown" }], [{ id: 8, status: "enrolled" }]]); mocks.getDb.mockResolvedValue(fake.db);
     await expect(requireBetaMemberAccess(7)).rejects.toThrow(/temporarily unavailable/i);
+  });
+
+  it("binds beta mode changes to the trusted runtime environment rather than a staff client input", async () => {
+    const previousNodeEnv = process.env.NODE_ENV; const previousAppEnv = process.env.APP_ENV;
+    const inserts: unknown[] = [];
+    try {
+      process.env.NODE_ENV = "development"; delete process.env.APP_ENV;
+      mocks.getDb.mockResolvedValue({
+        insert: (table: unknown) => ({ values: (values: unknown) => { inserts.push({ table, values }); return { onDuplicateKeyUpdate: async () => undefined }; } }),
+        select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 11 }] }) }) }),
+      });
+      await setBetaMode(7, { mode: "paused" });
+      expect(inserts[0]).toMatchObject({ values: { environment: "development", mode: "paused", updatedByUserId: 7 } });
+      expect(mocks.createAuditLog).toHaveBeenCalledWith(7, "beta.mode_changed", "beta_launch_control", "11", { environment: "development", mode: "paused" });
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      if (previousAppEnv === undefined) delete process.env.APP_ENV; else process.env.APP_ENV = previousAppEnv;
+    }
   });
 });
