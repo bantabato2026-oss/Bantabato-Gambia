@@ -3,10 +3,13 @@ import { getServiceHealth } from "./health";
 
 describe("service health response", () => {
   it("returns process liveness without leaking infrastructure or member data", () => {
-    expect(getServiceHealth(new Date("2026-08-15T00:00:00.000Z"))).toEqual({
+    const response = getServiceHealth(new Date("2026-08-15T00:00:00.000Z"));
+    expect(response).toEqual({
       status: "ok",
       service: "bantabato",
       timestamp: "2026-08-15T00:00:00.000Z",
     });
+    expect(Object.keys(response).sort()).toEqual(["service", "status", "timestamp"]);
+    expect(JSON.stringify(response)).not.toMatch(/token|secret|password|database|storage|member|user|email|queue|provider/i);
   });
 });
