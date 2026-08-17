@@ -14,7 +14,7 @@ const adminNavigation = [
 	  { icon: BellRing, label: "Notifications", href: "/admin/notifications", permission: "notifications.view" }, { icon: ShieldCheck, label: "Safety Operations", href: "/admin/safety", permission: "safety.cases.view" },
 	  { icon: ClipboardCheck, label: "Support", href: "/admin/support", permission: "support.view" }, { icon: ShieldCheck, label: "Approvals", href: "/admin/approvals", permission: "approvals.view" },
 	  { icon: Settings2, label: "Incidents", href: "/admin/incidents", permission: "incidents.view" }, { icon: UsersRound, label: "Staff & permissions", href: "/admin/staff", permission: "staff.view" },
-	  { icon: ClipboardCheck, label: "Audit logs", href: "/admin/audit", permission: "audit.view" }, { icon: Settings2, label: "Configuration", href: "/admin/configuration", permission: "settings.view" },
+	  { icon: ClipboardCheck, label: "Audit logs", href: "/admin/audit", permission: "audit.view" }, { icon: Settings2, label: "Configuration", href: "/admin/configuration", permission: "settings.view" }, { icon: ShieldCheck, label: "Closed beta", href: "/admin/beta", permission: "beta.view" },
 	  { icon: Globe2, label: "Countries", href: "/admin/countries", permission: "settings.view" },
 ];
 

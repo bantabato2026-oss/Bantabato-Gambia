@@ -1476,6 +1476,53 @@ export const operationalFeatureFlags = mysqlTable("operational_feature_flags", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [uniqueIndex("off_key_environment_unique").on(table.flagKey, table.environment)]);
 
+/** Closed-beta control is environment-scoped and defaults to disabled until an authorized staff member explicitly enables invite-only enrollment. */
+export const betaLaunchControls = mysqlTable("beta_launch_controls", {
+  id: int("id").autoincrement().primaryKey(),
+  environment: mysqlEnum("environment", ["development", "staging", "production"]).notNull(),
+  mode: mysqlEnum("mode", ["disabled", "invite_only", "paused", "shutdown"]).default("disabled").notNull(),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("beta_control_environment_unique").on(table.environment)]);
+
+/** Beta invitation secrets are stored only as hashes; raw codes are returned once to the authorized creator and never recorded in audit metadata. */
+export const betaInvitations = mysqlTable("beta_invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  invitedEmail: varchar("invitedEmail", { length: 320 }).notNull(),
+  invitationCodeHash: varchar("invitationCodeHash", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "expired", "revoked"]).default("pending").notNull(),
+  invitedByUserId: int("invitedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  acceptedByUserId: int("acceptedByUserId").references(() => users.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  revokedAt: timestamp("revokedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [uniqueIndex("beta_invitation_hash_unique").on(table.invitationCodeHash), index("beta_invitation_status_expiry_idx").on(table.status, table.expiresAt), index("beta_invitation_email_idx").on(table.invitedEmail, table.status)]);
+
+/** A member may have one beta enrollment lifecycle; beta state grants no exemption from any separate safety, consent, or eligibility rule. */
+export const betaEnrollments = mysqlTable("beta_enrollments", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  invitationId: int("invitationId").references(() => betaInvitations.id, { onDelete: "set null" }),
+  status: mysqlEnum("status", ["enrolled", "suspended", "removed"]).default("enrolled").notNull(),
+  enrolledAt: timestamp("enrolledAt").defaultNow().notNull(),
+  suspendedAt: timestamp("suspendedAt"),
+  removedAt: timestamp("removedAt"),
+  changedByUserId: int("changedByUserId").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("beta_enrollment_user_unique").on(table.userId), index("beta_enrollment_status_idx").on(table.status, table.updatedAt)]);
+
+/** Metadata-only beta events support operational review without recording invitation secrets, profile content, or private communications. */
+export const betaEvents = mysqlTable("beta_events", {
+  id: int("id").autoincrement().primaryKey(),
+  invitationId: int("invitationId").references(() => betaInvitations.id, { onDelete: "set null" }),
+  enrollmentId: int("enrollmentId").references(() => betaEnrollments.id, { onDelete: "set null" }),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  eventType: mysqlEnum("eventType", ["mode_changed", "invitation_created", "invitation_accepted", "invitation_revoked", "enrollment_completed", "enrollment_suspended", "enrollment_removed", "emergency_shutdown"]).notNull(),
+  safeMetadata: json("safeMetadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("beta_events_invitation_idx").on(table.invitationId, table.createdAt), index("beta_events_enrollment_idx").on(table.enrollmentId, table.createdAt)]);
+
 export const auditLogs = mysqlTable(
   "audit_logs",
   {

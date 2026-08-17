@@ -36,6 +36,8 @@ export const PERMISSION_CATALOG = [
   ["approvals.decide", "approvals", "Decide an independent approval request", true],
   ["feature_flags.view", "configuration", "View environment-scoped feature flag metadata", false],
   ["feature_flags.manage", "configuration", "Propose feature flag changes", true],
+  ["beta.view", "configuration", "View closed-beta enrollment metadata", false],
+  ["beta.manage", "configuration", "Manage closed-beta invitations and emergency controls", true],
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_CATALOG)[number][0];
@@ -44,7 +46,7 @@ const allPermissions = PERMISSION_CATALOG.map(([key]) => key) as PermissionKey[]
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<StaffRole, readonly PermissionKey[]> = {
   platform_administrator: allPermissions,
-  operations_manager: ["members.view", "members.search", "members.support", "verification.view", "safety.cases.view", "finance.transactions.view", "subscriptions.view", "notifications.view", "notifications.manage", "recommendations.policy.view", "settings.view", "audit.view", "staff.view", "support.view", "support.manage", "incidents.view", "incidents.manage", "approvals.view"],
+  operations_manager: ["members.view", "members.search", "members.support", "verification.view", "safety.cases.view", "finance.transactions.view", "subscriptions.view", "notifications.view", "notifications.manage", "recommendations.policy.view", "settings.view", "audit.view", "staff.view", "support.view", "support.manage", "incidents.view", "incidents.manage", "approvals.view", "beta.view", "beta.manage"],
   trust_safety_officer: ["members.view", "members.search", "safety.cases.view", "safety.cases.update", "safety.cases.escalate", "safety.actions.create", "safety.actions.approve", "audit.view", "incidents.view", "approvals.view"],
   verification_officer: ["members.view", "members.search", "verification.view", "verification.review", "verification.approve", "verification.reject", "audit.view"],
   customer_support_officer: ["members.view", "members.search", "members.support", "support.view", "support.manage"],
@@ -60,7 +62,7 @@ export function permissionIsHighImpact(key: PermissionKey) { return PERMISSION_C
 export function requiresIndependentApproval(type: "safety_action" | "refund" | "staff_role_change" | "permission_override" | "policy_change" | "configuration_change" | "feature_flag") { return ["safety_action", "refund", "staff_role_change", "permission_override", "policy_change", "configuration_change", "feature_flag"].includes(type); }
 export function canDecideApproval(requesterUserId: number, approverUserId: number, approverRole: StaffRole, requiredRole: StaffRole, status: string, expiresAt: Date, now = new Date()) { return requesterUserId !== approverUserId && approverRole === requiredRole && status === "pending" && expiresAt > now; }
 export function staffSessionIsUsable(status: string, expiresAt: Date, now = new Date()) { return status === "active" && expiresAt > now; }
-export function permissionRequiresFreshReauthentication(permission: PermissionKey) { return ["staff.manage", "finance.refunds.approve", "safety.actions.approve", "settings.manage", "feature_flags.manage", "recommendations.policy.approve"].includes(permission); }
+export function permissionRequiresFreshReauthentication(permission: PermissionKey) { return ["staff.manage", "finance.refunds.approve", "safety.actions.approve", "settings.manage", "feature_flags.manage", "recommendations.policy.approve", "beta.manage"].includes(permission); }
 export function safeStaffNavigation(keys: readonly PermissionKey[]) {
   const permitted = new Set(keys);
   return [

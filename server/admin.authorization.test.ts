@@ -58,6 +58,11 @@ async function expectAllScopedAdministrativeAccessDenied(caller: ReturnType<type
   await expect(caller.admin.decideApproval({ approvalId: 1, decision: "approved" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.operationsAudit({ page: 0 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.featureFlags()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.betaOperations()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.setBetaMode({ environment: "production", mode: "invite_only" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.createBetaInvitation({ invitedEmail: "beta@example.test", expiresInHours: 24 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.revokeBetaInvitation({ invitationId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.changeBetaEnrollment({ enrollmentId: 1, nextStatus: "removed" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.countryOperations()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.setCountryLifecycle({ countryId: 1, lifecycleStatus: "paused" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.saveCountryPolicy({ countryId: 1, policyVersion: "country-auth-test", signupAvailability: "available", discoveryAvailability: "available", verificationAvailability: "requires_configuration", paymentAvailability: "unavailable", notificationAvailability: "available", phoneVerificationAvailability: "unavailable", supportedLocaleCodes: ["en"], supportedNotificationChannels: ["in_app"], activate: false })).rejects.toMatchObject({ code: "FORBIDDEN" });

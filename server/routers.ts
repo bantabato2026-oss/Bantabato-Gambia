@@ -40,6 +40,7 @@ import { dismissNotification, getNotificationCenter, getNotificationPreferences,
 import { addSafetyEvidence, approveSafetyEnforcement, createIntegritySignal, expireSafetyEnforcements, getMemberSafetyCenter, getSafetyCaseDetail, getSafetyEvidenceForReview, listSafetyOperations, requestSafetyEnforcement, reviewSafetyAppeal, revokeSafetyEnforcement, saveIntegrityPolicy, submitSafetyAppeal, triageIntegritySignal } from "./integrityService";
 import { acceptStaffInvitation, createOperationalApproval, createOperationalIncident, createStaffSessionControl, createSupportTicket, decideOperationalApproval, getEffectiveStaffAccess, inviteStaff, listCurrentStaffPermissions, listFeatureFlags, listOperationalApprovals, listOperationalAudit, listOperationalIncidents, listOperationsOverview, listStaffDirectory, listSupportTickets, proposeStaffChange, revokeStaffSession, searchOperationalMembers, updateOperationalIncident, updateSupportTicket } from "./adminOperationsService";
 import { getInternationalSettings, listCountryOperations, listInternationalCountries, saveCountryPolicy, saveInternationalSettings, setCountryLifecycle } from "./internationalService";
+import { acceptBetaInvitation, changeBetaEnrollment, createBetaInvitation, getMyBetaEnrollment, listBetaOperations, requireBetaMemberAccess, revokeBetaInvitation, setBetaMode } from "./betaService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -47,6 +48,11 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 const staffOnlyProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "An authorized staff identity is required." });
   try { await getEffectiveStaffAccess(ctx.user.id, ctx.user.sessionReferenceHash); } catch { throw new TRPCError({ code: "FORBIDDEN", message: "An active, permissioned staff identity is required." }); }
+  return next();
+});
+
+const betaMemberProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  await requireBetaMemberAccess(ctx.user.id);
   return next();
 });
 
@@ -106,6 +112,7 @@ const preferenceInput = z.object({
 const fieldVisibilityInput = z.object({ fields: z.array(z.object({ fieldKey: z.enum(["religion", "practiceLevel", "ethnicity", "tribe", "country", "region", "city", "languages", "maritalStatus", "educationLevel", "educationField", "profession", "employmentStatus", "industry", "about", "personality", "interests", "hobbies", "marriageTimeline", "marriageIntent", "marriageExpectations", "relocationWillingness", "polygynyOpenness", "hasChildren", "desireChildren", "familyInvolvementPreference", "lifestyle", "values", "importantPrinciples", "familyBackground"]), audience: z.enum(["public", "verified_members", "potential_matches", "matched_members", "family_circle", "private", "admin_restricted"]) })).max(30) });
 
 async function requireProfile(userId: number) {
+  await requireBetaMemberAccess(userId);
   const profile = await getProfileByUserId(userId);
   if (!profile) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Please complete your profile before continuing." });
   return profile;
@@ -131,14 +138,20 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
+  beta: router({
+    status: protectedProcedure.query(({ ctx }) => getMyBetaEnrollment(ctx.user.id)),
+    acceptInvitation: protectedProcedure.input(z.object({ invitationCode: z.string().trim().min(16).max(200) })).mutation(({ ctx, input }) => acceptBetaInvitation(ctx.user.id, ctx.user.email, input.invitationCode)),
+  }),
   profile: router({
     mine: protectedProcedure.query(async ({ ctx }) => {
+      await requireBetaMemberAccess(ctx.user.id);
       const profile = await getProfileByUserId(ctx.user.id);
       if (!profile) return null;
       const [completeness, verification] = await Promise.all([getProfileCompleteness(profile.id), getVerificationSummary(profile.id)]);
       return { ...profile, completeness, verification };
     }),
 	    save: protectedProcedure.input(profileInput).mutation(async ({ ctx, input }) => {
+	      await requireBetaMemberAccess(ctx.user.id);
 	      const profile = await saveMemberProfile(ctx.user.id, { ...input, birthDate: input.birthDate ? new Date(input.birthDate) : undefined });
 	      if (profile) {
 	        await revokeHardIncompatibleConnectionsForProfile(profile.id);
@@ -189,7 +202,7 @@ export const appRouter = router({
 	    startInterest: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), message: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId); await createInterest(profile.id, recommendation.candidateProfileId, input.message); return { success: true }; }),
 	  }),
 	  billing: router({
-	    options: protectedProcedure.input(z.object({ currency: z.string().trim().length(3).optional() }).optional()).query(async ({ input }) => listMembershipOptions(input?.currency ?? "GMD")),
+	    options: betaMemberProcedure.input(z.object({ currency: z.string().trim().length(3).optional() }).optional()).query(async ({ input }) => listMembershipOptions(input?.currency ?? "GMD")),
 	    summary: protectedProcedure.query(async ({ ctx }) => getMemberBilling((await requireProfile(ctx.user.id)).id)),
 	    saveSettings: protectedProcedure.input(z.object({ preferredCurrency: z.string().trim().length(3), receiptEmail: z.string().email().optional().nullable() })).mutation(async ({ ctx, input }) => saveMemberBillingSettings((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
 	    initiate: protectedProcedure.input(z.object({ membershipPriceId: z.number().int().positive(), provider: z.string().trim().min(2).max(80), idempotencyKey: z.string().trim().min(16).max(96), acknowledgedTerms: z.literal(true), returnUrl: z.string().url().max(500).optional() })).mutation(async ({ ctx, input }) => initiatePayment((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
@@ -241,16 +254,16 @@ export const appRouter = router({
   safety: router({
 	    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const report = await createReport(profile.id, input); await createIntegritySignal({ actorUserId: ctx.user.id, subjectProfileId: input.reportedProfileId ?? null, reportId: report.reportId, source: "member_report", category: input.reason === "financial_solicitation" ? "financial_solicitation" : "report_pattern", severity: ["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `member-report:${report.reportId}` }); if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason)) { if (input.conversationId) await revokeConnectionForConversation(input.conversationId, "open_report", { profileId: profile.id }); if (input.reportedProfileId) { await revokeConnectionForProfilePair(profile.id, input.reportedProfileId, "open_report", { profileId: profile.id }); await withdrawRecommendationsForProfilePair(profile.id, input.reportedProfileId, "report"); } } return { success: true, reportId: report.reportId }; }),
 	    block: protectedProcedure.input(z.object({ blockedProfileId: z.number().int().positive(), reason: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); await blockProfile(profile.id, input.blockedProfileId, input.reason); await revokeConnectionForProfilePair(profile.id, input.blockedProfileId, "block", { profileId: profile.id }); await withdrawRecommendationsForProfilePair(profile.id, input.blockedProfileId, "block"); return { success: true }; }),
-	    center: protectedProcedure.query(async ({ ctx }) => getMemberSafetyCenter(ctx.user.id)),
-	    submitAppeal: protectedProcedure.input(z.object({ enforcementActionId: z.number().int().positive(), reason: z.string().trim().min(20).max(2000) })).mutation(async ({ ctx, input }) => submitSafetyAppeal(ctx.user.id, input.enforcementActionId, input.reason)),
+	    center: betaMemberProcedure.query(async ({ ctx }) => getMemberSafetyCenter(ctx.user.id)),
+	    submitAppeal: betaMemberProcedure.input(z.object({ enforcementActionId: z.number().int().positive(), reason: z.string().trim().min(20).max(2000) })).mutation(async ({ ctx, input }) => submitSafetyAppeal(ctx.user.id, input.enforcementActionId, input.reason)),
   }),
 	  notifications: router({
-	    list: protectedProcedure.query(async ({ ctx }) => getNotificationCenter(ctx.user.id)),
-	    read: protectedProcedure.input(z.object({ notificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => markNotificationReadState(ctx.user.id, input.notificationId)),
-	    markAllRead: protectedProcedure.mutation(async ({ ctx }) => { await markAllNotificationsRead(ctx.user.id); return { success: true }; }),
-	    dismiss: protectedProcedure.input(z.object({ notificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { await dismissNotification(ctx.user.id, input.notificationId); return { success: true }; }),
-	    preferences: protectedProcedure.query(async ({ ctx }) => getNotificationPreferences(ctx.user.id)),
-	    savePreferences: protectedProcedure.input(z.object({ timezone: z.string().trim().min(1).max(64), quietHoursEnabled: z.boolean(), quietHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(), quietHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(), locale: z.string().trim().min(2).max(16), preferences: z.array(z.object({ category: z.enum(["messages", "family", "recommendations", "billing", "product_updates", "marketing", "security", "verification", "safety"]), inAppEnabled: z.boolean(), emailEnabled: z.boolean(), smsEnabled: z.boolean(), pushEnabled: z.boolean(), marketingOptIn: z.boolean() })).max(9) })).mutation(async ({ ctx, input }) => { await saveNotificationPreferences(ctx.user.id, input); return { success: true }; }),
+	    list: betaMemberProcedure.query(async ({ ctx }) => getNotificationCenter(ctx.user.id)),
+	    read: betaMemberProcedure.input(z.object({ notificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => markNotificationReadState(ctx.user.id, input.notificationId)),
+	    markAllRead: betaMemberProcedure.mutation(async ({ ctx }) => { await markAllNotificationsRead(ctx.user.id); return { success: true }; }),
+	    dismiss: betaMemberProcedure.input(z.object({ notificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { await dismissNotification(ctx.user.id, input.notificationId); return { success: true }; }),
+	    preferences: betaMemberProcedure.query(async ({ ctx }) => getNotificationPreferences(ctx.user.id)),
+	    savePreferences: betaMemberProcedure.input(z.object({ timezone: z.string().trim().min(1).max(64), quietHoursEnabled: z.boolean(), quietHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(), quietHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(), locale: z.string().trim().min(2).max(16), preferences: z.array(z.object({ category: z.enum(["messages", "family", "recommendations", "billing", "product_updates", "marketing", "security", "verification", "safety"]), inAppEnabled: z.boolean(), emailEnabled: z.boolean(), smsEnabled: z.boolean(), pushEnabled: z.boolean(), marketingOptIn: z.boolean() })).max(9) })).mutation(async ({ ctx, input }) => { await saveNotificationPreferences(ctx.user.id, input); return { success: true }; }),
 	  }),
 	  admin: router({
     overview: protectedProcedure.query(async ({ ctx }) => {
@@ -385,6 +398,11 @@ export const appRouter = router({
 	    decideApproval: staffOnlyProcedure.input(z.object({ approvalId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) })).mutation(async ({ ctx, input }) => decideOperationalApproval(ctx.user.id, input.approvalId, input.decision)),
 	    operationsAudit: staffOnlyProcedure.input(z.object({ action: z.string().trim().min(1).max(120).optional(), entityType: z.string().trim().min(1).max(80).optional(), page: z.number().int().min(0).max(100).default(0) })).query(async ({ ctx, input }) => listOperationalAudit(ctx.user.id, input)),
 	    featureFlags: staffOnlyProcedure.query(async ({ ctx }) => listFeatureFlags(ctx.user.id)),
+	    betaOperations: staffOnlyProcedure.query(async ({ ctx }) => listBetaOperations(ctx.user.id)),
+	    setBetaMode: staffOnlyProcedure.input(z.object({ environment: z.enum(["development", "staging", "production"]), mode: z.enum(["disabled", "invite_only", "paused", "shutdown"]) })).mutation(async ({ ctx, input }) => setBetaMode(ctx.user.id, input)),
+	    createBetaInvitation: staffOnlyProcedure.input(z.object({ invitedEmail: z.string().email().max(320), expiresInHours: z.number().int().min(1).max(168).default(72) })).mutation(async ({ ctx, input }) => createBetaInvitation(ctx.user.id, input)),
+	    revokeBetaInvitation: staffOnlyProcedure.input(z.object({ invitationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => revokeBetaInvitation(ctx.user.id, input.invitationId)),
+	    changeBetaEnrollment: staffOnlyProcedure.input(z.object({ enrollmentId: z.number().int().positive(), nextStatus: z.enum(["suspended", "removed"]) })).mutation(async ({ ctx, input }) => changeBetaEnrollment(ctx.user.id, input.enrollmentId, input.nextStatus)),
 	    countryOperations: staffOnlyProcedure.query(async ({ ctx }) => listCountryOperations(ctx.user.id)),
 	    setCountryLifecycle: staffOnlyProcedure.input(z.object({ countryId: z.number().int().positive(), lifecycleStatus: z.enum(["draft", "configured", "review", "approved", "active", "paused", "deactivated"]) })).mutation(async ({ ctx, input }) => setCountryLifecycle(ctx.user.id, input.countryId, input.lifecycleStatus)),
 	    saveCountryPolicy: staffOnlyProcedure.input(z.object({ countryId: z.number().int().positive(), policyVersion: z.string().trim().min(3).max(64), signupAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), discoveryAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), verificationAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), paymentAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), notificationAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), phoneVerificationAvailability: z.enum(["available", "unavailable", "coming_soon", "requires_configuration"]), supportedLocaleCodes: z.array(z.string().trim().min(2).max(16)).max(12), supportedNotificationChannels: z.array(z.enum(["in_app", "email", "sms", "push"])).max(4), privacyConfiguration: z.record(z.string(), z.string()).optional(), verificationConfiguration: z.record(z.string(), z.string()).optional(), paymentConfiguration: z.record(z.string(), z.string()).optional(), activate: z.boolean() })).mutation(async ({ ctx, input }) => { const { countryId, ...policy } = input; return saveCountryPolicy(ctx.user.id, countryId, policy); }),

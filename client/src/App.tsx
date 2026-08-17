@@ -49,6 +49,8 @@ const AdminConfigurationPage = lazy(() => import("@/pages/AdminOperationsManagem
 const AdminMembersPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminMembersPage })));
 const AdminStaffPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminStaffPage })));
 const AdminCountriesPage = lazy(() => import("@/pages/AdminCountries"));
+const BetaAccessPage = lazy(() => import("@/pages/BetaAccessPage"));
+const AdminBetaPage = lazy(() => import("@/pages/AdminBetaPage"));
 
 function Router() {
   return <Switch>
@@ -62,6 +64,7 @@ function Router() {
     <Route path="/faq" component={FAQPage} />
     <Route path="/login">{() => <SignInPage />}</Route>
     <Route path="/register">{() => <SignInPage registration />}</Route>
+    <Route path="/beta" component={BetaAccessPage} />
     <Route path="/app" component={MemberHomePage} />
     <Route path="/app/onboarding" component={OnboardingPage} />
     <Route path="/app/profile" component={ProfilePage} />
@@ -101,6 +104,7 @@ function Router() {
 	      <Route path="/admin/staff" component={AdminStaffPage} />
 	      <Route path="/admin/audit" component={AdminAuditPage} />
 	      <Route path="/admin/configuration" component={AdminConfigurationPage} />
+	      <Route path="/admin/beta" component={AdminBetaPage} />
 	      <Route path="/admin/countries" component={AdminCountriesPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
