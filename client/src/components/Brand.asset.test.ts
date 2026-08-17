@@ -19,4 +19,13 @@ describe("official Brand asset", () => {
     expect(icon).toContain('/manus-storage/public/bantabato-logo-official-f445863c.png');
     expect(icon).toContain('preserveAspectRatio="xMidYMid meet"');
   });
+
+  it("exposes a public-header-only, reduced-motion-safe hover treatment", () => {
+    const layout = readFileSync(join(process.cwd(), "client/src/components/PublicLayout.tsx"), "utf8");
+    const styles = readFileSync(join(process.cwd(), "client/src/index.css"), "utf8");
+
+    expect(layout).toContain("<Brand hoverMotion />");
+    expect(styles).toContain("@media (prefers-reduced-motion:no-preference)");
+    expect(styles).toContain(".brand-wordmark-hover:hover .brand-logo-image");
+  });
 });

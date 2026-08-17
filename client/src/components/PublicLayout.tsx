@@ -19,7 +19,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-cream text-ink">
       <header className="public-header">
         <div className="container flex h-[74px] items-center justify-between gap-5">
-          <Brand />
+          <Brand hoverMotion />
           <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary navigation">
             {navigation.map(item => (
               <Link key={item.href} href={item.href} aria-current={location === item.href ? "page" : undefined} className={`nav-link ${location === item.href ? "nav-link-active" : ""}`}>

@@ -53,6 +53,8 @@ describe("mobile experience privacy and PWA boundaries", () => {
     const manifest = JSON.parse(readFileSync(join(process.cwd(), "client/public/manifest.webmanifest"), "utf8"));
     expect(manifest).toMatchObject({ short_name: "Bantabato", start_url: "/app", display: "standalone", theme_color: "#173a2d" });
     expect(manifest.icons).toHaveLength(2);
+    expect(manifest.icons).toContainEqual(expect.objectContaining({ src: "/manus-storage/public/bantabato-native-app-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }));
+    expect(manifest.icons).toContainEqual(expect.objectContaining({ src: "/manus-storage/public/bantabato-native-app-icon-1024.png", sizes: "1024x1024", type: "image/png" }));
   });
 
   it("keeps the service worker static-only and explicitly excludes private paths", () => {

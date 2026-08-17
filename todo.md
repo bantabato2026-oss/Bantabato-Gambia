@@ -184,3 +184,8 @@
 - [x] Prepare the user-provided official Bantabato logo as a deployment-safe static asset and replace existing logo marks on appropriate responsive public, member, administrative, PWA, and metadata surfaces while preserving accessible text alternatives.
 - [x] Validate logo visibility, proportions, responsive behavior, accessibility, TypeScript, production build, and relevant regression coverage without changing existing security or launch-readiness controls.
 - [x] Save the official-logo checkpoint and deliver the live brand update.
+- [x] Inventory existing social metadata, PWA icon configuration, shared logo behavior, and official asset constraints without modifying privacy, safety, authorization, or launch-readiness controls.
+- [x] Create and publish official brand-consistent social-sharing artwork and a square native PWA icon variant using deployment-safe static assets.
+- [x] Add accurate Open Graph and social metadata plus a subtle keyboard-safe, reduced-motion-respecting header-logo hover interaction.
+- [x] Validate social metadata, generated official assets, PWA manifest, responsive logo behavior, TypeScript, production build, and relevant regression coverage.
+- [x] Save the social-branding checkpoint and deliver the published update.
