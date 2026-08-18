@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { randomUUID } from "node:crypto";
 import {
   auditLogs,
   blocks,
@@ -29,6 +30,7 @@ import { assertExpectedFileSignature } from "./fileValidation";
 import { normalizeOptionalUserText, normalizeTextRecord } from "./inputSecurity";
 import { resolveAuthorizedReportTarget } from "./domain/reportAccessPolicy";
 import { resolveSuccessDeclarationStatus } from "./domain/successDeclarationPolicy";
+import { assertProfilePhotoCapacity } from "./domain/profilePhotoPolicy";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -503,11 +505,15 @@ function safeExtension(mimeType: string) {
 
 export async function uploadProfilePhoto(profileId: number, dataUrl: string) {
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "image/webp"], 8 * 1024 * 1024);
-  const stored = await storagePut(`members/${profileId}/profile-photos/photo.${safeExtension(mimeType)}`, buffer, mimeType);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(profilePhotos).values({ profileId, storageKey: stored.key, mimeType, photoPurpose: "profile", reviewStatus: "pending" });
-  return { key: stored.key };
+  return db.transaction(async tx => {
+    const existing = await tx.select({ id: profilePhotos.id }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).for("update");
+    assertProfilePhotoCapacity(existing.length);
+    const stored = await storagePut(`members/${profileId}/profile-photos/${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
+    await tx.insert(profilePhotos).values({ profileId, storageKey: stored.key, mimeType, photoPurpose: "profile", isPrimary: existing.length === 0, displayOrder: existing.length, reviewStatus: "pending" });
+    return { key: stored.key };
+  });
 }
 
 export async function listOwnProfilePhotos(profileId: number) {

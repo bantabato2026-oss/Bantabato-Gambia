@@ -197,3 +197,9 @@
 - [x] Implement only validated, supported product-experience refinements from the directive and document any external-provider, legal, operational, or evidence-dependent limitations.
 - [x] Validate responsive behavior, accessibility, security boundaries, TypeScript, production build, and full regression coverage after approved refinements.
 - [x] Save the master-directive refinement checkpoint and deliver an evidence-based implementation report.
+- [x] Inventory and classify all requested public, member, staff, administration, security, privacy, billing, mobile/PWA, low-bandwidth, and animation capabilities using actual workflow evidence.
+- [x] Audit representative unauthenticated and authenticated-capability workflows, loading/empty/error/success states, desktop/mobile routes, accessibility, and control boundaries without fabricating accounts or external services.
+- [x] Implement only verified high-priority internal gaps found by the audit while preserving provider-independent, privacy, safety, consent, authorization, and beta boundaries.
+- [x] Correct the verified profile-photo workflow gap by preventing storage-key overwrite and enforcing the displayed five-photo gallery maximum, while leaving the separate policy decision about a five-photo eligibility gate explicit and unchanged.
+- [x] Run the full regression suite, TypeScript, production build, dependency audit, route, responsive, accessibility, and security validation after any justified fixes.
+- [x] Save the full product-completeness audit checkpoint and deliver the requested evidence-based classification and readiness report.
