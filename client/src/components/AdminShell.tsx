@@ -3,12 +3,13 @@ import { Brand } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, BellRing, CircleDollarSign, ClipboardCheck, Flag, Globe2, LayoutDashboard, Settings2, ShieldCheck, Sparkles, UsersRound, Video } from "lucide-react";
+import { ArrowLeft, BellRing, CircleDollarSign, ClipboardCheck, Flag, Globe2, ImageOff, LayoutDashboard, Settings2, ShieldCheck, Sparkles, UsersRound, Video } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 const adminNavigation = [
 	  { icon: LayoutDashboard, label: "Overview", href: "/admin", permission: "members.view" }, { icon: UsersRound, label: "Members", href: "/admin/members", permission: "members.search" },
 	  { icon: ClipboardCheck, label: "Verification", href: "/admin/verification", permission: "verification.view" }, { icon: Flag, label: "Reports", href: "/admin/reports", permission: "safety.cases.view" },
+	  { icon: ImageOff, label: "Photo review", href: "/admin/photos", permission: "photos.review" }, { icon: Sparkles, label: "Success stories", href: "/admin/success-stories", permission: "success_stories.review" },
 	  { icon: Video, label: "Connection review", href: "/admin/connections", permission: "safety.cases.view" }, { icon: UsersRound, label: "Family Circle", href: "/admin/family", permission: "members.view" },
 	  { icon: Sparkles, label: "Recommendations", href: "/admin/recommendations", permission: "recommendations.policy.view" }, { icon: CircleDollarSign, label: "Billing", href: "/admin/billing", permission: "finance.transactions.view" },
 	  { icon: BellRing, label: "Notifications", href: "/admin/notifications", permission: "notifications.view" }, { icon: ShieldCheck, label: "Safety Operations", href: "/admin/safety", permission: "safety.cases.view" },

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { blocks, communicationPermissions, communicationRevocations, connectionConsents, connectionEvents, connectionReadinessPolicies, connectionReviews, connectionStates, conversationEvents, conversationInteractionSignals, conversations, matches, memberProfiles, reports, verificationRecords } from "../drizzle/schema";
 import { getCompatibilityExplanation } from "./compatibilityService";
-import { createAuditLog, createNotification, getDb } from "./db";
+import { createAuditLog, createNotification, getDb, getMemberEligibility } from "./db";
 import { DEFAULT_READINESS_POLICY, evaluateConnectionReadiness, type ParticipantSignals, type ReadinessPolicy } from "./domain/readinessPolicy";
 import { createIntegritySignal } from "./integrityService";
 import { addCaseNote, getCaseNotes } from "./operations";
@@ -33,7 +33,8 @@ export async function evaluateConversationReadiness(access: Awaited<ReturnType<t
 	    db.select({ id: connectionReviews.id }).from(connectionReviews).where(and(eq(connectionReviews.connectionStateId, state.id), eq(connectionReviews.reason, "fraud_concern"), inArray(connectionReviews.status, ["pending", "escalated"]))).limit(1),
 	  ]);
   const signals = signalByProfile(signalRows, eventRows, access.profileId, access.otherProfileId);
-  const bothActive = profileRows.length === 2 && profileRows.every(profile => profile.profileStatus === "active" && !profile.deletedAt);
+  const eligibilityRows = await Promise.all([getMemberEligibility(access.profileId), getMemberEligibility(access.otherProfileId)]);
+  const bothActive = profileRows.length === 2 && profileRows.every(profile => profile.profileStatus === "active" && !profile.deletedAt) && eligibilityRows.every(eligibility => eligibility.connectionEligible);
   const severeOpenReport = reportRows.some(report => report.priority === "high" || report.priority === "critical");
   const verified = verificationRows.length === 2;
   const bothVoiceConsent = hasMutualConsent(consentRows, access.profileId, access.otherProfileId, "voice");

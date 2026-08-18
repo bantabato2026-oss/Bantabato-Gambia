@@ -8,6 +8,7 @@ export const PERMISSION_CATALOG = [
   ["verification.review", "verification", "Claim and review verification work", false],
   ["verification.approve", "verification", "Approve or request verification resubmission", true],
   ["verification.reject", "verification", "Reject verification under policy", true],
+  ["photos.review", "profiles", "Review a private profile photo for policy compliance", false],
   ["safety.cases.view", "safety", "View authorized safety case metadata", false],
   ["safety.cases.update", "safety", "Triage authorized safety cases", false],
   ["safety.cases.escalate", "safety", "Escalate authorized safety cases", false],
@@ -36,6 +37,8 @@ export const PERMISSION_CATALOG = [
   ["approvals.decide", "approvals", "Decide an independent approval request", true],
   ["feature_flags.view", "configuration", "View environment-scoped feature flag metadata", false],
   ["feature_flags.manage", "configuration", "Propose feature flag changes", true],
+  ["success_stories.review", "content", "Review consented success-story submissions", false],
+  ["success_stories.publish", "content", "Publish an independently approved success story", true],
   ["beta.view", "configuration", "View closed-beta enrollment metadata", false],
   ["beta.manage", "configuration", "Manage closed-beta invitations and emergency controls", true],
 ] as const;
@@ -48,10 +51,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<StaffRole, readonly PermissionKey[
   platform_administrator: allPermissions,
   operations_manager: ["members.view", "members.search", "members.support", "verification.view", "safety.cases.view", "finance.transactions.view", "subscriptions.view", "notifications.view", "notifications.manage", "recommendations.policy.view", "settings.view", "audit.view", "staff.view", "support.view", "support.manage", "incidents.view", "incidents.manage", "approvals.view", "beta.view", "beta.manage"],
   trust_safety_officer: ["members.view", "members.search", "safety.cases.view", "safety.cases.update", "safety.cases.escalate", "safety.actions.create", "safety.actions.approve", "audit.view", "incidents.view", "approvals.view"],
-  verification_officer: ["members.view", "members.search", "verification.view", "verification.review", "verification.approve", "verification.reject", "audit.view"],
+  verification_officer: ["members.view", "members.search", "verification.view", "verification.review", "verification.approve", "verification.reject", "photos.review", "audit.view"],
   customer_support_officer: ["members.view", "members.search", "members.support", "support.view", "support.manage"],
   finance_officer: ["members.view", "finance.transactions.view", "finance.refunds.create", "finance.refunds.approve", "subscriptions.view", "subscriptions.manage", "audit.view", "approvals.view"],
-  content_policy_manager: ["recommendations.policy.view", "recommendations.policy.manage", "recommendations.policy.approve", "settings.view", "settings.manage", "feature_flags.view", "feature_flags.manage", "audit.view", "approvals.view"],
+  content_policy_manager: ["recommendations.policy.view", "recommendations.policy.manage", "recommendations.policy.approve", "settings.view", "settings.manage", "feature_flags.view", "feature_flags.manage", "success_stories.review", "success_stories.publish", "audit.view", "approvals.view"],
   read_only_auditor: ["verification.view", "safety.cases.view", "finance.transactions.view", "subscriptions.view", "notifications.view", "recommendations.policy.view", "settings.view", "audit.view", "staff.view", "support.view", "incidents.view", "approvals.view", "feature_flags.view"],
 };
 
@@ -62,7 +65,7 @@ export function permissionIsHighImpact(key: PermissionKey) { return PERMISSION_C
 export function requiresIndependentApproval(type: "safety_action" | "refund" | "staff_role_change" | "permission_override" | "policy_change" | "configuration_change" | "feature_flag") { return ["safety_action", "refund", "staff_role_change", "permission_override", "policy_change", "configuration_change", "feature_flag"].includes(type); }
 export function canDecideApproval(requesterUserId: number, approverUserId: number, approverRole: StaffRole, requiredRole: StaffRole, status: string, expiresAt: Date, now = new Date()) { return requesterUserId !== approverUserId && approverRole === requiredRole && status === "pending" && expiresAt > now; }
 export function staffSessionIsUsable(status: string, expiresAt: Date, now = new Date()) { return status === "active" && expiresAt > now; }
-export function permissionRequiresFreshReauthentication(permission: PermissionKey) { return ["staff.manage", "finance.refunds.approve", "safety.actions.approve", "settings.manage", "feature_flags.manage", "recommendations.policy.approve", "beta.manage"].includes(permission); }
+export function permissionRequiresFreshReauthentication(permission: PermissionKey) { return ["staff.manage", "finance.refunds.approve", "safety.actions.approve", "settings.manage", "feature_flags.manage", "recommendations.policy.approve", "beta.manage", "success_stories.publish"].includes(permission); }
 export function safeStaffNavigation(keys: readonly PermissionKey[]) {
   const permitted = new Set(keys);
   return [

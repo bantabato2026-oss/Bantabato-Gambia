@@ -14,6 +14,7 @@ import {
   memberSuccessDeclarations,
   messages,
   notifications,
+  operationalApprovals,
   profileFieldVisibilities,
   profilePhotos,
   reports,
@@ -29,8 +30,9 @@ import { storageGetSignedUrl, storagePut } from "./storage";
 import { assertExpectedFileSignature } from "./fileValidation";
 import { normalizeOptionalUserText, normalizeTextRecord } from "./inputSecurity";
 import { resolveAuthorizedReportTarget } from "./domain/reportAccessPolicy";
-import { resolveSuccessDeclarationStatus } from "./domain/successDeclarationPolicy";
-import { assertProfilePhotoCapacity } from "./domain/profilePhotoPolicy";
+import { mayPublishSuccessStory, maySubmitSuccessStory, resolveSuccessDeclarationStatus } from "./domain/successDeclarationPolicy";
+import { approvedPhotoProgress, assertProfilePhotoCapacity } from "./domain/profilePhotoPolicy";
+import { deriveMemberEligibility, desiredProfileStatusForEligibility } from "./domain/memberEligibilityPolicy";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -88,6 +90,38 @@ export async function getProfileByUserId(userId: number) {
   return result[0];
 }
 
+function coreProfileIsComplete(profile: Pick<typeof memberProfiles.$inferSelect, "displayName" | "birthDate" | "gender" | "country" | "maritalStatus">) {
+  return Boolean(profile.displayName && profile.birthDate && profile.gender && profile.country && profile.maritalStatus);
+}
+
+export async function getMemberEligibility(profileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [profile] = await db.select().from(memberProfiles).where(eq(memberProfiles.id, profileId)).limit(1);
+  if (!profile) throw new Error("Your profile is unavailable");
+  const [photos, verifications] = await Promise.all([
+    db.select({ reviewStatus: profilePhotos.reviewStatus }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))),
+    db.select({ status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"))).limit(10),
+  ]);
+  const approvedPhotoCount = photos.filter(photo => photo.reviewStatus === "approved").length;
+  const verificationStatus = verifications.some(record => record.status === "approved") ? "approved" : verifications.some(record => ["submitted", "under_review", "escalated"].includes(record.status)) ? "pending_review" : verifications.some(record => record.status === "requires_resubmission") ? "retry_required" : verifications.some(record => record.status === "rejected") ? "rejected" : "not_started";
+  return deriveMemberEligibility({ profileStatus: profile.profileStatus, searchVisible: profile.searchVisible, deletedAt: profile.deletedAt, coreProfileComplete: coreProfileIsComplete(profile), approvedPhotoCount, verificationStatus });
+}
+
+export async function synchronizeProfileEligibility(profileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [profile] = await db.select().from(memberProfiles).where(eq(memberProfiles.id, profileId)).limit(1);
+  if (!profile) throw new Error("Your profile is unavailable");
+  const eligibility = await getMemberEligibility(profileId);
+  const desiredStatus = desiredProfileStatusForEligibility({ profileStatus: profile.profileStatus, coreProfileComplete: coreProfileIsComplete(profile), approvedPhotoCount: eligibility.approvedPhotoCount });
+  const completedAt = eligibility.profileComplete ? profile.completedAt ?? new Date() : null;
+  if (profile.profileStatus !== desiredStatus || profile.completedAt?.getTime() !== completedAt?.getTime()) {
+    await db.update(memberProfiles).set({ profileStatus: desiredStatus, completedAt }).where(eq(memberProfiles.id, profileId));
+  }
+  return getMemberEligibility(profileId);
+}
+
 export async function getSuccessDeclaration(profileId: number) {
   const db = await getDb();
   if (!db) return null;
@@ -95,17 +129,24 @@ export async function getSuccessDeclaration(profileId: number) {
   return records[0] ?? null;
 }
 
-export async function saveSuccessDeclaration(profileId: number, actorUserId: number, input: { outcome: "engaged" | "married"; sharingConsent: boolean }) {
+export async function saveSuccessDeclaration(profileId: number, actorUserId: number, input: { outcome: "engaged" | "married"; sharingConsent: boolean; editorialAction?: "save_private" | "submit_for_review"; storySummary?: string; publicDisplayNameAuthorized?: boolean; publicPhotoId?: number | null; publicPhotoAuthorized?: boolean }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const now = new Date();
   const status = resolveSuccessDeclarationStatus(input.sharingConsent);
   const current = await getSuccessDeclaration(profileId);
-  const values = { outcome: input.outcome, sharingConsent: input.sharingConsent, status, declaredAt: now, consentRecordedAt: input.sharingConsent ? now : null, withdrawnAt: null } as const;
+  const publicStoryConsent = input.editorialAction === "submit_for_review";
+  if (publicStoryConsent && !maySubmitSuccessStory({ publicStoryConsent, storySummary: input.storySummary })) throw new Error("Add a short story summary and explicit public consent before submitting for review.");
+  if (input.publicPhotoId) {
+    const [photo] = await db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus }).from(profilePhotos).where(and(eq(profilePhotos.id, input.publicPhotoId), eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).limit(1);
+    if (!photo || photo.reviewStatus !== "approved" || !input.publicPhotoAuthorized) throw new Error("Only an approved photo that you separately authorize may be considered for a public story.");
+  }
+  const editorialStatus = publicStoryConsent ? "pending_review" : "private";
+  const values = { outcome: input.outcome, sharingConsent: input.sharingConsent, status, editorialStatus, publicStoryConsent, publicConsentAt: publicStoryConsent ? now : null, storySummary: input.storySummary?.trim() || null, publicDisplayNameAuthorized: Boolean(input.publicDisplayNameAuthorized), publicPhotoId: input.publicPhotoId ?? null, publicPhotoAuthorized: Boolean(input.publicPhotoAuthorized && input.publicPhotoId), publicPhotoAuthorizedAt: input.publicPhotoId && input.publicPhotoAuthorized ? now : null, submittedAt: publicStoryConsent ? now : null, declaredAt: now, consentRecordedAt: input.sharingConsent ? now : null, withdrawnAt: null, reviewedByUserId: null, reviewedAt: null, reviewNote: null, publishedByUserId: null, publishedAt: null } as const;
   if (current) await db.update(memberSuccessDeclarations).set(values).where(eq(memberSuccessDeclarations.id, current.id));
   else await db.insert(memberSuccessDeclarations).values({ profileId, ...values });
   const declaration = await getSuccessDeclaration(profileId);
-  await db.insert(auditLogs).values({ actorUserId, action: "member.success_declaration_saved", entityType: "member_success_declaration", entityId: String(declaration?.id ?? profileId), metadata: { outcome: input.outcome, sharingConsent: input.sharingConsent, status } });
+  await db.insert(auditLogs).values({ actorUserId, action: publicStoryConsent ? "member.success_story_submitted" : "member.success_declaration_saved", entityType: "member_success_declaration", entityId: String(declaration?.id ?? profileId), metadata: { outcome: input.outcome, sharingConsent: input.sharingConsent, editorialStatus, publicDisplayNameAuthorized: Boolean(input.publicDisplayNameAuthorized), publicPhotoAuthorized: Boolean(input.publicPhotoAuthorized && input.publicPhotoId) } });
   return declaration;
 }
 
@@ -115,9 +156,37 @@ export async function withdrawSuccessDeclaration(profileId: number, actorUserId:
   const current = await getSuccessDeclaration(profileId);
   if (!current || current.status === "withdrawn") throw new Error("No active success declaration exists");
   const now = new Date();
-  await db.update(memberSuccessDeclarations).set({ sharingConsent: false, status: "withdrawn", withdrawnAt: now, consentRecordedAt: null }).where(eq(memberSuccessDeclarations.id, current.id));
-  await db.insert(auditLogs).values({ actorUserId, action: "member.success_declaration_withdrawn", entityType: "member_success_declaration", entityId: String(current.id), metadata: { status: "withdrawn" } });
+  await db.update(memberSuccessDeclarations).set({ sharingConsent: false, status: "withdrawn", editorialStatus: "withdrawn", publicStoryConsent: false, publicConsentAt: null, publicDisplayNameAuthorized: false, publicPhotoId: null, publicPhotoAuthorized: false, publicPhotoAuthorizedAt: null, withdrawnAt: now, consentRecordedAt: null }).where(eq(memberSuccessDeclarations.id, current.id));
+  await db.insert(auditLogs).values({ actorUserId, action: "member.success_declaration_withdrawn", entityType: "member_success_declaration", entityId: String(current.id), metadata: { status: "withdrawn", editorialStatus: "withdrawn" } });
   return getSuccessDeclaration(profileId);
+}
+
+export async function listSuccessStoryEditorialQueue() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: memberSuccessDeclarations.id, profileId: memberSuccessDeclarations.profileId, outcome: memberSuccessDeclarations.outcome, editorialStatus: memberSuccessDeclarations.editorialStatus, storySummary: memberSuccessDeclarations.storySummary, publicDisplayNameAuthorized: memberSuccessDeclarations.publicDisplayNameAuthorized, publicPhotoId: memberSuccessDeclarations.publicPhotoId, publicPhotoAuthorized: memberSuccessDeclarations.publicPhotoAuthorized, submittedAt: memberSuccessDeclarations.submittedAt, displayName: memberProfiles.displayName }).from(memberSuccessDeclarations).innerJoin(memberProfiles, eq(memberSuccessDeclarations.profileId, memberProfiles.id)).where(inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])).orderBy(memberSuccessDeclarations.submittedAt).limit(100);
+}
+
+export async function reviewSuccessStory(actorUserId: number, declarationId: number, decision: "approved" | "rejected", reviewNote?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [declaration] = await db.select().from(memberSuccessDeclarations).where(and(eq(memberSuccessDeclarations.id, declarationId), eq(memberSuccessDeclarations.editorialStatus, "pending_review"), eq(memberSuccessDeclarations.publicStoryConsent, true))).limit(1);
+  if (!declaration) throw new Error("This success-story submission is not awaiting editorial review");
+  await db.update(memberSuccessDeclarations).set({ editorialStatus: decision, reviewedByUserId: actorUserId, reviewedAt: new Date(), reviewNote: reviewNote || null }).where(eq(memberSuccessDeclarations.id, declarationId));
+  await createAuditLog(actorUserId, `success_story.${decision}`, "member_success_declaration", String(declarationId), { profileId: declaration.profileId, reviewNote: reviewNote || null });
+  return { decision };
+}
+
+export async function publishSuccessStory(actorUserId: number, declarationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [declaration] = await db.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.id, declarationId)).limit(1);
+  if (!declaration || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: false })) throw new Error("This story is not ready for publication");
+  const [approval] = await db.select({ id: operationalApprovals.id }).from(operationalApprovals).where(and(eq(operationalApprovals.approvalType, "configuration_change"), eq(operationalApprovals.resourceType, "success_declaration_publication"), eq(operationalApprovals.resourceId, String(declarationId)), eq(operationalApprovals.status, "approved"))).limit(1);
+  if (!approval || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: true })) throw new Error("Independent publication approval is required before this story can be published");
+  await db.update(memberSuccessDeclarations).set({ editorialStatus: "published", publishedByUserId: actorUserId, publishedAt: new Date() }).where(eq(memberSuccessDeclarations.id, declarationId));
+  await createAuditLog(actorUserId, "success_story.published", "member_success_declaration", String(declarationId), { approvalId: approval.id });
+  return { published: true };
 }
 
 export type ProfileUpdate = Partial<{
@@ -172,22 +241,22 @@ export async function saveMemberProfile(userId: number, input: ProfileUpdate) {
   if (!db) throw new Error("Database unavailable");
   const normalizedInput = normalizeTextRecord(input);
   const current = await getProfileByUserId(userId);
-  const next = { ...(current ?? {}), ...normalizedInput };
-  const completedAt = next.displayName && next.birthDate && next.gender && next.country && next.maritalStatus ? current?.completedAt ?? new Date() : current?.completedAt;
   if (!current) {
-    await db.insert(memberProfiles).values({ userId, ...normalizedInput, completedAt });
+    await db.insert(memberProfiles).values({ userId, ...normalizedInput });
   } else {
-    await db.update(memberProfiles).set({ ...normalizedInput, completedAt }).where(eq(memberProfiles.id, current.id));
+    await db.update(memberProfiles).set(normalizedInput).where(eq(memberProfiles.id, current.id));
   }
+  const saved = await getProfileByUserId(userId);
+  if (saved) await synchronizeProfileEligibility(saved.id);
   return getProfileByUserId(userId);
 }
 
 export async function getProfileCompleteness(profileId: number) {
   const db = await getDb();
-  if (!db) return { photoCount: 0, hasPreferences: false, completedRecommendedFields: 0, recommendedFieldCount: 8, suggestedNext: [] as string[] };
+  if (!db) return { photoCount: 0, approvedPhotoCount: 0, pendingPhotoCount: 0, rejectedPhotoCount: 0, hasPreferences: false, completedRecommendedFields: 0, recommendedFieldCount: 8, suggestedNext: [] as string[] };
   const [photos, preferences, profiles] = await Promise.all([
     db
-      .select({ id: profilePhotos.id })
+      .select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus })
       .from(profilePhotos)
       .where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))),
     db.select({ id: memberPreferences.id }).from(memberPreferences).where(eq(memberPreferences.profileId, profileId)).limit(1),
@@ -204,7 +273,10 @@ export async function getProfileCompleteness(profileId: number) {
     ["Lifestyle", profile?.lifestyle],
     ["Compatibility preferences", preferences[0]],
   ];
-  return { photoCount: photos.length, hasPreferences: Boolean(preferences[0]), completedRecommendedFields: recommended.filter(([, value]) => Boolean(value)).length, recommendedFieldCount: recommended.length, suggestedNext: recommended.filter(([, value]) => !value).map(([label]) => label) };
+  const approvedPhotoCount = photos.filter(photo => photo.reviewStatus === "approved").length;
+  const pendingPhotoCount = photos.filter(photo => photo.reviewStatus === "pending").length;
+  const rejectedPhotoCount = photos.filter(photo => photo.reviewStatus === "rejected").length;
+  return { photoCount: photos.length, approvedPhotoCount, pendingPhotoCount, rejectedPhotoCount, photoProgress: approvedPhotoProgress(approvedPhotoCount), hasPreferences: Boolean(preferences[0]), completedRecommendedFields: recommended.filter(([, value]) => Boolean(value)).length, recommendedFieldCount: recommended.length, suggestedNext: recommended.filter(([, value]) => !value).map(([label]) => label) };
 }
 
 export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
@@ -220,6 +292,8 @@ export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
 }) {
   const db = await getDb();
   if (!db) return [];
+  const viewerEligibility = await getMemberEligibility(viewerProfileId);
+  if (!viewerEligibility.discoveryEligible) throw new Error(`${viewerEligibility.title} ${viewerEligibility.detail}`);
   const conditions = [
     eq(memberProfiles.profileStatus, "active"),
     eq(memberProfiles.searchVisible, true),
@@ -272,8 +346,11 @@ export async function getDiscoveryProfiles(viewerProfileId: number, filters?: {
     if (beforeBirthday) age -= 1;
     return age;
   };
+  const candidateEligibility = await Promise.all(profiles.map(async profile => ({ id: profile.id, eligibility: await getMemberEligibility(profile.id) })));
+  const eligibleIds = new Set(candidateEligibility.filter(candidate => candidate.eligibility.discoveryEligible).map(candidate => candidate.id));
   return profiles.filter(profile => {
     if (excludedIds.has(profile.id)) return false;
+    if (!eligibleIds.has(profile.id)) return false;
     const age = calculateAge(profile.birthDate);
     if (filters?.minAge !== undefined && (age === undefined || age < filters.minAge)) return false;
     if (filters?.maxAge !== undefined && (age === undefined || age > filters.maxAge)) return false;
@@ -285,12 +362,14 @@ export async function getProfileForMember(viewerProfileId: number, targetProfile
   const db = await getDb();
   if (!db) return undefined;
   if (viewerProfileId === targetProfileId) return undefined;
+  const viewerEligibility = await getMemberEligibility(viewerProfileId);
+  if (!viewerEligibility.discoveryEligible) return undefined;
   const viewer = await db.select({ id: memberProfiles.id }).from(memberProfiles).where(and(eq(memberProfiles.id, viewerProfileId), eq(memberProfiles.profileStatus, "active"), isNull(memberProfiles.deletedAt))).limit(1);
   if (!viewer[0]) return undefined;
   const blocked = await db.select({ id: blocks.id }).from(blocks).where(or(and(eq(blocks.blockerProfileId, viewerProfileId), eq(blocks.blockedProfileId, targetProfileId)), and(eq(blocks.blockerProfileId, targetProfileId), eq(blocks.blockedProfileId, viewerProfileId)))).limit(1);
   if (blocked[0]) return undefined;
   const profile = await db.select().from(memberProfiles).where(and(eq(memberProfiles.id, targetProfileId), eq(memberProfiles.profileStatus, "active"), ne(memberProfiles.profileVisibility, "hidden"), isNull(memberProfiles.deletedAt))).limit(1);
-  if (!profile[0]) return undefined;
+  if (!profile[0] || !(await getMemberEligibility(targetProfileId)).discoveryEligible) return undefined;
   const pair = canonicalProfilePair(viewerProfileId, targetProfileId);
   const mutualMatch = await db
     .select({ id: matches.id })
@@ -359,6 +438,9 @@ export async function createInterest(senderProfileId: number, recipientProfileId
   if (senderProfileId === recipientProfileId) throw new Error("You cannot express interest in your own profile");
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const [senderEligibility, recipientEligibility] = await Promise.all([getMemberEligibility(senderProfileId), getMemberEligibility(recipientProfileId)]);
+  if (!senderEligibility.discoveryEligible) throw new Error(`${senderEligibility.title} ${senderEligibility.detail}`);
+  if (!recipientEligibility.discoveryEligible) throw new Error("This introduction is unavailable");
   const blocked = await db
     .select({ id: blocks.id })
     .from(blocks)
@@ -507,19 +589,49 @@ export async function uploadProfilePhoto(profileId: number, dataUrl: string) {
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "image/webp"], 8 * 1024 * 1024);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  return db.transaction(async tx => {
+  await db.transaction(async tx => {
     const existing = await tx.select({ id: profilePhotos.id }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).for("update");
     assertProfilePhotoCapacity(existing.length);
     const stored = await storagePut(`members/${profileId}/profile-photos/${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
     await tx.insert(profilePhotos).values({ profileId, storageKey: stored.key, mimeType, photoPurpose: "profile", isPrimary: existing.length === 0, displayOrder: existing.length, reviewStatus: "pending" });
-    return { key: stored.key };
   });
+  await synchronizeProfileEligibility(profileId);
+  return { queuedForReview: true };
 }
 
 export async function listOwnProfilePhotos(profileId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus, isPrimary: profilePhotos.isPrimary, displayOrder: profilePhotos.displayOrder, createdAt: profilePhotos.createdAt }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).orderBy(profilePhotos.displayOrder, profilePhotos.createdAt);
+  return db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus, reviewNote: profilePhotos.reviewNote, reviewedAt: profilePhotos.reviewedAt, isPrimary: profilePhotos.isPrimary, displayOrder: profilePhotos.displayOrder, createdAt: profilePhotos.createdAt }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).orderBy(profilePhotos.displayOrder, profilePhotos.createdAt);
+}
+
+export async function listProfilePhotoReviewQueue() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ photoId: profilePhotos.id, profileId: profilePhotos.profileId, displayName: memberProfiles.displayName, reviewStatus: profilePhotos.reviewStatus, createdAt: profilePhotos.createdAt }).from(profilePhotos).innerJoin(memberProfiles, eq(profilePhotos.profileId, memberProfiles.id)).where(and(eq(profilePhotos.photoPurpose, "profile"), eq(profilePhotos.reviewStatus, "pending"), isNull(profilePhotos.deletedAt))).orderBy(profilePhotos.createdAt).limit(100);
+}
+
+export async function getProfilePhotoForReview(actorUserId: number, photoId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [photo] = await db.select({ id: profilePhotos.id, profileId: profilePhotos.profileId, storageKey: profilePhotos.storageKey, reviewStatus: profilePhotos.reviewStatus }).from(profilePhotos).where(and(eq(profilePhotos.id, photoId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).limit(1);
+  if (!photo) throw new Error("This profile photo is unavailable for review");
+  await createAuditLog(actorUserId, "profile_photo.review_accessed", "profile_photo", String(photo.id), { profileId: photo.profileId });
+  return { photoId: photo.id, profileId: photo.profileId, reviewStatus: photo.reviewStatus, reviewUrl: await storageGetSignedUrl(photo.storageKey) };
+}
+
+export async function reviewProfilePhoto(actorUserId: number, photoId: number, decision: "approved" | "rejected", reviewNote?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [photo] = await db.select({ id: profilePhotos.id, profileId: profilePhotos.profileId }).from(profilePhotos).where(and(eq(profilePhotos.id, photoId), eq(profilePhotos.photoPurpose, "profile"), eq(profilePhotos.reviewStatus, "pending"), isNull(profilePhotos.deletedAt))).limit(1);
+  if (!photo) throw new Error("This profile photo is not awaiting review");
+  const now = new Date();
+  await db.update(profilePhotos).set({ reviewStatus: decision, reviewNote: reviewNote || null, reviewedByUserId: actorUserId, reviewedAt: now }).where(eq(profilePhotos.id, photoId));
+  const eligibility = await synchronizeProfileEligibility(photo.profileId);
+  const [member] = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, photo.profileId)).limit(1);
+  if (member) await createNotification(member.userId, "verification", decision === "approved" ? "A profile photo was approved" : "A profile photo needs attention", decision === "approved" ? eligibility.photosComplete ? "Your five approved-photo requirement is complete." : `You have ${eligibility.approvedPhotoCount} of 5 approved profile photos.` : "Review the feedback and upload a different photo when you are ready.", "/app/photos", `profile-photo:${photoId}:${decision}`);
+  await createAuditLog(actorUserId, `profile_photo.${decision}`, "profile_photo", String(photoId), { profileId: photo.profileId, reviewNote: reviewNote || null, approvedPhotoCount: eligibility.approvedPhotoCount });
+  return { decision, eligibility };
 }
 
 export async function uploadIdentityDocument(profileId: number, documentType: "national_id" | "passport", dataUrl: string) {

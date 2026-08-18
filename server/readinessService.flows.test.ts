@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getDb: vi.fn(),
-  createAuditLog: vi.fn(),
-  createNotification: vi.fn(),
+	  getDb: vi.fn(),
+	  createAuditLog: vi.fn(),
+	  createNotification: vi.fn(),
+	  getMemberEligibility: vi.fn(),
   getCompatibilityExplanation: vi.fn(),
   addCaseNote: vi.fn(),
   getCaseNotes: vi.fn(),
 }));
 
-vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog, createNotification: mocks.createNotification }));
+vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog, createNotification: mocks.createNotification, getMemberEligibility: mocks.getMemberEligibility }));
 vi.mock("./compatibilityService", () => ({ getCompatibilityExplanation: mocks.getCompatibilityExplanation }));
 vi.mock("./operations", () => ({ addCaseNote: mocks.addCaseNote, getCaseNotes: mocks.getCaseNotes }));
 
@@ -33,7 +34,7 @@ const match = { id: 20, memberOneProfileId: 3, memberTwoProfileId: 4, status: "a
 const connectionState = { id: 70, conversationId: 10 };
 
 describe("Phase 5 readiness service flows", () => {
-  beforeEach(() => vi.clearAllMocks());
+	beforeEach(() => { vi.clearAllMocks(); mocks.getMemberEligibility.mockResolvedValue({ connectionEligible: true }); });
 
   it("immediately revokes only the withdrawn capability and persists an audit event", async () => {
     const fake = fakeDb([[conversation], [match], [connectionState], [connectionState]]);

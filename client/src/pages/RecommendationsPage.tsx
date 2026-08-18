@@ -25,7 +25,8 @@ export default function RecommendationsPage() {
   const [selected, setSelected] = useState<number | null>(null);
   const utils = trpc.useUtils();
   const queryInput = useMemo(() => ({ limit: 12, category: category === "all" ? undefined : category }), [category]);
-  const recommendations = trpc.recommendations.list.useQuery(queryInput);
+  const profile = trpc.profile.mine.useQuery();
+  const recommendations = trpc.recommendations.list.useQuery(queryInput, { enabled: profile.data?.eligibility?.discoveryEligible === true });
   const settings = trpc.recommendations.settings.useQuery();
   const explanation = trpc.recommendations.explain.useQuery({ recommendationId: selected ?? 1 }, { enabled: selected !== null });
   const feedback = trpc.recommendations.feedback.useMutation({ onSuccess: () => { utils.recommendations.list.invalidate(); toast.success("Your feedback was saved for your discovery experience."); }, onError: error => toast.error(error.message) });
@@ -36,6 +37,8 @@ export default function RecommendationsPage() {
     saveSettings.mutate({ recommendationsEnabled: settings.data.recommendationsEnabled, showVerifiedCategory: settings.data.showVerifiedCategory, showNearbyCategory: settings.data.showNearbyCategory, showRecentCategory: settings.data.showRecentCategory, [key]: value });
   };
 
+  const eligibility = profile.data?.eligibility;
+  if (!profile.isLoading && (!eligibility || !eligibility.discoveryEligible)) { const title = eligibility?.title || "Your profile isn't ready yet."; const detail = eligibility?.detail || "Complete your private profile foundation before recommendations begin."; return <MemberShell eyebrow="Smart matching" title="Your profile isn't ready yet." description={detail}><section className="empty-state"><div className="icon-plate"><Compass size={25} /></div><h2 className="mt-6 font-display text-3xl text-ink">{title}</h2><p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">{detail}</p><Link href={eligibility?.photosRemaining ? "/app/photos" : "/app/onboarding"} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-forest">{eligibility?.nextAction || "Complete your profile foundation."} <ChevronRight size={16} /></Link></section></MemberShell>; }
   return <MemberShell eyebrow="Smart matching" title="Meaningful introductions, explained." description="These recommendations use your stated preferences, privacy boundaries, and marriage intent. They are not popularity rankings, compatibility percentages, or decisions about who you should marry.">
     <section className="welcome-panel"><Lightbulb size={25} className="text-gold" /><p className="mt-6 text-xs font-semibold uppercase tracking-[.16em] text-gold">A considered starting point</p><h2 className="mt-3 max-w-3xl font-display text-3xl text-cream">Potential fit is something to explore—not a verdict.</h2><p className="mt-4 max-w-3xl text-sm leading-6 text-cream opacity-80">Safety, profile visibility, blocks, and stated hard requirements are checked before any profile reaches this page. Voice and video readiness remain separate, mutual-consent decisions.</p></section>
 

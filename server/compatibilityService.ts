@@ -4,7 +4,7 @@ import { evaluatePair, type CompatibilityPreferences, type CompatibilityProfile,
 import { compareCuratedOrder, isEligibleForDiscovery } from "./domain/discoveryPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
 import { safeLocationDisplay } from "./domain/internationalPolicy";
-import { getDb } from "./db";
+import { getDb, getMemberEligibility } from "./db";
 
 export type CompatibilityPreferenceInput = {
   minAge?: number;
@@ -64,7 +64,8 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
   if (!db) return { items: [], nextCursor: undefined };
   const limit = Math.min(Math.max(input.limit ?? 12, 1), 24);
   const viewer = await db.select().from(memberProfiles).where(and(eq(memberProfiles.id, viewerProfileId), eq(memberProfiles.profileStatus, "active"), isNull(memberProfiles.deletedAt))).limit(1);
-  if (!viewer[0]) throw new Error("A complete active profile is required for curated discovery");
+  const viewerEligibility = await getMemberEligibility(viewerProfileId);
+  if (!viewer[0] || !viewerEligibility.discoveryEligible) throw new Error(`${viewerEligibility.title} ${viewerEligibility.detail}`);
   const viewerPreferences = normalizePreferences(await getCompatibilityPreferences(viewerProfileId));
 
   const conditions = [eq(memberProfiles.profileStatus, "active"), eq(memberProfiles.searchVisible, true), isNull(memberProfiles.deletedAt), ne(memberProfiles.id, viewerProfileId), ne(memberProfiles.profileVisibility, "hidden")];
@@ -82,6 +83,7 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
   const excluded = new Set(blocked.map(block => block.blockerProfileId === viewerProfileId ? block.blockedProfileId : block.blockerProfileId));
   const candidates = await db.select().from(memberProfiles).where(and(...conditions)).orderBy(desc(memberProfiles.updatedAt), desc(memberProfiles.id)).limit(limit * 4 + 1);
   const candidateIds = candidates.map(candidate => candidate.id);
+  const eligibleCandidateIds = new Set((await Promise.all(candidateIds.map(async id => ({ id, eligible: (await getMemberEligibility(id)).discoveryEligible })))).filter(candidate => candidate.eligible).map(candidate => candidate.id));
   const [preferenceRows, verificationRows, visibilityRows] = await Promise.all([
     candidateIds.length ? db.select().from(memberPreferences).where(inArray(memberPreferences.profileId, candidateIds)) : Promise.resolve([]),
     candidateIds.length ? db.select({ profileId: verificationRecords.profileId }).from(verificationRecords).where(and(inArray(verificationRecords.profileId, candidateIds), eq(verificationRecords.verificationType, "identity_document"), eq(verificationRecords.status, "approved"))) : Promise.resolve([]),
@@ -97,7 +99,7 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
   });
 
   const items = candidates
-    .filter(candidate => isEligibleForDiscovery({ profileStatus: candidate.profileStatus, searchVisible: candidate.searchVisible, deletedAt: candidate.deletedAt, profileVisibility: candidate.profileVisibility, blocked: excluded.has(candidate.id) }))
+    .filter(candidate => eligibleCandidateIds.has(candidate.id) && isEligibleForDiscovery({ profileStatus: candidate.profileStatus, searchVisible: candidate.searchVisible, deletedAt: candidate.deletedAt, profileVisibility: candidate.profileVisibility, blocked: excluded.has(candidate.id) }))
     .map(candidate => {
       const compatibility = evaluatePair(viewer[0] as CompatibilityProfile, candidate as CompatibilityProfile, viewerPreferences, preferencesByProfile.get(candidate.id) ?? {});
       return { candidate, compatibility, identityVerified: verifiedProfiles.has(candidate.id), visibility: visibilitiesByProfile.get(candidate.id) ?? new Map<string, string>() };

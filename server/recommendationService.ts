@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { blocks, matches, memberPreferences, memberProfiles, memberRecommendationSettings, profileFieldVisibilities, recommendationEvents, recommendationFeedback, recommendationPolicies, recommendations, verificationRecords } from "../drizzle/schema";
-import { createAuditLog, createNotification, getDb } from "./db";
+import { createAuditLog, createNotification, getDb, getMemberEligibility } from "./db";
 import { evaluateCompatibility, type CompatibilityPreferences, type CompatibilityProfile } from "./domain/compatibility";
 import { buildRecommendationDecision, DEFAULT_RECOMMENDATION_POLICY, isEligibleForRecommendation, memberSafeConsideration, memberSafeExplanation, rankRecommendationCandidates, type RecommendationCategory, type RecommendationFeedbackResponse, type RecommendationPolicy } from "./domain/recommendationPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
@@ -82,13 +82,15 @@ export async function getRecommendationsForMember(profileId: number, input: { cu
     getRecommendationSettings(profileId),
     getActiveRecommendationPolicy(),
   ]);
-  if (!viewer[0] || !viewerSettings.recommendationsEnabled) return { items: [], nextCursor: undefined, policyVersion: policyRow.policyVersion };
+  const viewerEligibility = await getMemberEligibility(profileId);
+  if (!viewer[0] || !viewerSettings.recommendationsEnabled || !viewerEligibility.discoveryEligible) return { items: [], nextCursor: undefined, policyVersion: policyRow.policyVersion };
   const policy = policyFromRow(policyRow);
   const conditions = [eq(memberProfiles.profileStatus, "active"), eq(memberProfiles.searchVisible, true), isNull(memberProfiles.deletedAt), ne(memberProfiles.profileVisibility, "hidden"), ne(memberProfiles.id, profileId)];
   if (input.cursor) conditions.push(lt(memberProfiles.id, input.cursor));
   const candidatePool = await db.select().from(memberProfiles).where(and(...conditions)).orderBy(desc(memberProfiles.updatedAt), desc(memberProfiles.id)).limit(limit * 8 + 1);
   const candidateIds = candidatePool.map(candidate => candidate.id);
   if (!candidateIds.length) return { items: [], nextCursor: undefined, policyVersion: policy.policyVersion };
+  const eligibleCandidateIds = new Set((await Promise.all(candidateIds.map(async id => ({ id, eligible: (await getMemberEligibility(id)).discoveryEligible })))).filter(candidate => candidate.eligible).map(candidate => candidate.id));
   const [viewerPreferenceRows, candidatePreferenceRows, blockRows, verificationRows, visibilityRows, candidateSettings, existingRecommendations, existingMatches, viewerVerification] = await Promise.all([
     db.select().from(memberPreferences).where(eq(memberPreferences.profileId, profileId)).limit(1),
     db.select().from(memberPreferences).where(inArray(memberPreferences.profileId, candidateIds)),
@@ -109,7 +111,7 @@ export async function getRecommendationsForMember(profileId: number, input: { cu
   const visibilityByProfile = new Map<number, Map<string, string>>();
   visibilityRows.forEach(row => { const fields = visibilityByProfile.get(row.profileId) ?? new Map<string, string>(); fields.set(row.fieldKey, row.audience); visibilityByProfile.set(row.profileId, fields); });
   const viewerPreferences = normalizePreferences(viewerPreferenceRows[0]);
-  const evaluations = candidatePool.filter(candidate => !excluded.has(candidate.id) && !matchedCandidateIds.has(candidate.id)).map(candidate => {
+  const evaluations = candidatePool.filter(candidate => eligibleCandidateIds.has(candidate.id) && !excluded.has(candidate.id) && !matchedCandidateIds.has(candidate.id)).map(candidate => {
     const own = evaluateCompatibility(viewer[0] as CompatibilityProfile, candidate as CompatibilityProfile, viewerPreferences);
     const reciprocal = evaluateCompatibility(candidate as CompatibilityProfile, viewer[0] as CompatibilityProfile, preferencesByProfile.get(candidate.id) ?? {});
     const compatibility = { eligible: own.eligible && reciprocal.eligible, dimensions: [...own.dimensions, ...reciprocal.dimensions], compatibleCount: own.compatibleCount + reciprocal.compatibleCount, considerationCount: own.considerationCount + reciprocal.considerationCount };

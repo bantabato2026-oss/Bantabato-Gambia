@@ -12,6 +12,9 @@ import {
   getMessagesForProfile,
   getNotificationsForUser,
   getProfileByUserId,
+  getMemberEligibility,
+  getProfilePhotoForReview,
+  listSuccessStoryEditorialQueue,
   getProfileCompleteness,
   getProfileForMember,
   getSuccessDeclaration,
@@ -19,6 +22,7 @@ import {
   listFamilyLinks,
   listIncomingInterests,
   listOwnProfilePhotos,
+  listProfilePhotoReviewQueue,
   markNotificationRead,
   respondToInterest,
   saveMemberProfile,
@@ -31,6 +35,9 @@ import {
   upsertFamilyLink,
   getVerificationDocumentForReview,
   reviewIdentityVerification,
+  reviewProfilePhoto,
+  reviewSuccessStory,
+  publishSuccessStory,
 } from "./db";
 import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase, getActiveAdminScopes, getReportCase, getReportQueue, getScopedAdminOverview, getVerificationCase, getVerificationDocumentForAuthorizedReview, getVerificationQueue, requireOperationalScope } from "./operations";
 import { getCompatibilityExplanation, getCompatibilityPreferences, getCuratedDiscovery, listProfileFieldVisibilities, saveCompatibilityPreferences, saveProfileFieldVisibilities } from "./compatibilityService";
@@ -41,7 +48,7 @@ import { getRecommendationExplanation, getRecommendationSettings, getRecommendat
 import { cancelSubscriptionRenewal, getMemberBilling, hasEntitlement, initiatePayment, listBillingConfiguration, listFinanceTransactions, listMembershipOptions, listReconciliationQueue, requestRefund, saveBillingPlanConfiguration, saveMemberBillingSettings, savePaymentProviderAvailability } from "./billingService";
 import { dismissNotification, getNotificationCenter, getNotificationPreferences, listNotificationConfiguration, listNotificationOperations, markAllNotificationsRead, markNotificationReadState, processQueuedNotificationDeliveries, saveNotificationPreferences, saveNotificationProviderAvailability, saveNotificationTemplateConfiguration } from "./notificationService";
 import { addSafetyEvidence, approveSafetyEnforcement, createIntegritySignal, expireSafetyEnforcements, getMemberSafetyCenter, getSafetyCaseDetail, getSafetyEvidenceForReview, listSafetyOperations, requestSafetyEnforcement, reviewSafetyAppeal, revokeSafetyEnforcement, saveIntegrityPolicy, submitSafetyAppeal, triageIntegritySignal } from "./integrityService";
-import { acceptStaffInvitation, createOperationalApproval, createOperationalIncident, createStaffSessionControl, createSupportTicket, decideOperationalApproval, getEffectiveStaffAccess, inviteStaff, listCurrentStaffPermissions, listFeatureFlags, listOperationalApprovals, listOperationalAudit, listOperationalIncidents, listOperationsOverview, listStaffDirectory, listSupportTickets, proposeStaffChange, revokeStaffSession, searchOperationalMembers, updateOperationalIncident, updateSupportTicket } from "./adminOperationsService";
+import { acceptStaffInvitation, createOperationalApproval, createOperationalIncident, createStaffSessionControl, createSupportTicket, decideOperationalApproval, getEffectiveStaffAccess, inviteStaff, listCurrentStaffPermissions, listFeatureFlags, listOperationalApprovals, listOperationalAudit, listOperationalIncidents, listOperationsOverview, listStaffDirectory, listSupportTickets, proposeStaffChange, requireOperationalPermission, revokeStaffSession, searchOperationalMembers, updateOperationalIncident, updateSupportTicket } from "./adminOperationsService";
 import { getInternationalSettings, listCountryOperations, listInternationalCountries, saveCountryPolicy, saveInternationalSettings, setCountryLifecycle } from "./internationalService";
 import { acceptBetaInvitation, changeBetaEnrollment, createBetaInvitation, getMyBetaEnrollment, listBetaOperations, requireBetaMemberAccess, revokeBetaInvitation, setBetaMode } from "./betaService";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -150,8 +157,8 @@ export const appRouter = router({
       await requireBetaMemberAccess(ctx.user.id);
       const profile = await getProfileByUserId(ctx.user.id);
       if (!profile) return null;
-      const [completeness, verification] = await Promise.all([getProfileCompleteness(profile.id), getVerificationSummary(profile.id)]);
-      return { ...profile, completeness, verification };
+      const [completeness, verification, eligibility] = await Promise.all([getProfileCompleteness(profile.id), getVerificationSummary(profile.id), getMemberEligibility(profile.id)]);
+      return { ...profile, completeness, verification, eligibility };
     }),
 	    save: protectedProcedure.input(profileInput).mutation(async ({ ctx, input }) => {
 	      await requireBetaMemberAccess(ctx.user.id);
@@ -214,7 +221,7 @@ export const appRouter = router({
   }),
   success: router({
     mine: protectedProcedure.query(async ({ ctx }) => getSuccessDeclaration((await requireProfile(ctx.user.id)).id)),
-    declare: protectedProcedure.input(z.object({ outcome: z.enum(["engaged", "married"]), sharingConsent: z.boolean() })).mutation(async ({ ctx, input }) => saveSuccessDeclaration((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
+    declare: protectedProcedure.input(z.object({ outcome: z.enum(["engaged", "married"]), sharingConsent: z.boolean(), editorialAction: z.enum(["save_private", "submit_for_review"]).default("save_private"), storySummary: z.string().trim().max(1200).optional(), publicDisplayNameAuthorized: z.boolean().optional(), publicPhotoId: z.number().int().positive().nullable().optional(), publicPhotoAuthorized: z.boolean().optional() })).mutation(async ({ ctx, input }) => saveSuccessDeclaration((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
     withdraw: protectedProcedure.mutation(async ({ ctx }) => withdrawSuccessDeclaration((await requireProfile(ctx.user.id)).id, ctx.user.id)),
   }),
   matches: router({
@@ -386,6 +393,13 @@ export const appRouter = router({
 	    saveNotificationTemplate: protectedProcedure.input(z.object({ eventType: z.string().trim().min(3).max(100), channel: z.enum(["in_app", "email", "sms", "push"]), locale: z.string().trim().min(2).max(16), templateVersion: z.string().trim().min(2).max(64), subject: z.string().trim().min(3).max(160), body: z.string().trim().min(3).max(500), allowedVariables: z.array(z.string()).max(0), activate: z.boolean() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["platform_admin"]); return saveNotificationTemplateConfiguration(ctx.user.id, input); }),
 	    saveNotificationProviderAvailability: protectedProcedure.input(z.object({ provider: z.string().trim().min(2).max(80), channel: z.enum(["email", "sms", "push"]), enabled: z.boolean(), supportedLocales: z.array(z.string().trim().min(2).max(16)).max(12), configurationNote: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalAccess(ctx.user, ["platform_admin"]); return saveNotificationProviderAvailability(ctx.user.id, input); }),
 	    operationsAccess: staffOnlyProcedure.query(async ({ ctx }) => getEffectiveStaffAccess(ctx.user.id)),
+	    profilePhotoReviewQueue: staffOnlyProcedure.query(async ({ ctx }) => { await requireOperationalPermission(ctx.user.id, "photos.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return listProfilePhotoReviewQueue(); }),
+	    profilePhotoReviewUrl: staffOnlyProcedure.input(z.object({ photoId: z.number().int().positive() })).query(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "photos.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return getProfilePhotoForReview(ctx.user.id, input.photoId); }),
+	    reviewProfilePhoto: staffOnlyProcedure.input(z.object({ photoId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), reviewNote: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "photos.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return reviewProfilePhoto(ctx.user.id, input.photoId, input.decision, input.reviewNote); }),
+	    successStoryEditorialQueue: staffOnlyProcedure.query(async ({ ctx }) => { await requireOperationalPermission(ctx.user.id, "success_stories.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return listSuccessStoryEditorialQueue(); }),
+	    reviewSuccessStory: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), reviewNote: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return reviewSuccessStory(ctx.user.id, input.declarationId, input.decision, input.reviewNote); }),
+	    requestSuccessStoryPublicationApproval: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive(), reason: z.string().trim().min(10).max(1000) })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.publish", { requireFresh: true, sessionReferenceHash: ctx.user.sessionReferenceHash }); return createOperationalApproval(ctx.user.id, { approvalType: "configuration_change", resourceType: "success_declaration_publication", resourceId: String(input.declarationId), requiredApproverRole: "platform_administrator", reason: input.reason, impactSummary: JSON.stringify({ declarationId: input.declarationId, action: "publish_success_story" }), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) }); }),
+	    publishSuccessStory: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.publish", { requireFresh: true, sessionReferenceHash: ctx.user.sessionReferenceHash }); return publishSuccessStory(ctx.user.id, input.declarationId); }),
 	    operationsOverview: staffOnlyProcedure.query(async ({ ctx }) => listOperationsOverview(ctx.user.id)),
 	    operationsMembers: staffOnlyProcedure.input(z.object({ query: z.string().trim().min(2).max(120), page: z.number().int().min(0).max(100).default(0) })).query(async ({ ctx, input }) => searchOperationalMembers(ctx.user.id, input.query, input.page)),
 	    staffDirectory: staffOnlyProcedure.query(async ({ ctx }) => listStaffDirectory(ctx.user.id)),

@@ -51,6 +51,8 @@ const AdminConfigurationPage = lazy(() => import("@/pages/AdminOperationsManagem
 const AdminMembersPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminMembersPage })));
 const AdminStaffPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminStaffPage })));
 const AdminCountriesPage = lazy(() => import("@/pages/AdminCountries"));
+const AdminPhotoReviewPage = lazy(() => import("@/pages/AdminContentReview").then(module => ({ default: module.AdminPhotoReviewPage })));
+const AdminSuccessStoriesPage = lazy(() => import("@/pages/AdminContentReview").then(module => ({ default: module.AdminSuccessStoriesPage })));
 const BetaAccessPage = lazy(() => import("@/pages/BetaAccessPage"));
 const AdminBetaPage = lazy(() => import("@/pages/AdminBetaPage"));
 
@@ -109,7 +111,9 @@ function Router() {
 	      <Route path="/admin/audit" component={AdminAuditPage} />
 	      <Route path="/admin/configuration" component={AdminConfigurationPage} />
 	      <Route path="/admin/beta" component={AdminBetaPage} />
-	      <Route path="/admin/countries" component={AdminCountriesPage} />
+	    <Route path="/admin/countries" component={AdminCountriesPage} />
+	    <Route path="/admin/photos" component={AdminPhotoReviewPage} />
+	    <Route path="/admin/success-stories" component={AdminSuccessStoriesPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
   </Switch></PageEnter>;
