@@ -10,6 +10,7 @@ import {
   matches,
   memberPreferences,
   memberProfiles,
+  memberSuccessDeclarations,
   messages,
   notifications,
   profileFieldVisibilities,
@@ -27,6 +28,7 @@ import { storageGetSignedUrl, storagePut } from "./storage";
 import { assertExpectedFileSignature } from "./fileValidation";
 import { normalizeOptionalUserText, normalizeTextRecord } from "./inputSecurity";
 import { resolveAuthorizedReportTarget } from "./domain/reportAccessPolicy";
+import { resolveSuccessDeclarationStatus } from "./domain/successDeclarationPolicy";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -82,6 +84,38 @@ export async function getProfileByUserId(userId: number) {
     .where(and(eq(memberProfiles.userId, userId), isNull(memberProfiles.deletedAt)))
     .limit(1);
   return result[0];
+}
+
+export async function getSuccessDeclaration(profileId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const records = await db.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.profileId, profileId)).limit(1);
+  return records[0] ?? null;
+}
+
+export async function saveSuccessDeclaration(profileId: number, actorUserId: number, input: { outcome: "engaged" | "married"; sharingConsent: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const now = new Date();
+  const status = resolveSuccessDeclarationStatus(input.sharingConsent);
+  const current = await getSuccessDeclaration(profileId);
+  const values = { outcome: input.outcome, sharingConsent: input.sharingConsent, status, declaredAt: now, consentRecordedAt: input.sharingConsent ? now : null, withdrawnAt: null } as const;
+  if (current) await db.update(memberSuccessDeclarations).set(values).where(eq(memberSuccessDeclarations.id, current.id));
+  else await db.insert(memberSuccessDeclarations).values({ profileId, ...values });
+  const declaration = await getSuccessDeclaration(profileId);
+  await db.insert(auditLogs).values({ actorUserId, action: "member.success_declaration_saved", entityType: "member_success_declaration", entityId: String(declaration?.id ?? profileId), metadata: { outcome: input.outcome, sharingConsent: input.sharingConsent, status } });
+  return declaration;
+}
+
+export async function withdrawSuccessDeclaration(profileId: number, actorUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const current = await getSuccessDeclaration(profileId);
+  if (!current || current.status === "withdrawn") throw new Error("No active success declaration exists");
+  const now = new Date();
+  await db.update(memberSuccessDeclarations).set({ sharingConsent: false, status: "withdrawn", withdrawnAt: now, consentRecordedAt: null }).where(eq(memberSuccessDeclarations.id, current.id));
+  await db.insert(auditLogs).values({ actorUserId, action: "member.success_declaration_withdrawn", entityType: "member_success_declaration", entityId: String(current.id), metadata: { status: "withdrawn" } });
+  return getSuccessDeclaration(profileId);
 }
 
 export type ProfileUpdate = Partial<{

@@ -1522,7 +1522,19 @@ export const betaEvents = mysqlTable("beta_events", {
   safeMetadata: json("safeMetadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [index("beta_events_invitation_idx").on(table.invitationId, table.createdAt), index("beta_events_enrollment_idx").on(table.enrollmentId, table.createdAt)]);
-
+/** Private member-declared engagement or marriage outcomes. Sharing consent is never publication consent and no public story surface reads this table. */
+export const memberSuccessDeclarations = mysqlTable("member_success_declarations", {
+  id: int("id").autoincrement().primaryKey(),
+  profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  outcome: mysqlEnum("outcome", ["engaged", "married"]).notNull(),
+  sharingConsent: boolean("sharingConsent").default(false).notNull(),
+  status: mysqlEnum("status", ["private", "consent_recorded", "withdrawn"]).default("private").notNull(),
+  declaredAt: timestamp("declaredAt").defaultNow().notNull(),
+  consentRecordedAt: timestamp("consentRecordedAt"),
+  withdrawnAt: timestamp("withdrawnAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("member_success_declaration_profile_unique").on(table.profileId), index("member_success_declaration_status_idx").on(table.status, table.updatedAt)]);
 export const auditLogs = mysqlTable(
   "audit_logs",
   {

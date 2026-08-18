@@ -1,12 +1,14 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/Home";
-import { ContactPage, FAQPage, PublicInfoPage, SignInPage } from "@/pages/PublicPages";
+import { ContactPage, FAQPage, MembershipPage, PublicInfoPage, SignInPage } from "@/pages/PublicPages";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { BrandedRouteLoading, PageEnter } from "./components/ExperienceMotion";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
+import { useLocation } from "wouter";
 
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const AdminVerificationQueuePage = lazy(() => import("@/pages/AdminOperations").then(module => ({ default: module.AdminVerificationQueuePage })));
@@ -53,7 +55,8 @@ const BetaAccessPage = lazy(() => import("@/pages/BetaAccessPage"));
 const AdminBetaPage = lazy(() => import("@/pages/AdminBetaPage"));
 
 function Router() {
-  return <Switch>
+  const [location] = useLocation();
+  return <PageEnter key={location}><Switch>
     <Route path="/" component={Home} />
     <Route path="/about">{() => <PublicInfoPage page="about" />}</Route>
     <Route path="/how-it-works">{() => <PublicInfoPage page="how-it-works" />}</Route>
@@ -62,6 +65,7 @@ function Router() {
     <Route path="/terms">{() => <PublicInfoPage page="terms" />}</Route>
     <Route path="/contact" component={ContactPage} />
     <Route path="/faq" component={FAQPage} />
+    <Route path="/membership" component={MembershipPage} />
     <Route path="/login">{() => <SignInPage />}</Route>
     <Route path="/register">{() => <SignInPage registration />}</Route>
     <Route path="/beta" component={BetaAccessPage} />
@@ -108,7 +112,7 @@ function Router() {
 	      <Route path="/admin/countries" component={AdminCountriesPage} />
     <Route path="/404" component={NotFound} />
     <Route component={NotFound} />
-  </Switch>;
+  </Switch></PageEnter>;
 }
 
-export default function App() { return <ErrorBoundary><ThemeProvider defaultTheme="light"><TooltipProvider><Toaster /><Suspense fallback={<main className="grid min-h-screen place-items-center bg-cream p-6" role="status" aria-live="polite"><p className="text-sm text-forest">Loading Bantabato securely…</p></main>}><Router /></Suspense></TooltipProvider></ThemeProvider></ErrorBoundary>; }
+export default function App() { return <ErrorBoundary><ThemeProvider defaultTheme="light"><TooltipProvider><Toaster /><Suspense fallback={<BrandedRouteLoading />}><Router /></Suspense></TooltipProvider></ThemeProvider></ErrorBoundary>; }
