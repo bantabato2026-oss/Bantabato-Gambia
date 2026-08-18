@@ -1,0 +1,1 @@
+ALTER TABLE `member_success_declarations` ADD `editorialCopy` varchar(1200);

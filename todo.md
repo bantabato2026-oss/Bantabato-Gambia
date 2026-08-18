@@ -212,3 +212,11 @@
 - [x] Inspect available connector configuration and use GitHub, Supabase, Sentry, or Cloudflare only when appropriate, approved, and safe; do not deploy, change DNS, activate payments, expose secrets, or fabricate external activity.
 - [x] Add and run state-transition, five-photo, success-story consent, authorization, accessibility, mobile/desktop, TypeScript, production-build, dependency-audit, and full regression validation.
 - [x] Save the internal product-standardization checkpoint and deliver the requested evidence-based status report without claiming launch readiness.
+- [x] Audit the existing success-story data, member, editorial, approval, withdrawal, audit, privacy, and public-presentation paths against the submitted authoritative operating procedure.
+- [x] Recover and reassess the prior 11 partial capabilities and one missing capability, classifying each as an internal implementation target, external dependency, or blocked item with an explicit reason.
+- [x] Formalize the BANTABATO — SUCCESS-STORY OPERATING PROCEDURE & INTERNAL GAP CLOSURE documentation and close only verified internal consent, photograph-authorization, editorial, approval, withdrawal, privacy, or public-visibility gaps.
+- [x] Require a recent server-observed member sign-in before voluntary public-story submission, with a clear sign-out/sign-in recovery path, while preserving immediate withdrawal and not treating general session age as renewed consent.
+- [x] Add a text-only public success-story presentation path that reads only independently approved published records and editorial copy, never leaks private source content or media, and removes a story immediately after withdrawal.
+- [x] Add focused success-story lifecycle, consent, photo-authorization, withdrawal, editorial-permission, independent-approval, visibility, authorization, and responsive-route regression coverage.
+- [x] Run TypeScript, full tests, production build, dependency audit, security/privacy checks, desktop/mobile validation, and update the evidence-based internal-completeness report without activating connectors or claiming launch readiness.
+- [x] Save the success-story operating-procedure and internal-gap-closure checkpoint and deliver the requested final status report.

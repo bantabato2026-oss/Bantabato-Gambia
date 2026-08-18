@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/Home";
 import { ContactPage, FAQPage, MembershipPage, PublicInfoPage, SignInPage } from "@/pages/PublicPages";
+import PublicSuccessStoriesPage from "@/pages/PublicSuccessStoriesPage";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -68,6 +69,7 @@ function Router() {
     <Route path="/contact" component={ContactPage} />
     <Route path="/faq" component={FAQPage} />
     <Route path="/membership" component={MembershipPage} />
+    <Route path="/stories" component={PublicSuccessStoriesPage} />
     <Route path="/login">{() => <SignInPage />}</Route>
     <Route path="/register">{() => <SignInPage registration />}</Route>
     <Route path="/beta" component={BetaAccessPage} />

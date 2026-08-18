@@ -1536,6 +1536,7 @@ export const memberSuccessDeclarations = mysqlTable("member_success_declarations
   publicStoryConsent: boolean("publicStoryConsent").default(false).notNull(),
   publicConsentAt: timestamp("publicConsentAt"),
   storySummary: varchar("storySummary", { length: 1200 }),
+  editorialCopy: varchar("editorialCopy", { length: 1200 }),
   publicDisplayNameAuthorized: boolean("publicDisplayNameAuthorized").default(false).notNull(),
   publicPhotoId: int("publicPhotoId").references(() => profilePhotos.id, { onDelete: "set null" }),
   publicPhotoAuthorized: boolean("publicPhotoAuthorized").default(false).notNull(),

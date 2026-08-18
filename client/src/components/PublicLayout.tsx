@@ -58,7 +58,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-7 sm:grid-cols-3">
-            <FooterLinks title="Explore" links={[{ label: "How it works", href: "/how-it-works" }, { label: "Our approach", href: "/about" }, { label: "Membership", href: "/membership" }, { label: "Safety & verification", href: "/safety" }]} />
+            <FooterLinks title="Explore" links={[{ label: "How it works", href: "/how-it-works" }, { label: "Our approach", href: "/about" }, { label: "Membership", href: "/membership" }, { label: "Member stories", href: "/stories" }, { label: "Safety & verification", href: "/safety" }]} />
             <FooterLinks title="Support" links={[{ label: "Privacy", href: "/privacy" }, { label: "FAQ", href: "/faq" }, { label: "Contact", href: "/contact" }]} />
             <FooterLinks title="Legal" links={[{ label: "Terms", href: "/terms" }, { label: "Member standards", href: "/safety" }]} />
           </div>

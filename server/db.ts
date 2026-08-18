@@ -30,7 +30,7 @@ import { storageGetSignedUrl, storagePut } from "./storage";
 import { assertExpectedFileSignature } from "./fileValidation";
 import { normalizeOptionalUserText, normalizeTextRecord } from "./inputSecurity";
 import { resolveAuthorizedReportTarget } from "./domain/reportAccessPolicy";
-import { mayPublishSuccessStory, maySubmitSuccessStory, resolveSuccessDeclarationStatus } from "./domain/successDeclarationPolicy";
+import { hasFreshSuccessStoryAuthentication, mayPublishSuccessStory, maySubmitSuccessStory, resolveSuccessDeclarationStatus, validateEditorialCopy } from "./domain/successDeclarationPolicy";
 import { approvedPhotoProgress, assertProfilePhotoCapacity } from "./domain/profilePhotoPolicy";
 import { deriveMemberEligibility, desiredProfileStatusForEligibility } from "./domain/memberEligibilityPolicy";
 import { ENV } from "./_core/env";
@@ -77,6 +77,15 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+export async function requireFreshMemberAuthentication(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [user] = await db.select({ lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!hasFreshSuccessStoryAuthentication(user?.lastSignedIn)) {
+    throw new Error("For your privacy, sign out and sign back in before submitting a story for public editorial review.");
+  }
 }
 
 export async function getProfileByUserId(userId: number) {
@@ -164,16 +173,17 @@ export async function withdrawSuccessDeclaration(profileId: number, actorUserId:
 export async function listSuccessStoryEditorialQueue() {
   const db = await getDb();
   if (!db) return [];
-  return db.select({ id: memberSuccessDeclarations.id, profileId: memberSuccessDeclarations.profileId, outcome: memberSuccessDeclarations.outcome, editorialStatus: memberSuccessDeclarations.editorialStatus, storySummary: memberSuccessDeclarations.storySummary, publicDisplayNameAuthorized: memberSuccessDeclarations.publicDisplayNameAuthorized, publicPhotoId: memberSuccessDeclarations.publicPhotoId, publicPhotoAuthorized: memberSuccessDeclarations.publicPhotoAuthorized, submittedAt: memberSuccessDeclarations.submittedAt, displayName: memberProfiles.displayName }).from(memberSuccessDeclarations).innerJoin(memberProfiles, eq(memberSuccessDeclarations.profileId, memberProfiles.id)).where(inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])).orderBy(memberSuccessDeclarations.submittedAt).limit(100);
+  return db.select({ id: memberSuccessDeclarations.id, profileId: memberSuccessDeclarations.profileId, outcome: memberSuccessDeclarations.outcome, editorialStatus: memberSuccessDeclarations.editorialStatus, storySummary: memberSuccessDeclarations.storySummary, editorialCopy: memberSuccessDeclarations.editorialCopy, publicDisplayNameAuthorized: memberSuccessDeclarations.publicDisplayNameAuthorized, publicPhotoId: memberSuccessDeclarations.publicPhotoId, publicPhotoAuthorized: memberSuccessDeclarations.publicPhotoAuthorized, submittedAt: memberSuccessDeclarations.submittedAt, displayName: memberProfiles.displayName }).from(memberSuccessDeclarations).innerJoin(memberProfiles, eq(memberSuccessDeclarations.profileId, memberProfiles.id)).where(inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])).orderBy(memberSuccessDeclarations.submittedAt).limit(100);
 }
 
-export async function reviewSuccessStory(actorUserId: number, declarationId: number, decision: "approved" | "rejected", reviewNote?: string) {
+export async function reviewSuccessStory(actorUserId: number, declarationId: number, decision: "approved" | "rejected", reviewNote?: string, editorialCopy?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const [declaration] = await db.select().from(memberSuccessDeclarations).where(and(eq(memberSuccessDeclarations.id, declarationId), eq(memberSuccessDeclarations.editorialStatus, "pending_review"), eq(memberSuccessDeclarations.publicStoryConsent, true))).limit(1);
   if (!declaration) throw new Error("This success-story submission is not awaiting editorial review");
-  await db.update(memberSuccessDeclarations).set({ editorialStatus: decision, reviewedByUserId: actorUserId, reviewedAt: new Date(), reviewNote: reviewNote || null }).where(eq(memberSuccessDeclarations.id, declarationId));
-  await createAuditLog(actorUserId, `success_story.${decision}`, "member_success_declaration", String(declarationId), { profileId: declaration.profileId, reviewNote: reviewNote || null });
+  const approvedCopy = decision === "approved" ? validateEditorialCopy(editorialCopy ?? "") : null;
+  await db.update(memberSuccessDeclarations).set({ editorialStatus: decision, editorialCopy: approvedCopy, reviewedByUserId: actorUserId, reviewedAt: new Date(), reviewNote: reviewNote || null }).where(eq(memberSuccessDeclarations.id, declarationId));
+  await createAuditLog(actorUserId, `success_story.${decision}`, "member_success_declaration", String(declarationId), { profileId: declaration.profileId, reviewNote: reviewNote || null, editorialCopyLength: approvedCopy?.length ?? 0 });
   return { decision };
 }
 
@@ -181,12 +191,19 @@ export async function publishSuccessStory(actorUserId: number, declarationId: nu
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const [declaration] = await db.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.id, declarationId)).limit(1);
-  if (!declaration || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: false })) throw new Error("This story is not ready for publication");
+  if (!declaration || !declaration.editorialCopy || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: false })) throw new Error("This story is not ready for publication");
   const [approval] = await db.select({ id: operationalApprovals.id }).from(operationalApprovals).where(and(eq(operationalApprovals.approvalType, "configuration_change"), eq(operationalApprovals.resourceType, "success_declaration_publication"), eq(operationalApprovals.resourceId, String(declarationId)), eq(operationalApprovals.status, "approved"))).limit(1);
   if (!approval || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: true })) throw new Error("Independent publication approval is required before this story can be published");
   await db.update(memberSuccessDeclarations).set({ editorialStatus: "published", publishedByUserId: actorUserId, publishedAt: new Date() }).where(eq(memberSuccessDeclarations.id, declarationId));
   await createAuditLog(actorUserId, "success_story.published", "member_success_declaration", String(declarationId), { approvalId: approval.id });
   return { published: true };
+}
+
+export async function listPublishedSuccessStories() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ outcome: memberSuccessDeclarations.outcome, editorialCopy: memberSuccessDeclarations.editorialCopy, publicDisplayNameAuthorized: memberSuccessDeclarations.publicDisplayNameAuthorized, displayName: memberProfiles.displayName, publishedAt: memberSuccessDeclarations.publishedAt }).from(memberSuccessDeclarations).innerJoin(memberProfiles, eq(memberSuccessDeclarations.profileId, memberProfiles.id)).where(and(eq(memberSuccessDeclarations.editorialStatus, "published"), eq(memberSuccessDeclarations.publicStoryConsent, true), isNull(memberSuccessDeclarations.withdrawnAt))).orderBy(desc(memberSuccessDeclarations.publishedAt)).limit(24);
+  return rows.filter(row => Boolean(row.editorialCopy)).map(row => ({ outcome: row.outcome, story: row.editorialCopy!, displayName: row.publicDisplayNameAuthorized ? row.displayName : null, publishedAt: row.publishedAt }));
 }
 
 export type ProfileUpdate = Partial<{

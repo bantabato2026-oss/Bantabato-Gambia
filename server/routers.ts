@@ -12,9 +12,11 @@ import {
   getMessagesForProfile,
   getNotificationsForUser,
   getProfileByUserId,
+  requireFreshMemberAuthentication,
   getMemberEligibility,
   getProfilePhotoForReview,
   listSuccessStoryEditorialQueue,
+  listPublishedSuccessStories,
   getProfileCompleteness,
   getProfileForMember,
   getSuccessDeclaration,
@@ -148,6 +150,9 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
+  publicContent: router({
+    successStories: publicProcedure.query(() => listPublishedSuccessStories()),
+  }),
   beta: router({
     status: protectedProcedure.query(({ ctx }) => getMyBetaEnrollment(ctx.user.id)),
     acceptInvitation: protectedProcedure.input(z.object({ invitationCode: z.string().trim().min(16).max(200) })).mutation(({ ctx, input }) => acceptBetaInvitation(ctx.user.id, ctx.user.email, input.invitationCode)),
@@ -221,7 +226,7 @@ export const appRouter = router({
   }),
   success: router({
     mine: protectedProcedure.query(async ({ ctx }) => getSuccessDeclaration((await requireProfile(ctx.user.id)).id)),
-    declare: protectedProcedure.input(z.object({ outcome: z.enum(["engaged", "married"]), sharingConsent: z.boolean(), editorialAction: z.enum(["save_private", "submit_for_review"]).default("save_private"), storySummary: z.string().trim().max(1200).optional(), publicDisplayNameAuthorized: z.boolean().optional(), publicPhotoId: z.number().int().positive().nullable().optional(), publicPhotoAuthorized: z.boolean().optional() })).mutation(async ({ ctx, input }) => saveSuccessDeclaration((await requireProfile(ctx.user.id)).id, ctx.user.id, input)),
+    declare: protectedProcedure.input(z.object({ outcome: z.enum(["engaged", "married"]), sharingConsent: z.boolean(), editorialAction: z.enum(["save_private", "submit_for_review"]).default("save_private"), storySummary: z.string().trim().max(1200).optional(), publicDisplayNameAuthorized: z.boolean().optional(), publicPhotoId: z.number().int().positive().nullable().optional(), publicPhotoAuthorized: z.boolean().optional() })).mutation(async ({ ctx, input }) => { if (input.editorialAction === "submit_for_review") await requireFreshMemberAuthentication(ctx.user.id); return saveSuccessDeclaration((await requireProfile(ctx.user.id)).id, ctx.user.id, input); }),
     withdraw: protectedProcedure.mutation(async ({ ctx }) => withdrawSuccessDeclaration((await requireProfile(ctx.user.id)).id, ctx.user.id)),
   }),
   matches: router({
@@ -397,7 +402,7 @@ export const appRouter = router({
 	    profilePhotoReviewUrl: staffOnlyProcedure.input(z.object({ photoId: z.number().int().positive() })).query(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "photos.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return getProfilePhotoForReview(ctx.user.id, input.photoId); }),
 	    reviewProfilePhoto: staffOnlyProcedure.input(z.object({ photoId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), reviewNote: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "photos.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return reviewProfilePhoto(ctx.user.id, input.photoId, input.decision, input.reviewNote); }),
 	    successStoryEditorialQueue: staffOnlyProcedure.query(async ({ ctx }) => { await requireOperationalPermission(ctx.user.id, "success_stories.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return listSuccessStoryEditorialQueue(); }),
-	    reviewSuccessStory: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), reviewNote: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return reviewSuccessStory(ctx.user.id, input.declarationId, input.decision, input.reviewNote); }),
+	    reviewSuccessStory: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), reviewNote: z.string().trim().max(500).optional(), editorialCopy: z.string().trim().max(1200).optional() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.review", { sessionReferenceHash: ctx.user.sessionReferenceHash }); return reviewSuccessStory(ctx.user.id, input.declarationId, input.decision, input.reviewNote, input.editorialCopy); }),
 	    requestSuccessStoryPublicationApproval: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive(), reason: z.string().trim().min(10).max(1000) })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.publish", { requireFresh: true, sessionReferenceHash: ctx.user.sessionReferenceHash }); return createOperationalApproval(ctx.user.id, { approvalType: "configuration_change", resourceType: "success_declaration_publication", resourceId: String(input.declarationId), requiredApproverRole: "platform_administrator", reason: input.reason, impactSummary: JSON.stringify({ declarationId: input.declarationId, action: "publish_success_story" }), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) }); }),
 	    publishSuccessStory: staffOnlyProcedure.input(z.object({ declarationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => { await requireOperationalPermission(ctx.user.id, "success_stories.publish", { requireFresh: true, sessionReferenceHash: ctx.user.sessionReferenceHash }); return publishSuccessStory(ctx.user.id, input.declarationId); }),
 	    operationsOverview: staffOnlyProcedure.query(async ({ ctx }) => listOperationsOverview(ctx.user.id)),
