@@ -20,7 +20,7 @@ export function saveSafeDraft(key: string, value: unknown) { try { const seriali
 export function clearSafeDraft(key: string) { try { storage()?.removeItem(key); } catch { /* unavailable storage is a supported fallback */ } }
 export function clearAllMobileDrafts() { try { const area = storage(); if (!area) return; for (let index = area.length - 1; index >= 0; index -= 1) { const key = area.key(index); if (key?.startsWith(DRAFT_PREFIX)) area.removeItem(key); } } catch { /* unavailable storage is a supported fallback */ } }
 export function lowBandwidthEnabled() { try { const stored = storage()?.getItem(LOW_BANDWIDTH_KEY); return stored === null ? deviceConnectionProfile().saveData : stored === "true"; } catch { return false; } }
-export function saveLowBandwidthPreference(enabled: boolean) { try { storage()?.setItem(LOW_BANDWIDTH_KEY, String(enabled)); return true; } catch { return false; } }
+export function saveLowBandwidthPreference(enabled: boolean) { try { storage()?.setItem(LOW_BANDWIDTH_KEY, String(enabled)); window.dispatchEvent(new Event("bantabato:low-bandwidth-change")); return true; } catch { return false; } }
 
 export function installPromptRecentlyDismissed(now = Date.now()) { const raw = storage()?.getItem(INSTALL_DISMISS_KEY); const dismissedAt = raw ? Number(raw) : 0; return Number.isFinite(dismissedAt) && now - dismissedAt < 30 * 24 * 60 * 60 * 1000; }
 export function recordInstallDismissal() { try { storage()?.setItem(INSTALL_DISMISS_KEY, String(Date.now())); } catch { /* unsupported storage */ } }

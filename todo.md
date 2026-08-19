@@ -220,3 +220,12 @@
 - [x] Add focused success-story lifecycle, consent, photo-authorization, withdrawal, editorial-permission, independent-approval, visibility, authorization, and responsive-route regression coverage.
 - [x] Run TypeScript, full tests, production build, dependency audit, security/privacy checks, desktop/mobile validation, and update the evidence-based internal-completeness report without activating connectors or claiming launch readiness.
 - [x] Save the success-story operating-procedure and internal-gap-closure checkpoint and deliver the requested final status report.
+- [x] Audit the entire current visual system, reusable component patterns, representative loading/empty/error/success states, motion, accessibility, mobile, low-bandwidth, and performance behavior without changing product rules.
+- [x] Define a centralized, reduced-motion-safe Bantabato motion language and P0–P3 design-system/interactions backlog with explicit non-goals and no external connector activation.
+- [x] P0: Centralize visible keyboard focus, accessible error/retry, loading, empty, and success-state primitives; apply them to the global error boundary and representative public routes without exposing technical or private information.
+- [x] P1: Centralize motion durations, easings, radii, shadows, and interaction tokens; preserve purposeful transform/opacity-only transitions and remove competing literal timing definitions from shared styles.
+- [x] P1: Make the existing low-bandwidth preference suppress nonessential route/reveal/decorative motion and expensive visual effects app-wide, while preserving core function and reduced-motion equivalence.
+- [x] P1: Apply the shared state and interaction language to the public success-story, membership, and sign-in experiences, including transparent loading, error, empty, and recovery states.
+- [x] Implement verified P0 usability/accessibility fixes and highest-value P1 reusable interaction, loading, empty-state, error-state, success-state, navigation, and mobile refinements without altering privacy, safety, matching, verification, family, billing, five-photo, or success-story governance rules.
+- [x] Add focused regression coverage and run full TypeScript, test, production-build, dependency-audit, accessibility, reduced-motion, loading/error-state, desktop, and mobile validation.
+- [x] Save the BANTABATO — DESIGN SYSTEM & INTERACTION POLISH CHECKPOINT and deliver the requested evidence-based report without claiming launch readiness.

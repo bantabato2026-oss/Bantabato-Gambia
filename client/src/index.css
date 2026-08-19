@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap');
 @import "tailwindcss";
+@import "./design-system.css";
 
 @theme inline { --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif; --font-display: "Playfair Display", Georgia, serif; --color-background: #fcf8ef; --color-foreground: #173a2d; --color-muted-foreground: #62766e; --color-primary: #173a2d; --color-primary-foreground: #fffaf2; --color-border: #dfe4dc; }
 @layer base { * { border-color: #dfe4dc; } body { margin: 0; background: #fcf8ef; color: #173a2d; font-family: "DM Sans", ui-sans-serif, sans-serif; } button, a { -webkit-tap-highlight-color: transparent; } button { cursor: pointer; } }

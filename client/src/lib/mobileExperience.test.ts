@@ -19,7 +19,7 @@ describe("mobile experience privacy and PWA boundaries", () => {
 
   beforeEach(() => {
     localStorage = createStorage();
-    vi.stubGlobal("window", { localStorage, isSecureContext: true, addEventListener: vi.fn() });
+    vi.stubGlobal("window", { localStorage, isSecureContext: true, addEventListener: vi.fn(), dispatchEvent: vi.fn() });
     vi.stubGlobal("navigator", { onLine: true, connection: { saveData: false, effectiveType: "4g" } });
   });
 
@@ -43,6 +43,7 @@ describe("mobile experience privacy and PWA boundaries", () => {
   it("supports explicit low-bandwidth preference without persisting server responses", () => {
     expect(lowBandwidthEnabled()).toBe(false); expect(saveLowBandwidthPreference(true)).toBe(true); expect(lowBandwidthEnabled()).toBe(true);
     clearSafeDraft(draftKey("message", "23")); expect(localStorage.getItem("bantabato.device.v1.low-bandwidth")).toBe("true");
+    expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "bantabato:low-bandwidth-change" }));
   });
 
   it("throttles a dismissed install prompt for thirty days", () => {

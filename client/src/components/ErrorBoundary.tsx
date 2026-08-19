@@ -1,5 +1,6 @@
-import { cn } from "@/lib/utils";
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { StatePanel } from "@/components/StatePanel";
+import { RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
 
 interface Props {
@@ -23,34 +24,7 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      return (
-        <div className="flex items-center justify-center min-h-screen p-8 bg-background">
-          <div className="flex flex-col items-center w-full max-w-2xl p-8">
-            <AlertTriangle
-              size={48}
-              className="text-destructive mb-6 flex-shrink-0"
-            />
-
-            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
-
-            <p className="mb-6 max-w-lg text-center text-sm leading-6 text-muted-foreground">
-              Your information is still protected. Reload the page, then try again. If the problem continues, contact support without sharing private messages or documents.
-            </p>
-
-            <button
-              onClick={() => window.location.reload()}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg",
-                "bg-primary text-primary-foreground",
-                "hover:opacity-90 cursor-pointer"
-              )}
-            >
-              <RotateCcw size={16} />
-              Reload Page
-            </button>
-          </div>
-        </div>
-      );
+      return <main className="app-state-page"><StatePanel kind="error" title="Something went wrong." description="Your information is still protected. Reload the page, then try again. If the problem continues, contact support without sharing private messages or documents." action={<Button onClick={() => window.location.reload()} className="btn-forest"><RotateCcw size={16} /> Reload page</Button>} /></main>;
     }
 
     return this.props.children;
