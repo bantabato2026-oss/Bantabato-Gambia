@@ -20,6 +20,13 @@ describe("design-system interaction contracts", () => {
     expect(statePanel).toContain('type StateKind = "empty" | "error" | "success" | "loading"');
   });
 
+  it("retains visible keyboard focus and a labelled screen-reader loading announcement", () => {
+    expect(designCss).toContain(":focus-visible");
+    expect(designCss).toContain("box-shadow: var(--focus-ring)");
+    expect(statePanel).toContain('role="status" aria-live="polite" aria-label={label}');
+    expect(statePanel).toContain('<span className="sr-only">{label}</span>');
+  });
+
   it("connects the persisted low-bandwidth preference to an app-wide visual data attribute", () => {
     expect(bridge).toContain('document.documentElement.dataset.lowBandwidth');
     expect(bridge).toContain('"bantabato:low-bandwidth-change"');

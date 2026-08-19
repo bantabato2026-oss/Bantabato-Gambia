@@ -235,3 +235,7 @@
 - [x] Standardize high-value member and permission-scoped administration routes on shared accessible loading, empty, error, retry, blocked, unauthorized, restricted, pending, offline, and recovery primitives while preserving server-authoritative state.
 - [x] Add focused authenticated-state, recovery, authorization, accessibility, mobile, reduced-motion, and low-bandwidth regression coverage; run all available validation without claiming blocked authenticated execution was performed.
 - [x] Save the BANTABATO — AUTHENTICATED EXPERIENCE STATE STANDARDIZATION checkpoint and deliver the requested evidence-based report without claiming launch readiness.
+- [x] Review authorized synthetic-account accessibility and UX smoke-test guidance, environments, account availability, and security boundaries without using real member data or fabricating execution.
+- [x] Execute only legitimately available safe accessibility, keyboard, screen-reader-supported, reduced-motion, low-bandwidth, mobile, desktop, and authorization checks; record unavailable synthetic workflows as BLOCKED — EXTERNAL ACTION REQUIRED.
+- [x] Repair only verified internally fixable P0/P1 accessibility or UX defects and add focused regression coverage without weakening security, privacy, safety, or consent boundaries.
+- [x] Run full validation, document the requested 24-item evidence report with explicit blocked prerequisites, save the smoke-test checkpoint, and retain the NOT READY launch decision.
