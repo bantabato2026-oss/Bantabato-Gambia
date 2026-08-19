@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Brand } from "@/components/Brand";
+import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
@@ -44,8 +45,8 @@ export function MemberShell({ children, eyebrow, title, description }: { childre
   const mobile = useIsMobile();
   const network = useNetworkState();
 
-  if (loading) return <div className="app-loading"><div className="h-7 w-40 animate-pulse rounded-full bg-forest/10" /><div className="mt-8 h-52 max-w-4xl animate-pulse rounded-[2rem] bg-forest/10" /></div>;
-  if (!isAuthenticated) return <div className="app-guard"><div className="app-guard-card"><Brand /><div className="mt-10 rounded-3xl bg-gold/15 p-4 text-gold-dark"><ShieldCheck size={28} /></div><h1 className="mt-6 font-display text-4xl">A private space for serious intentions.</h1><p className="mt-4 text-sm leading-6 text-muted-foreground">Sign in to continue your Bantabato journey. Your profile and conversations remain private to you and the members you choose to connect with.</p><Button onClick={() => startLogin()} className="mt-7 w-full btn-forest">Sign in to continue <ChevronRight size={16} /></Button><Link href="/" className="mt-5 block text-center text-sm font-medium text-forest hover:underline">Return to Bantabato</Link></div></div>;
+  if (loading) return <div className="app-loading"><StateSkeleton label="Loading your Bantabato experience" /></div>;
+  if (!isAuthenticated) return <div className="app-guard"><div className="app-guard-card"><Brand /><StatePanel className="mt-8" kind="empty" title="A private space for serious intentions." description="Sign in to continue your Bantabato journey. Your profile and conversations remain private to you and the members you choose to connect with." action={<div className="space-y-4"><Button onClick={() => startLogin()} className="w-full btn-forest">Sign in to continue <ChevronRight size={16} /></Button><Link href="/" className="block text-center text-sm font-medium text-forest hover:underline">Return to Bantabato</Link></div>} /></div></div>;
 
   const links = mobile ? primaryLinks : [...primaryLinks, ...secondaryLinks];
   return (
@@ -63,7 +64,7 @@ export function MemberShell({ children, eyebrow, title, description }: { childre
       </aside>
       {menuOpen ? <button className="member-overlay lg:hidden" aria-label="Close navigation overlay" onClick={() => setMenuOpen(false)} /> : null}
 	      <main className="member-main">
-	        {network === "offline" ? <div role="status" className="member-network-status"><WifiOff size={16} /><span>You appear to be offline. Private information is not available offline.</span></div> : null}
+        {network === "offline" ? <div role="status" aria-live="polite" className="member-network-status"><WifiOff size={16} /><span>You’re offline. We’ll reconnect when your connection returns. Private information is not available offline.</span></div> : null}
         <header className="member-topbar">
           <div className="flex items-center gap-3"><button onClick={() => setMenuOpen(true)} className="rounded-full p-2.5 hover:bg-forest/5 lg:hidden" aria-label="Open navigation"><Menu size={19} /></button><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">{eyebrow ?? "Member space"}</p><h1 className="font-display text-2xl text-ink sm:text-3xl">{title}</h1></div></div>
           <div className="flex items-center gap-3"><Link href="/app/notifications" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-forest/10 bg-white text-forest transition-colors hover:bg-forest/5" aria-label="Notifications"><Bell size={18} /></Link><div className="hidden text-right sm:block"><p className="text-sm font-semibold text-ink">{user?.name || "Member"}</p><p className="text-xs text-muted-foreground">Bantabato member</p></div><Avatar className="h-10 w-10 border border-gold/30"><AvatarFallback className="bg-gold/15 text-sm font-semibold text-gold-dark">{user?.name?.slice(0, 1).toUpperCase() || "B"}</AvatarFallback></Avatar></div>

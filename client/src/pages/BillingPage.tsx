@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StatePanel } from "@/components/StatePanel";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle2, CreditCard, FileText, HeartHandshake, LockKeyhole, ReceiptText, ShieldCheck, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -26,6 +27,7 @@ export default function BillingPage() {
   const current = summary.data?.membership;
   const selected = options.data?.find(option => option.price.id === selectedPriceId) ?? null;
   const submitCheckout = () => { if (!selected || !consent) return toast.error("Choose a plan and confirm its renewal and cancellation terms."); initiate.mutate({ membershipPriceId: selected.price.id, provider: selected.price.provider || "unconfigured", idempotencyKey: crypto.randomUUID(), acknowledgedTerms: true, returnUrl: window.location.origin + "/app/billing" }); };
+  if (summary.isError || options.isError) return <MemberShell eyebrow="Membership & billing" title="Membership, on clear terms." description="Bantabato Premium is for optional convenience features."><StatePanel kind="error" title="Your billing information is unavailable right now." description="No membership, payment, or plan information has been shown. Please try again." action={<Button onClick={() => { summary.refetch(); options.refetch(); }} className="btn-forest">Try again</Button>} /></MemberShell>;
 
   return <MemberShell eyebrow="Membership & billing" title="Membership, on clear terms." description="Bantabato Premium is for optional convenience features. It never improves compatibility, changes safety treatment, unlocks calls, bypasses consent, or makes anyone a better marriage candidate.">
     <section className="welcome-panel"><Sparkles size={25} className="text-gold" /><p className="mt-6 text-xs font-semibold uppercase tracking-[.16em] text-gold">Transparent membership</p><h2 className="mt-3 max-w-3xl font-display text-3xl text-cream">Premium adds functionality, not human value.</h2><p className="mt-4 max-w-3xl text-sm leading-6 text-cream opacity-80">Your free membership continues to include profile creation, verification submission, discovery, compatibility information, mutual interest, permitted messages, Family Circle, reporting, blocking, and Trust & Safety.</p></section>
