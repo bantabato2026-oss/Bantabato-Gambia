@@ -239,3 +239,8 @@
 - [x] Execute only legitimately available safe accessibility, keyboard, screen-reader-supported, reduced-motion, low-bandwidth, mobile, desktop, and authorization checks; record unavailable synthetic workflows as BLOCKED — EXTERNAL ACTION REQUIRED.
 - [x] Repair only verified internally fixable P0/P1 accessibility or UX defects and add focused regression coverage without weakening security, privacy, safety, or consent boundaries.
 - [x] Run full validation, document the requested 24-item evidence report with explicit blocked prerequisites, save the smoke-test checkpoint, and retain the NOT READY launch decision.
+- [x] Audit GitHub, Supabase, Sentry, and Cloudflare connector capability; repository, deployment, environment, migration, release, and secret handling in read-only mode without activating or altering external services.
+- [x] Define isolated staging architecture, environment validation, storage, migration, authentication, RLS, synthetic-account, least-privilege access-control, and release requirements without provisioning any production or staging resource.
+- [x] Prepare privacy-safe staging monitoring, alert, backup/restore, operational ownership, legal/security handoff, accessibility, and authenticated-smoke-test runbooks with explicit unassigned and blocked statuses.
+- [x] Implement only safe internal staging-readiness scaffolding, synthetic-account definitions, smoke-test matrices, and regression coverage without creating accounts, sending notifications, activating providers, or changing production infrastructure.
+- [x] Run full internal validation, document the requested 26-item final report with exact external actions required, checkpoint the staging and operations readiness preparation, and retain the NOT READY launch decision.

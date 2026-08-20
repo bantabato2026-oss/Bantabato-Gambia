@@ -4,15 +4,12 @@ import { betaEnrollments, betaEvents, betaInvitations, betaLaunchControls, membe
 import { createAuditLog, getDb } from "./db";
 import { requireOperationalPermission } from "./adminOperationsService";
 import { betaAccessFailureMessage, betaModeAllowsEnrollment, betaModeAllowsMemberAccess, type BetaEnrollmentStatus, type BetaMode } from "./domain/betaPolicy";
+import { getRuntimeEnvironment, type RuntimeEnvironment } from "./runtimeEnvironment";
 
-type BetaEnvironment = "development" | "staging" | "production";
 type BetaInvitationStatus = "pending" | "accepted" | "expired" | "revoked";
 
 function hash(value: string) { return createHash("sha256").update(value).digest("hex"); }
-function currentEnvironment(): BetaEnvironment {
-  if (process.env.APP_ENV === "staging") return "staging";
-  return process.env.NODE_ENV === "production" ? "production" : "development";
-}
+function currentEnvironment(): RuntimeEnvironment { return getRuntimeEnvironment(); }
 function asId(result: unknown) {
   const row = Array.isArray(result) ? result[0] as { id?: number; insertId?: number } | undefined : undefined;
   return Number(row?.id ?? row?.insertId ?? 0);

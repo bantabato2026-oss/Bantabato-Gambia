@@ -85,4 +85,22 @@ describe("closed-beta invitation acceptance", () => {
       if (previousAppEnv === undefined) delete process.env.APP_ENV; else process.env.APP_ENV = previousAppEnv;
     }
   });
+
+  it("uses the explicit server-injected staging environment for operational beta changes", async () => {
+    const previousNodeEnv = process.env.NODE_ENV; const previousAppEnv = process.env.APP_ENV;
+    const inserts: unknown[] = [];
+    try {
+      process.env.NODE_ENV = "production"; process.env.APP_ENV = "staging";
+      mocks.getDb.mockResolvedValue({
+        insert: (table: unknown) => ({ values: (values: unknown) => { inserts.push({ table, values }); return { onDuplicateKeyUpdate: async () => undefined }; } }),
+        select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 12 }] }) }) }),
+      });
+      await setBetaMode(7, { mode: "paused" });
+      expect(inserts[0]).toMatchObject({ values: { environment: "staging", mode: "paused", updatedByUserId: 7 } });
+      expect(mocks.createAuditLog).toHaveBeenCalledWith(7, "beta.mode_changed", "beta_launch_control", "12", { environment: "staging", mode: "paused" });
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      if (previousAppEnv === undefined) delete process.env.APP_ENV; else process.env.APP_ENV = previousAppEnv;
+    }
+  });
 });
