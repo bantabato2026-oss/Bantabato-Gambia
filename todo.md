@@ -248,3 +248,6 @@
 - [x] Provision only an explicitly authorized isolated staging resource, or document exact manual setup requirements and BLOCKED — EXTERNAL ACTION REQUIRED status for every unavailable resource.
 - [x] Perform only authorized staging-only authentication, storage, monitoring, backup, synthetic-account, and isolation checks; do not use production resources, real data, real identities, live payments, or external communications.
 - [x] Run validation, record the requested 23-item isolated-staging provisioning report, checkpoint the work, and retain the NOT READY launch decision.
+- [x] Reconcile verified ownership and resource availability against the operational ownership and staging-authorization requirements without inventing any person, account, or infrastructure.
+- [x] Prepare explicit ownership, staging architecture, database, storage, OAuth, monitoring, backup/restore, synthetic-account, accessibility, connector-scope, and readiness-gate documentation without activating connectors or external services.
+- [x] Run safe internal validation, document the requested 24-item final report with exact external actions and risks, checkpoint the work, and retain the NOT READY launch decision.
