@@ -6,20 +6,20 @@
 
 | Role | Owner | Backup | Status | Required action |
 | --- | --- | --- | --- | --- |
-| Primary Technical Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Name an authorized primary and backup. |
-| Backup Technical Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Name an independent continuity owner. |
+| Primary Technical Owner | Bubacarr Sillah | Salifu Marong (operational backup) | ASSIGNED | Technical architecture, development, infrastructure, security implementation, integrations, and technical release control. |
+| Backup Technical Owner | Salifu Marong | Not provided | ASSIGNED | Operations, outreach, member support, community coordination, operational decisions, and continuity coordination. |
 | Staging Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Authorize stage creation, isolation review, reset, and cleanup. |
-| Database Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Authorize MySQL/TiDB stage identity, migrations, and recovery. |
-| Backup/Restore Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve backup, retention, restore, and evidence. |
-| Monitoring Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve scrubbing, routing, retention, and safe alert testing. |
-| Security Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve scope review, isolation testing, and incident response. |
+| Database Owner | Bubacarr Sillah | Not provided | ASSIGNED | Authorize MySQL/TiDB stage identity, migrations, and recovery. |
+| Backup/Restore Owner | Bubacarr Sillah | Not provided | ASSIGNED | Approve backup, retention, restore, and evidence. |
+| Monitoring Owner | Bubacarr Sillah | Not provided | ASSIGNED | Approve scrubbing, routing, retention, and safe alert testing. |
+| Security Owner | Bubacarr Sillah | Not provided | ASSIGNED | Approve scope review, isolation testing, and incident response. |
 | Trust & Safety Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve controlled safety scenarios and evidence limits. |
 | Verification Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve fictional verification workflow tests. |
 | Editorial Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve controlled story-review/publication scenarios. |
-| Support Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Approve scoped support-test access. |
-| Beta Test Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Maintain fictional account register, tests, and cleanup. |
-| Release Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Select candidate checkpoint, validation, migration, rollback. |
-| Incident Response Owner | Not provided | Not provided | **UNASSIGNED — USER ACTION REQUIRED** | Own stop/contain/recover/post-incident decisions. |
+| Support Owner | Salifu Marong | Not provided | ASSIGNED | Approve scoped support-test access. |
+| Beta Test Owner | Bubacarr Sillah and Salifu Marong | Not provided | ASSIGNED | Maintain fictional account register, tests, and cleanup. |
+| Release Owner | Bubacarr Sillah | Not provided | ASSIGNED | Select candidate checkpoint, validation, migration, rollback. |
+| Incident Response Owner | Bubacarr Sillah and Salifu Marong | Not provided | ASSIGNED | Own stop/contain/recover/post-incident decisions. |
 
 ## 2. Staging target authorization inputs
 
