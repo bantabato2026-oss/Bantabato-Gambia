@@ -244,3 +244,7 @@
 - [x] Prepare privacy-safe staging monitoring, alert, backup/restore, operational ownership, legal/security handoff, accessibility, and authenticated-smoke-test runbooks with explicit unassigned and blocked statuses.
 - [x] Implement only safe internal staging-readiness scaffolding, synthetic-account definitions, smoke-test matrices, and regression coverage without creating accounts, sending notifications, activating providers, or changing production infrastructure.
 - [x] Run full internal validation, document the requested 26-item final report with exact external actions required, checkpoint the staging and operations readiness preparation, and retain the NOT READY launch decision.
+- [x] Verify authorization and availability for Supabase, storage, OAuth, GitHub, Sentry, Cloudflare, staging domain, backup, and named ownership in read-only mode without inferring access.
+- [x] Provision only an explicitly authorized isolated staging resource, or document exact manual setup requirements and BLOCKED — EXTERNAL ACTION REQUIRED status for every unavailable resource.
+- [x] Perform only authorized staging-only authentication, storage, monitoring, backup, synthetic-account, and isolation checks; do not use production resources, real data, real identities, live payments, or external communications.
+- [x] Run validation, record the requested 23-item isolated-staging provisioning report, checkpoint the work, and retain the NOT READY launch decision.
