@@ -260,3 +260,8 @@
 - [x] Reconcile current specialist ownership, staging-resource availability, and planned provider status against the specialist-owner finalization requirements without inventing any owner or resource.
 - [x] Prepare specialist ownership, staging resource, MySQL/Drizzle, storage, authentication/OAuth, monitoring, backup, connector, payment, OTP, synthetic-account, security-gate, and human-approval documentation without provisioning or activation.
 - [x] Run safe internal validation, document the requested 25-item final report with exact external actions and blockers, checkpoint the work, and retain the NOT READY launch decision.
+- [x] Audit the actual public, member, staff, billing, country, mobile, safety, and interaction implementation against the established Bantabato product vision; classify verified internal gaps without duplicating working systems.
+- [x] Design targeted high-value public and member experience improvements using the existing official brand assets, design tokens, motion primitives, accessibility safeguards, and low-bandwidth behavior.
+- [x] Implement only verified internal product and interaction gaps while preserving deterministic matching, server enforcement, privacy, safety, consent, provider boundaries, and no-live-payment posture.
+- [x] Add focused regression coverage and validate desktop, mobile, loading, empty, error, reduced-motion, and low-bandwidth behavior without fabricating authenticated activity.
+- [x] Document implemented and remaining product gaps, save the BANTABATO — FULL PRODUCT EXPERIENCE IMPLEMENTATION checkpoint, and deliver an evidence-based product-completeness report.
