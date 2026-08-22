@@ -25,6 +25,7 @@ import {
   getVerificationSummary,
   listFamilyLinks,
   listIncomingInterests,
+	  listOutgoingInterests,
   listOwnProfilePhotos,
 	  listProfilePhotoReviewQueue,
 	  removeOwnProfilePhoto,
@@ -212,6 +213,7 @@ export const appRouter = router({
   }),
 	  interests: router({
 	    incoming: protectedProcedure.query(async ({ ctx }) => listIncomingInterests((await requireProfile(ctx.user.id)).id)),
+	    outgoing: protectedProcedure.query(async ({ ctx }) => listOutgoingInterests((await requireProfile(ctx.user.id)).id)),
 	    send: protectedProcedure.input(z.object({ recipientProfileId: z.number().int().positive(), message: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => createInterest((await requireProfile(ctx.user.id)).id, input.recipientProfileId, input.message)),
 	    respond: protectedProcedure.input(z.object({ interestId: z.number().int().positive(), response: z.enum(["accepted", "declined"]) })).mutation(async ({ ctx, input }) => respondToInterest((await requireProfile(ctx.user.id)).id, input.interestId, input.response)),
 	    withdraw: protectedProcedure.input(z.object({ interestId: z.number().int().positive() })).mutation(async ({ ctx, input }) => withdrawInterest((await requireProfile(ctx.user.id)).id, input.interestId)),

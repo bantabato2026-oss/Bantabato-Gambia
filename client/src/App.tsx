@@ -24,6 +24,7 @@ const MessageThreadPage = lazy(() => import("@/pages/MemberDetailPages").then(mo
 const FamilyCirclePage = lazy(() => import("@/pages/FamilyCirclePages").then(module => ({ default: module.FamilyCirclePage })));
 const FamilyParticipantPage = lazy(() => import("@/pages/FamilyCirclePages").then(module => ({ default: module.FamilyParticipantPage })));
 const MemberHomePage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberHomeRoute })));
+const ConnectionsPage = lazy(() => import("@/pages/ConnectionsPage"));
 const OnboardingPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.OnboardingPage })));
 const ProfilePage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberProfileRoute })));
 const FamilyPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.FamilyPage })));
@@ -89,6 +90,7 @@ function Router() {
     <Route path="/app/discover" component={CuratedDiscoveryPage} />
 	    <Route path="/app/recommendations" component={RecommendationsPage} />
 	    <Route path="/app/billing" component={BillingPage} />
+	    <Route path="/app/connections" component={ConnectionsPage} />
     <Route path="/app/matches" component={MatchesPage} />
     <Route path="/app/messages" component={MessagesPage} />
     <Route path="/app/messages/:conversationId">{params => <MessageThreadPage conversationId={Number(params.conversationId)} />}</Route>

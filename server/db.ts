@@ -620,6 +620,16 @@ export async function listIncomingInterests(profileId: number) {
   return db.select().from(interestRequests).where(and(eq(interestRequests.recipientProfileId, profileId), eq(interestRequests.status, "pending"))).orderBy(desc(interestRequests.createdAt));
 }
 
+export async function listOutgoingInterests(profileId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const requests = await db.select().from(interestRequests).where(eq(interestRequests.senderProfileId, profileId)).orderBy(desc(interestRequests.createdAt)).limit(100);
+  if (!requests.length) return [];
+  const recipients = await db.select({ id: memberProfiles.id, displayName: memberProfiles.displayName }).from(memberProfiles).where(inArray(memberProfiles.id, requests.map(request => request.recipientProfileId)));
+  const byId = new Map(recipients.map(recipient => [recipient.id, recipient]));
+  return requests.map(request => ({ ...request, recipient: byId.get(request.recipientProfileId) ?? null }));
+}
+
 export async function upsertFamilyLink(profileId: number, input: { relationship: "parent" | "wali_guardian"; contactName: string; contactEmail?: string; contactPhone?: string; canReceiveMatchNotifications: boolean }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");

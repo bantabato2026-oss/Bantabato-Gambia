@@ -14,8 +14,7 @@ import { Link, useLocation } from "wouter";
 const primaryLinks = [
   { label: "Home", href: "/app", icon: Home },
   { label: "Discover", href: "/app/discover", icon: Compass },
-	  { label: "For you", href: "/app/recommendations", icon: Lightbulb },
-  { label: "Introductions", href: "/app/matches", icon: HeartHandshake },
+	  { label: "Connections", href: "/app/connections", icon: HeartHandshake },
   { label: "Messages", href: "/app/messages", icon: MessageCircle },
 ];
 const secondaryLinks = [
@@ -34,7 +33,7 @@ const secondaryLinks = [
 const mobileBottomLinks = [
   { label: "Home", href: "/app", icon: Home },
   { label: "Discover", href: "/app/discover", icon: Compass },
-  { label: "Matches", href: "/app/matches", icon: HeartHandshake },
+	  { label: "Connections", href: "/app/connections", icon: HeartHandshake },
   { label: "Messages", href: "/app/messages", icon: MessageCircle },
   { label: "Profile", href: "/app/profile", icon: CircleUserRound },
 ];
@@ -49,7 +48,7 @@ export function MemberShell({ children, eyebrow, title, description }: { childre
   if (loading) return <div className="app-loading"><StateSkeleton label="Loading your Bantabato experience" /></div>;
   if (!isAuthenticated) return <div className="app-guard"><div className="app-guard-card"><Brand /><StatePanel className="mt-8" kind="empty" title="A private space for serious intentions." description="Sign in to continue your Bantabato journey. Your profile and conversations remain private to you and the members you choose to connect with." action={<div className="space-y-4"><Button onClick={() => startLogin()} className="w-full btn-forest">Sign in to continue <ChevronRight size={16} /></Button><Link href="/" className="block text-center text-sm font-medium text-forest hover:underline">Return to Bantabato</Link></div>} /></div></div>;
 
-  const links = mobile ? primaryLinks : [...primaryLinks, ...secondaryLinks];
+	  const links = primaryLinks;
   return (
     <div className="min-h-screen bg-app">
       <aside className={`member-sidebar ${menuOpen ? "member-sidebar-open" : ""}`}>
