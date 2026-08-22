@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getDb: vi.fn(), createAuditLog: vi.fn(), createNotification: vi.fn() }));
 vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog, createNotification: mocks.createNotification }));
 
-import { cancelSubscriptionRenewal, handleBillingAccountClosure, initiatePayment, processProviderWebhook, requestRefund, saveBillingPlanConfiguration, saveMemberBillingSettings, savePaymentProviderAvailability } from "./billingService";
+import { cancelSubscriptionRenewal, handleBillingAccountClosure, initiatePayment, processProviderWebhook, requestMemberRefund, requestRefund, reviewRefundRequest, saveBillingPlanConfiguration, saveMemberBillingSettings, savePaymentProviderAvailability } from "./billingService";
 import { registerPaymentProvider } from "./paymentProvider";
 
 function fakeDb(rows: unknown[][]) {
@@ -11,12 +11,13 @@ function fakeDb(rows: unknown[][]) {
   const updates: Array<{ table: unknown; values: Record<string, unknown> }> = [];
   const select = () => {
     const result = rows.shift() ?? [];
-    const query = { limit: async () => result, orderBy: async () => result, then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve) };
+    const query = { limit: async () => result, orderBy: async () => result, for: async () => result, then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve) };
     return { from: () => ({ where: () => query }) };
   };
   const insert = (table: unknown) => ({ values: (values: Record<string, unknown>) => { inserts.push({ table, values }); const result = Object.assign([{ id: inserts.length }], { $returningId: async () => [{ id: inserts.length }], onDuplicateKeyUpdate: async () => undefined }); return result; } });
   const update = (table: unknown) => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updates.push({ table, values }); } }) });
-  return { db: { select, insert, update }, inserts, updates };
+  const db = { select, insert, update, transaction: async (callback: (tx: any) => Promise<unknown>) => callback(db) };
+  return { db, inserts, updates };
 }
 
 const plan = { id: 1, membershipLevel: "premium", status: "active", code: "premium", displayName: "Bantabato Premium" };
@@ -67,6 +68,31 @@ describe("Phase 8 billing service flows", () => {
     expect(fake.inserts.some(entry => entry.values.paymentTransactionId === 8 && entry.values.status === "requested" && entry.values.amountMinor === 5000)).toBe(true);
     expect(fake.updates.some(entry => entry.values.status === "partially_refunded" || entry.values.status === "refunded")).toBe(false);
     expect(mocks.createAuditLog).toHaveBeenCalledWith(99, "billing.refund_requested", "payment_refund", "1", { transactionId: 8, amountMinor: 5000 });
+  });
+
+  it("lets a member request review only for their own confirmed payment, records the remaining amount once, and denies duplicate pending requests", async () => {
+    const transaction = { id: 8, profileId: 3, status: "successful", amountMinor: 15000, provider: "paystack" };
+    const created = fakeDb([[transaction], [], [{ userId: 9 }]]);
+    mocks.getDb.mockResolvedValue(created.db);
+    await expect(requestMemberRefund(3, 9, 8, "I need finance to review this confirmed payment.")).resolves.toEqual({ refundId: 1, amountMinor: 15000, status: "requested" });
+    expect(created.inserts.some(entry => entry.values.paymentTransactionId === 8 && entry.values.amountMinor === 15000 && entry.values.status === "requested" && entry.values.requestedByUserId === 9)).toBe(true);
+    expect(created.updates.some(entry => entry.values.status === "refunded" || entry.values.status === "partially_refunded")).toBe(false);
+    expect(mocks.createAuditLog).toHaveBeenCalledWith(9, "billing.member_refund_requested", "payment_refund", "1", { transactionId: 8, amountMinor: 15000 });
+
+    const duplicate = fakeDb([[transaction], [{ amountMinor: 15000, status: "requested" }]]);
+    mocks.getDb.mockResolvedValue(duplicate.db);
+    await expect(requestMemberRefund(3, 9, 8, "I need finance to review this confirmed payment.")).rejects.toThrow("already under review");
+    expect(duplicate.inserts).toHaveLength(0);
+  });
+
+  it("allows scoped finance review to prepare or close a member request without treating either decision as provider confirmation", async () => {
+    const refund = { id: 21, paymentTransactionId: 8, status: "requested", amountMinor: 15000 };
+    const reviewed = fakeDb([[refund], [{ profileId: 3 }], [{ userId: 9 }]]);
+    mocks.getDb.mockResolvedValue(reviewed.db);
+    await expect(reviewRefundRequest(99, 21, "approve_for_provider")).resolves.toEqual({ refundId: 21, status: "processing" });
+    expect(reviewed.updates.some(entry => entry.values.status === "processing" && entry.values.processedAt instanceof Date)).toBe(true);
+    expect(reviewed.updates.some(entry => entry.values.status === "succeeded" || entry.values.status === "refunded")).toBe(false);
+    expect(mocks.createAuditLog).toHaveBeenCalledWith(99, "billing.refund_reviewed", "payment_refund", "21", { decision: "approve_for_provider", providerMovement: false });
   });
 
   it("rejects invalid signed-webhook results and deduplicates an already-seen provider event", async () => {

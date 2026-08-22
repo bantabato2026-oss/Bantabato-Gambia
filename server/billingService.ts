@@ -52,8 +52,8 @@ export async function getMemberBilling(profileId: number) {
   return {
     membership: active ? { subscriptionId: active.id, level: active.plan === "premium" ? "premium" : "free", status: active.status, currentPeriodEndsAt: active.currentPeriodEndsAt, gracePeriodEndsAt: active.gracePeriodEndsAt, cancelAtPeriodEnd: active.cancelAtPeriodEnd, autoRenew: active.autoRenew } : { subscriptionId: null, level: "free", status: "active", currentPeriodEndsAt: null, gracePeriodEndsAt: null, cancelAtPeriodEnd: false, autoRenew: false },
     billingSettings: settings[0] ?? { preferredCurrency: "GMD", receiptEmail: null },
-    transactions: transactions.map((transaction: any) => safeBillingSummary(transaction)),
-    refunds: refunds.map((refund: any) => ({ id: refund.id, transactionReference: transactions.find((transaction: any) => transaction.id === refund.paymentTransactionId)?.internalReference ?? "Private payment record", amountMinor: refund.amountMinor, status: refund.status, createdAt: refund.createdAt, processedAt: refund.processedAt ?? null })),
+    transactions: transactions.map((transaction: any) => ({ id: transaction.id, ...safeBillingSummary(transaction) })),
+    refunds: refunds.map((refund: any) => ({ id: refund.id, transactionId: refund.paymentTransactionId, transactionReference: transactions.find((transaction: any) => transaction.id === refund.paymentTransactionId)?.internalReference ?? "Private payment record", amountMinor: refund.amountMinor, status: refund.status, createdAt: refund.createdAt, processedAt: refund.processedAt ?? null })),
   };
 }
 
@@ -209,6 +209,53 @@ export async function requestRefund(actorUserId: number, transactionId: number, 
   if (userId) await createNotification(userId, "billing", "Refund request received", "A refund request is recorded for provider review. Your membership conveniences and account protections have not changed while the request is pending.", "/app/billing", `billing-refund-requested:${refundId}`);
   await createAuditLog(actorUserId, "billing.refund_requested", "payment_refund", String(refundId), { transactionId, amountMinor });
   return { refundId, status: "requested" as const };
+}
+
+/** Records a member-owned request only. It never moves money, changes a transaction result, or alters membership/entitlements. */
+export async function requestMemberRefund(profileId: number, actorUserId: number, transactionId: number, reason: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const normalizedReason = reason.trim();
+  if (normalizedReason.length < 10) throw new Error("Please provide a short reason so the finance team can review your request.");
+  const result = await db.transaction(async tx => {
+    const transactions = await tx.select().from(paymentTransactions).where(and(eq(paymentTransactions.id, transactionId), eq(paymentTransactions.profileId, profileId))).for("update");
+    const transaction = transactions[0];
+    if (!transaction || !["successful", "partially_refunded"].includes(transaction.status)) throw new Error("Only a confirmed payment on your account can be requested for refund review.");
+    const existing = await tx.select({ amountMinor: paymentRefunds.amountMinor, status: paymentRefunds.status }).from(paymentRefunds).where(eq(paymentRefunds.paymentTransactionId, transactionId)).for("update");
+    if (existing.some((refund: any) => ["requested", "processing"].includes(refund.status))) throw new Error("A refund request for this payment is already under review.");
+    const committedAmount = existing.filter((refund: any) => refund.status === "succeeded").reduce((sum: number, refund: any) => sum + refund.amountMinor, 0);
+    const remainingAmount = transaction.amountMinor - committedAmount;
+    if (remainingAmount <= 0) throw new Error("This payment has no remaining amount eligible for a refund request.");
+    const inserted = await tx.insert(paymentRefunds).values({ paymentTransactionId: transactionId, amountMinor: remainingAmount, reason: normalizedReason, requestedByUserId: actorUserId, status: "requested" }).$returningId();
+    return { refundId: Number(inserted[0]?.id ?? 0), amountMinor: remainingAmount };
+  });
+  await createNotification(actorUserId, "billing", "Refund request received", "Your request is awaiting scoped finance review. No money has moved and your membership conveniences and protections are unchanged.", "/app/billing", `member-refund-request:${result.refundId}`);
+  await createAuditLog(actorUserId, "billing.member_refund_requested", "payment_refund", String(result.refundId), { transactionId, amountMinor: result.amountMinor });
+  return { ...result, status: "requested" as const };
+}
+
+export async function listRefundRequests() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: paymentRefunds.id, transactionId: paymentRefunds.paymentTransactionId, transactionReference: paymentTransactions.internalReference, amountMinor: paymentRefunds.amountMinor, currency: paymentTransactions.currency, status: paymentRefunds.status, reason: paymentRefunds.reason, createdAt: paymentRefunds.createdAt, processedAt: paymentRefunds.processedAt }).from(paymentRefunds).innerJoin(paymentTransactions, eq(paymentTransactions.id, paymentRefunds.paymentTransactionId)).orderBy(asc(paymentRefunds.createdAt)).limit(100);
+}
+
+/** A finance decision prepares or closes a provider-bound request; it never sends funds or fabricates provider confirmation. */
+export async function reviewRefundRequest(actorUserId: number, refundId: number, decision: "approve_for_provider" | "reject") {
+  const db = await getDb();
+  if (!db) throw new Error("Billing is temporarily unavailable.");
+  const nextStatus = decision === "approve_for_provider" ? "processing" : "cancelled" as const;
+  const transactionId = await db.transaction(async tx => {
+    const refund = await tx.select().from(paymentRefunds).where(eq(paymentRefunds.id, refundId)).for("update");
+    if (!refund[0] || refund[0].status !== "requested") throw new Error("This refund request is not awaiting finance review.");
+    await tx.update(paymentRefunds).set({ status: nextStatus, processedAt: new Date() }).where(eq(paymentRefunds.id, refundId));
+    return refund[0].paymentTransactionId;
+  });
+  const transaction = await db.select({ profileId: paymentTransactions.profileId }).from(paymentTransactions).where(eq(paymentTransactions.id, transactionId)).limit(1);
+  const memberUserId = transaction[0]?.profileId ? await profileUser(transaction[0].profileId) : null;
+  if (memberUserId) await createNotification(memberUserId, "billing", decision === "approve_for_provider" ? "Refund request prepared for provider review" : "Refund request review completed", decision === "approve_for_provider" ? "Finance prepared your request for a configured provider workflow. No refund is complete until provider confirmation is recorded." : "Finance could not approve this request for provider processing. No money moved and your membership protections are unchanged.", "/app/billing", `member-refund-review:${refundId}:${decision}`);
+  await createAuditLog(actorUserId, "billing.refund_reviewed", "payment_refund", String(refundId), { decision, providerMovement: false });
+  return { refundId, status: nextStatus };
 }
 
 export async function listFinanceTransactions() {

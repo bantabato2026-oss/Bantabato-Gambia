@@ -119,7 +119,25 @@ export async function listMemberFamilyCircle(memberProfileId: number) {
   const links = await db.select().from(familyLinks).where(eq(familyLinks.memberProfileId, memberProfileId)).orderBy(desc(familyLinks.createdAt));
   const permissions = links.length ? await db.select().from(familyPermissions).where(inArray(familyPermissions.familyLinkId, links.map(link => link.id))) : [];
   const shares = links.length ? await db.select().from(familyShares).where(and(inArray(familyShares.familyLinkId, links.map(link => link.id)), eq(familyShares.status, "active"))) : [];
-  return links.map(link => ({ ...link, permissions: permissions.filter(permission => permission.familyLinkId === link.id), activeShares: shares.filter(share => share.familyLinkId === link.id).map(share => ({ id: share.id, sharedProfileId: share.sharedProfileId, createdAt: share.createdAt })) }));
+  const events = links.length ? await db.select().from(familyEvents).where(inArray(familyEvents.familyLinkId, links.map(link => link.id))).orderBy(desc(familyEvents.createdAt)).limit(120) : [];
+  const visibleEventTypes = new Set(["invitation_sent", "invitation_accepted", "invitation_declined", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted"]);
+  return links.map(link => ({
+    id: link.id,
+    relationship: link.relationship,
+    contactName: link.contactName,
+    status: link.status,
+    canReceiveMatchNotifications: link.canReceiveMatchNotifications,
+    waliVerificationStatus: link.waliVerificationStatus,
+    invitationExpiresAt: link.invitationExpiresAt,
+    createdAt: link.createdAt,
+    permissions: permissions.filter(permission => permission.familyLinkId === link.id).map(permission => ({ permission: permission.permission, isGranted: permission.isGranted, grantedAt: permission.grantedAt, revokedAt: permission.revokedAt })),
+    activeShares: shares.filter(share => share.familyLinkId === link.id).map(share => ({ id: share.id, sharedProfileId: share.sharedProfileId, createdAt: share.createdAt })),
+    history: events.filter(event => event.familyLinkId === link.id && visibleEventTypes.has(event.eventType)).slice(0, 12).map(event => {
+      const details = event.details && typeof event.details === "object" ? event.details as Record<string, unknown> : {};
+      const permission = typeof details.permission === "string" && (FAMILY_PERMISSIONS as readonly string[]).includes(details.permission) ? details.permission : null;
+      return { id: event.id, eventType: event.eventType, permission, createdAt: event.createdAt };
+    }),
+  }));
 }
 
 export async function setFamilyPermission(memberProfileId: number, actorUserId: number, familyLinkId: number, permission: FamilyPermission, isGranted: boolean) {

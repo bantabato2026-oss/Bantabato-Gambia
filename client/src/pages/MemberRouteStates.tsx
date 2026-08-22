@@ -2,7 +2,8 @@ import { MemberShell } from "@/components/MemberShell";
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { MatchesPage, MemberHomePage, MessagesPage, NotificationsPage, ProfilePage } from "./MemberPages";
+import { MatchesPage, MessagesPage, NotificationsPage, ProfilePage } from "./MemberPages";
+import MemberDashboardPage from "./MemberDashboardPage";
 
 function ProfileGate({ eyebrow, title, description, loadingLabel, children }: { eyebrow: string; title: string; description: string; loadingLabel: string; children: React.ReactNode }) {
   const profile = trpc.profile.mine.useQuery();
@@ -11,7 +12,7 @@ function ProfileGate({ eyebrow, title, description, loadingLabel, children }: { 
   return <>{children}</>;
 }
 
-export function MemberHomeRoute() { return <ProfileGate eyebrow="Your Bantaba" title="A meaningful start." description="Build your profile with care, then discover members at a pace that feels right for you." loadingLabel="Loading your protected start…"><MemberHomePage /></ProfileGate>; }
+export function MemberHomeRoute() { return <ProfileGate eyebrow="Your Bantaba" title="Your private command center." description="Review your current account status and the actions that need your attention without changing any state automatically." loadingLabel="Loading your protected command center…"><MemberDashboardPage /></ProfileGate>; }
 
 export function MemberProfileRoute() { return <ProfileGate eyebrow="My profile" title="Your introduction, in your control." description="Review the information members may see and the privacy choices that protect your pace." loadingLabel="Loading your profile overview…"><ProfilePage /></ProfileGate>; }
 

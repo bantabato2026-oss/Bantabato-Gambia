@@ -13,6 +13,9 @@ const international = readFileSync(join(process.cwd(), "client/src/pages/Interna
 const recommendations = readFileSync(join(process.cwd(), "client/src/pages/RecommendationsPage.tsx"), "utf8");
 const verification = readFileSync(join(process.cwd(), "client/src/pages/VerificationCenter.tsx"), "utf8");
 const profilePreview = readFileSync(join(process.cwd(), "client/src/pages/ProfilePreviewPage.tsx"), "utf8");
+const memberDashboard = readFileSync(join(process.cwd(), "client/src/pages/MemberDashboardPage.tsx"), "utf8");
+const familyCircle = readFileSync(join(process.cwd(), "client/src/pages/FamilyCirclePages.tsx"), "utf8");
+const familyService = readFileSync(join(process.cwd(), "server/familyService.ts"), "utf8");
 
 describe("full product experience interaction contracts", () => {
   it("gives registration a branded, privacy-first orientation while retaining the existing secure sign-in action", () => {
@@ -50,7 +53,7 @@ describe("full product experience interaction contracts", () => {
   });
 
   it("gives the core protected member journey consistent loading, error, retry, and privacy-safe recovery before rendering established route content", () => {
-    expect(memberRouteStates).toContain("Loading your protected start…");
+    expect(memberRouteStates).toContain("Loading your protected command center…");
     expect(memberRouteStates).toContain("Loading your profile overview…");
     expect(memberRouteStates).toContain("Loading your private introductions…");
     expect(memberRouteStates).toContain("Loading your private conversations…");
@@ -92,5 +95,27 @@ describe("full product experience interaction contracts", () => {
     expect(profilePreview).toContain('audiences.get(key) !== "private"');
     expect(profilePreview).toContain("Approved photos are not fetched into this private text preview.");
     expect(profilePreview).toContain('setLocation("/app/compatibility")');
+  });
+
+  it("makes the member home a factual command center with routed recovery actions rather than an activity score or an automatic decision surface", () => {
+    expect(memberDashboard).toContain("Important actions");
+    expect(memberDashboard).toContain("Your private command center.");
+    expect(memberDashboard).toContain("Preview your profile");
+    expect(memberDashboard).toContain("Connection readiness");
+    expect(memberDashboard).toContain("Family Circle");
+    expect(memberDashboard).toContain("refund request");
+    expect(memberDashboard).toContain("It never ranks you, scores your activity, or changes any state automatically.");
+    expect(memberDashboard).toContain('href="/app/verification"');
+    expect(memberDashboard).toContain('href="/app/billing"');
+    expect(memberDashboard).toContain('href="/app/safety"');
+  });
+
+  it("adds bounded member-owned Family Circle history without raw audit detail or sensitive participant identity fields", () => {
+    expect(familyCircle).toContain("Recent Family Circle history");
+    expect(familyCircle).toContain("does not reveal private messages, documents, safety records, participant credentials, or report details");
+    expect(familyService).toContain("visibleEventTypes");
+    expect(familyService).toContain("history: events.filter");
+    expect(familyService).toContain("invitationExpiresAt: link.invitationExpiresAt");
+    expect(familyService).not.toContain("return links.map(link => ({ ...link");
   });
 });

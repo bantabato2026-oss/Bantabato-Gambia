@@ -49,7 +49,9 @@ describe("administration experience state contracts", () => {
 
   it("keeps finance and support operations inside shared recovery surfaces and their specialist boundaries", () => {
     expect(billing).toContain('StateSkeleton label="Loading finance operations…"');
-    expect(billing).toContain("transactions.refetch(); reconciliation.refetch(); configuration.refetch();");
+    expect(billing).toContain("transactions.refetch(); refundRequests.refetch(); reconciliation.refetch(); configuration.refetch();");
+    expect(billing).toContain("Member refund review");
+    expect(billing).toContain("does not move money");
     expect(billing).toContain("never card data, payment credentials, private member content");
     expect(support).toContain('StateSkeleton label="Loading support tickets…"');
     expect(support).toContain("tickets.refetch()");
