@@ -270,3 +270,8 @@
 - [x] Implement only verified internal communication, discovery, and shared authenticated-state improvements while preserving mutual-match, block, report, safety, consent, signed-media, ownership, and provider boundaries.
 - [x] Add focused communication, accessibility, recovery, reduced-motion, low-bandwidth, and mobile regression coverage; create an authenticated accessibility matrix without fabricating unavailable execution.
 - [x] Run full validation, document implemented and blocked work, save the BANTABATO — COMMUNICATION & AUTHENTICATED EXPERIENCE POLISH checkpoint, and deliver the requested evidence-based report.
+- [x] Audit message-send, voice-upload, verification, Family Circle, billing, and shared authenticated route states to identify verified lifecycle, recovery, and interaction gaps without duplicating existing server protections.
+- [x] Design safe text and voice retry semantics, branded route states, accessibility coverage, and restrained motion using existing state, focus, reduced-motion, and low-bandwidth primitives.
+- [x] Implement only verified message/voice lifecycle, recovery, verification, Family Circle, billing, and shared route improvements while preserving security, privacy, consent, ownership, and provider boundaries.
+- [x] Add focused lifecycle, accessibility, motion, and state regression coverage; extend the manual authenticated accessibility matrix without fabricating unavailable execution.
+- [x] Run full validation, document implemented and remaining work, save the BANTABATO — COMMUNICATION LIFECYCLE & INTERACTION POLISH checkpoint, and deliver the requested evidence-based report.

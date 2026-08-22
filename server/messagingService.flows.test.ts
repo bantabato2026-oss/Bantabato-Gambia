@@ -32,7 +32,7 @@ describe("Phase 4 messaging service flows", () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.storagePut.mockResolvedValue({ key: "members/3/conversations/10/voice/private.webm" }); });
 
   it("sends text through mutual-match authorization and records a text interaction", async () => {
-    const harness = statefulHarness([...accessRows(), [], ...notificationRows()]);
+    const harness = statefulHarness([...accessRows(), [], [], ...notificationRows()]);
     mocks.getDb.mockResolvedValue(harness.db);
     await sendText(3, 10, "Assalamu alaikum. I would be glad to discuss our intentions respectfully.");
     expect(harness.inserts.some(entry => (entry.values as any).messageType === "text")).toBe(true);
@@ -41,7 +41,7 @@ describe("Phase 4 messaging service flows", () => {
   });
 
   it("stores a validated private voice note through the same mutual-match gate and records a voice interaction", async () => {
-    const harness = statefulHarness([...accessRows(), ...notificationRows()]);
+    const harness = statefulHarness([...accessRows(), [], ...notificationRows()]);
     mocks.getDb.mockResolvedValue(harness.db);
     await uploadVoiceNote(3, 10, "data:audio/webm;base64,GkXfow==", 12);
     expect(mocks.storagePut).toHaveBeenCalledWith(expect.stringContaining("members/3/conversations/10/voice/"), expect.any(Buffer), "audio/webm");

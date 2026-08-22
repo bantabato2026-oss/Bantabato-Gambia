@@ -73,38 +73,58 @@ export async function listMessages(profileId: number, conversationId: number, in
   return { items: page.reverse(), nextCursor: rows.length > limit ? page.at(-1)?.id : undefined, conversation: { id: access.conversation.id, status: access.conversation.status, otherProfileId: access.otherProfileId } };
 }
 
-export async function sendText(profileId: number, conversationId: number, body: string, retryOfMessageId?: number) {
+export async function sendText(profileId: number, conversationId: number, body: string, retryOfMessageId?: number, clientRequestId?: string) {
   const clean = normalizeUserText(body).trim();
   if (!clean || clean.length > MAX_TEXT_LENGTH) throw new Error("Messages must contain up to 2,000 characters");
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active"]);
+  const requestId = normalizeClientRequestId(clientRequestId);
+  const existing = await findExistingClientRequest(db, profileId, conversationId, requestId);
+  if (existing) return { id: existing.id, deliveryStatus: existing.deliveryStatus, duplicate: true };
   const recent = await db.select({ id: messages.id }).from(messages).where(and(eq(messages.conversationId, conversationId), eq(messages.senderProfileId, profileId), gt(messages.createdAt, new Date(Date.now() - 60_000)))).limit(9);
   if (recent.length >= 8) throw new Error("Please pause briefly before sending another message");
   if (retryOfMessageId) {
     const original = await db.select().from(messages).where(and(eq(messages.id, retryOfMessageId), eq(messages.senderProfileId, profileId), eq(messages.conversationId, conversationId), eq(messages.deliveryStatus, "failed"))).limit(1);
     if (!original[0]) throw new Error("This message cannot be retried");
   }
-  const result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "text", body: clean, retryOfMessageId: retryOfMessageId ?? null, deliveryStatus: "sent" });
+  let result;
+  try {
+    result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "text", body: clean, retryOfMessageId: retryOfMessageId ?? null, clientRequestId: requestId, deliveryStatus: "sent" });
+  } catch (error) {
+    const duplicate = await findExistingClientRequest(db, profileId, conversationId, requestId);
+    if (duplicate) return { id: duplicate.id, deliveryStatus: duplicate.deliveryStatus, duplicate: true };
+    throw error;
+  }
   const messageId = Number(result[0].insertId);
   await touchConversation(conversationId, profileId, "message_sent", "text");
   await notifyParticipant(profileId, conversationId, "message", "New message from a match", "You have received a new message in a private conversation.");
-  return { id: messageId, deliveryStatus: "sent" as const };
+  return { id: messageId, deliveryStatus: "sent" as const, duplicate: false };
 }
 
-export async function uploadVoiceNote(profileId: number, conversationId: number, dataUrl: string, durationSeconds: number) {
+export async function uploadVoiceNote(profileId: number, conversationId: number, dataUrl: string, durationSeconds: number, clientRequestId?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active"]);
+  const requestId = normalizeClientRequestId(clientRequestId);
+  const existing = await findExistingClientRequest(db, profileId, conversationId, requestId);
+  if (existing) return { id: existing.id, durationSeconds: existing.durationSeconds ?? durationSeconds, duplicate: true };
   const { buffer, mimeType, extension } = decodeVoice(dataUrl);
   const validation = validateVoiceNoteMeta({ mimeType, byteLength: buffer.length, durationSeconds });
   if (!validation.valid) throw new Error(validation.reason);
-  const stored = await storagePut(`members/${profileId}/conversations/${conversationId}/voice/${randomUUID()}.${extension}`, buffer, mimeType);
-  const result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "voice", mediaStorageKey: stored.key, mimeType, durationSeconds, deliveryStatus: "sent", metadata: { optimizedFor: "low_bandwidth", download: "controlled_access" } });
+  const stored = await storagePut(`members/${profileId}/conversations/${conversationId}/voice/${requestId}.${extension}`, buffer, mimeType);
+  let result;
+  try {
+    result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "voice", mediaStorageKey: stored.key, mimeType, durationSeconds, clientRequestId: requestId, deliveryStatus: "sent", metadata: { optimizedFor: "low_bandwidth", download: "controlled_access" } });
+  } catch (error) {
+    const duplicate = await findExistingClientRequest(db, profileId, conversationId, requestId);
+    if (duplicate) return { id: duplicate.id, durationSeconds: duplicate.durationSeconds ?? durationSeconds, duplicate: true };
+    throw error;
+  }
   const messageId = Number(result[0].insertId);
   await touchConversation(conversationId, profileId, "voice_note_sent", "voice");
   await notifyParticipant(profileId, conversationId, "message", "New voice note from a match", "You have received a private voice note in your conversation.");
-  return { id: messageId, durationSeconds };
+  return { id: messageId, durationSeconds, duplicate: false };
 }
 
 export async function getVoiceNoteUrl(profileId: number, conversationId: number, messageId: number) {
@@ -244,6 +264,17 @@ async function notifyParticipant(senderProfileId: number, conversationId: number
   const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, access.otherProfileId)).limit(1);
   const preference = await db.select().from(conversationPreferences).where(and(eq(conversationPreferences.conversationId, conversationId), eq(conversationPreferences.profileId, access.otherProfileId))).limit(1);
   if (recipient[0] && !preference[0]?.isMuted) await createNotification(recipient[0].userId, type, title, body, `/app/messages/${conversationId}`, `${type}:${conversationId}:${Date.now()}`);
+}
+
+function normalizeClientRequestId(value?: string) {
+  const requestId = value?.trim() || randomUUID();
+  if (!/^[A-Za-z0-9_-]{16,96}$/.test(requestId)) throw new Error("This message could not be prepared safely. Please try again.");
+  return requestId;
+}
+
+async function findExistingClientRequest(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, profileId: number, conversationId: number, clientRequestId: string) {
+  const existing = await db.select({ id: messages.id, deliveryStatus: messages.deliveryStatus, durationSeconds: messages.durationSeconds }).from(messages).where(and(eq(messages.senderProfileId, profileId), eq(messages.conversationId, conversationId), eq(messages.clientRequestId, clientRequestId))).limit(1);
+  return existing[0];
 }
 
 function decodeVoice(dataUrl: string) {

@@ -5,6 +5,13 @@ import { describe, expect, it } from "vitest";
 const detailPages = readFileSync(join(process.cwd(), "client/src/pages/MemberDetailPages.tsx"), "utf8");
 const discovery = readFileSync(join(process.cwd(), "client/src/pages/CuratedDiscoveryPage.tsx"), "utf8");
 const styles = readFileSync(join(process.cwd(), "client/src/index.css"), "utf8");
+const family = readFileSync(join(process.cwd(), "client/src/pages/FamilyCirclePages.tsx"), "utf8");
+const billing = readFileSync(join(process.cwd(), "client/src/pages/BillingPage.tsx"), "utf8");
+const memberPages = readFileSync(join(process.cwd(), "client/src/pages/MemberPages.tsx"), "utf8");
+const verificationCenter = readFileSync(join(process.cwd(), "client/src/pages/VerificationCenter.tsx"), "utf8");
+const messagingService = readFileSync(join(process.cwd(), "server/messagingService.ts"), "utf8");
+const messagingRouter = readFileSync(join(process.cwd(), "server/routers.ts"), "utf8");
+const schema = readFileSync(join(process.cwd(), "drizzle/schema.ts"), "utf8");
 
 describe("communication and authenticated experience contracts", () => {
   it("keeps voice-note lifecycle feedback private, explicit, recoverable, and non-scoring", () => {
@@ -33,5 +40,32 @@ describe("communication and authenticated experience contracts", () => {
     expect(styles).toContain(".voice-waveform span{animation:none!important;transition:none!important}");
     expect(styles).toContain('html[data-low-bandwidth="true"] .voice-waveform span');
     expect(styles).toContain("@keyframes voice-wave-pulse");
+  });
+
+  it("uses one opaque per-conversation request key for member-initiated text and voice retries, with server-scoped duplicate lookup", () => {
+    expect(detailPages).toContain("const [messageRequestId, setMessageRequestId]");
+    expect(detailPages).toContain("clientRequestId: requestId");
+    expect(detailPages).toContain("clientRequestId: createClientRequestId()");
+    expect(detailPages).toContain("Retry message");
+    expect(detailPages).toContain("Retry voice note");
+    expect(messagingRouter).toContain("clientRequestId: z.string().regex");
+    expect(messagingService).toContain("findExistingClientRequest(db, profileId, conversationId, requestId)");
+    expect(schema).toContain('clientRequestId: varchar("clientRequestId", { length: 96 })');
+    expect(schema).toContain("messages_sender_conversation_client_request_unique");
+  });
+
+  it("uses shared recovery states and factual status language for verification, Family Circle, and provider-bound billing", () => {
+    expect(memberPages).toContain('StateSkeleton label="Loading your verification status…"');
+    expect(memberPages).toContain('title="Verification status is unavailable right now."');
+    expect(memberPages).toContain("verificationStatusCopy");
+    expect(verificationCenter).toContain('StateSkeleton label="Loading your verification status…"');
+    expect(verificationCenter).toContain('title="Verification status is unavailable right now."');
+    expect(verificationCenter).toContain("You may submit another supported document when ready.");
+    expect(family).toContain('StateSkeleton label="Loading your Family Circle…"');
+    expect(family).toContain('title="Family Circle is unavailable right now."');
+    expect(family).toContain("familyStatusExplanation");
+    expect(billing).toContain('StateSkeleton label="Loading available membership options…"');
+    expect(billing).toContain("Provider method listed");
+    expect(billing).toContain("not confirmation of a sandbox, live credential, or provider-ready checkout");
   });
 });

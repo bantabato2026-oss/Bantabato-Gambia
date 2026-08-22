@@ -497,6 +497,7 @@ export const messages = mysqlTable(
     deliveredAt: timestamp("deliveredAt"),
     failureReason: varchar("failureReason", { length: 500 }),
     retryOfMessageId: int("retryOfMessageId"),
+    clientRequestId: varchar("clientRequestId", { length: 96 }),
     moderationStatus: mysqlEnum("moderationStatus", ["normal", "flagged", "under_review", "restricted"]).default("normal").notNull(),
     reportCount: int("reportCount").default(0).notNull(),
     metadata: json("metadata"),
@@ -504,7 +505,7 @@ export const messages = mysqlTable(
     deletedAt: timestamp("deletedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => [index("messages_conversation_idx").on(table.conversationId, table.createdAt), index("messages_sender_idx").on(table.senderProfileId, table.createdAt)],
+  table => [index("messages_conversation_idx").on(table.conversationId, table.createdAt), index("messages_sender_idx").on(table.senderProfileId, table.createdAt), uniqueIndex("messages_sender_conversation_client_request_unique").on(table.senderProfileId, table.conversationId, table.clientRequestId)],
 );
 
 export const messageReads = mysqlTable(
