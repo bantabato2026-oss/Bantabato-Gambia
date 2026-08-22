@@ -81,7 +81,7 @@ describe("controlled workflow state integrity", () => {
     expect(readinessSource).toContain("hard_incompatibility");
     expect(readinessSource).toContain("safety_restriction");
     expect(integritySource).toContain('set({ searchVisible: false');
-    expect(integritySource).toContain('set({ status: "restricted" })');
+    expect(integritySource).toContain('set({ status: "restricted", restrictedAt: new Date(), safetyRestrictionActionId: action.id })');
     expect(integritySource).toContain("revokeConnectionsForProfile");
     expect(integritySource).toContain("withdrawRecommendationsForProfile");
     expect(operationsSource).toContain("canDecideApproval(approval.requestedByUserId, actorUserId");

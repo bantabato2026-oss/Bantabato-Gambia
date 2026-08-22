@@ -176,20 +176,21 @@ export async function blockConversationMember(profileId: number, conversationId:
   await revokeConnectionForConversation(conversationId, "block", { profileId });
 }
 
-export async function reportMessage(profileId: number, conversationId: number, messageId: number, reason: ReportReason, details?: string) {
+export async function reportMessage(profileId: number, conversationId: number, messageId: number, reason: ReportReason, details?: string, clientRequestId?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const access = await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active", "paused", "reported", "restricted"]);
   const message = await db.select().from(messages).where(and(eq(messages.id, messageId), eq(messages.conversationId, conversationId), isNull(messages.deletedAt))).limit(1);
   if (!message[0]) throw new Error("Message is unavailable");
   const reportedProfileId = message[0].senderProfileId === profileId ? access.otherProfileId : message[0].senderProfileId;
-  const report = await createReport(profileId, { reportedProfileId, conversationId, messageId, reason, details: normalizeOptionalUserText(details) ?? undefined });
+  const report = await createReport(profileId, { reportedProfileId, conversationId, messageId, reason, details: normalizeOptionalUserText(details) ?? undefined, clientRequestId });
+	  if (report.duplicate) return { created: false, duplicate: true, reportId: report.reportId };
   await createIntegritySignal({ subjectProfileId: reportedProfileId, reportId: report.reportId, source: "messaging", category: reason === "financial_solicitation" ? "financial_solicitation" : "messaging_behavior", severity: ["scam", "harassment", "financial_solicitation", "safety_concern"].includes(reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `message-report:${report.reportId}` });
   await db.update(messages).set({ reportCount: sql`${messages.reportCount} + 1`, moderationStatus: "flagged" }).where(eq(messages.id, messageId));
   await db.update(conversations).set({ status: "reported", lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
   await recordEvent(conversationId, profileId, "safety_reported", { messageId, reason });
   if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(reason)) await revokeConnectionForConversation(conversationId, "open_report", { profileId });
-  return { created: true };
+  return { created: true, duplicate: false, reportId: report.reportId };
 }
 
 /** Scoped Trust & Safety hook; a member never self-applies a moderation restriction. */

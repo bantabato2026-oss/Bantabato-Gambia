@@ -740,7 +740,7 @@ export async function createNotification(userId: number, notificationType: "inte
   await emitLegacyNotification(userId, notificationType, title, body, actionPath, eventKey);
 }
 
-export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string }) {
+export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string; clientRequestId?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   let reportedProfileId = input.reportedProfileId;
@@ -755,8 +755,23 @@ export async function createReport(reporterProfileId: number, input: { reportedP
   reportedProfileId = resolveAuthorizedReportTarget({ reporterProfileId, requestedReportedProfileId: reportedProfileId });
   const target = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(and(eq(memberProfiles.id, reportedProfileId), isNull(memberProfiles.deletedAt))).limit(1))[0];
   if (!target) throw new Error("The selected member is unavailable for reporting");
-  const result = await db.insert(reports).values({ reporterProfileId, ...input, details: normalizeOptionalUserText(input.details), reportedProfileId }).$returningId();
-  return { reportId: Number(result[0]?.id ?? 0) };
+  const clientRequestId = input.clientRequestId?.trim() || null;
+  if (clientRequestId) {
+    const existing = (await db.select({ id: reports.id, reportedProfileId: reports.reportedProfileId, conversationId: reports.conversationId, messageId: reports.messageId, reason: reports.reason }).from(reports).where(and(eq(reports.reporterProfileId, reporterProfileId), eq(reports.clientRequestId, clientRequestId))).limit(1))[0];
+    if (existing) {
+      if (existing.reportedProfileId !== reportedProfileId || existing.conversationId !== (input.conversationId ?? null) || existing.messageId !== (input.messageId ?? null) || existing.reason !== input.reason) throw new Error("This report retry key is already linked to a different concern. Please start a new report.");
+      return { reportId: existing.id, duplicate: true };
+    }
+  }
+  try {
+    const result = await db.insert(reports).values({ reporterProfileId, reportedProfileId, conversationId: input.conversationId ?? null, messageId: input.messageId ?? null, reason: input.reason, details: normalizeOptionalUserText(input.details), clientRequestId }).$returningId();
+    return { reportId: Number(result[0]?.id ?? 0), duplicate: false };
+  } catch (error) {
+    if (!clientRequestId) throw error;
+    const recovered = (await db.select({ id: reports.id, reportedProfileId: reports.reportedProfileId, conversationId: reports.conversationId, messageId: reports.messageId, reason: reports.reason }).from(reports).where(and(eq(reports.reporterProfileId, reporterProfileId), eq(reports.clientRequestId, clientRequestId))).limit(1))[0];
+    if (recovered && recovered.reportedProfileId === reportedProfileId && recovered.conversationId === (input.conversationId ?? null) && recovered.messageId === (input.messageId ?? null) && recovered.reason === input.reason) return { reportId: recovered.id, duplicate: true };
+    throw error;
+  }
 }
 
 export async function blockProfile(blockerProfileId: number, blockedProfileId: number, reason?: string) {
@@ -765,6 +780,21 @@ export async function blockProfile(blockerProfileId: number, blockedProfileId: n
   if (!db) throw new Error("Database unavailable");
   const normalizedReason = normalizeOptionalUserText(reason);
   await db.insert(blocks).values({ blockerProfileId, blockedProfileId, reason: normalizedReason || null }).onDuplicateKeyUpdate({ set: { reason: normalizedReason || null } });
+}
+
+export async function listBlockedProfiles(blockerProfileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  return db.select({ blockId: blocks.id, profileId: memberProfiles.id, displayName: memberProfiles.displayName, country: memberProfiles.country, createdAt: blocks.createdAt }).from(blocks).innerJoin(memberProfiles, eq(blocks.blockedProfileId, memberProfiles.id)).where(eq(blocks.blockerProfileId, blockerProfileId)).orderBy(desc(blocks.createdAt));
+}
+
+export async function unblockProfile(blockerProfileId: number, blockedProfileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.delete(blocks).where(and(eq(blocks.blockerProfileId, blockerProfileId), eq(blocks.blockedProfileId, blockedProfileId)));
+  const summary = Array.isArray(result) ? result[0] : result;
+  if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error("This block is no longer active.");
+  return { removed: true };
 }
 
 export async function createAuditLog(actorUserId: number | null, action: string, entityType: string, entityId?: string, metadata?: unknown) {

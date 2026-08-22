@@ -75,6 +75,7 @@ export async function requestSafetyEnforcement(input: { actorUserId: number; rep
   validateRestrictionScope(input.actionType, input.scope);
   if (isPermanentAction(input.actionType) && input.expiresAt) throw new Error("Permanent-account-removal proposals may not use a temporary expiration.");
   if (!isPermanentAction(input.actionType) && input.actionType !== "warning" && !input.expiresAt) throw new Error("Temporary safety restrictions require an explicit expiration.");
+	  if (input.expiresAt && input.expiresAt.getTime() <= Date.now()) throw new Error("A temporary safety restriction must expire in the future.");
   const db = await requireDb();
   const existing = (await db.select().from(safetyEnforcementActions).where(and(eq(safetyEnforcementActions.subjectProfileId, input.subjectProfileId), eq(safetyEnforcementActions.idempotencyKey, input.idempotencyKey))).limit(1))[0];
   if (existing) return { enforcementActionId: existing.id, status: existing.status, duplicate: true };
@@ -95,6 +96,11 @@ export async function approveSafetyEnforcement(actorUserId: number, enforcementA
   const action = (await db.select().from(safetyEnforcementActions).where(eq(safetyEnforcementActions.id, enforcementActionId)).limit(1))[0];
   if (!action || action.status !== "proposed" || !action.requiresSecondApproval) throw new Error("This safety action is not awaiting second approval.");
   if (action.requestedByUserId === actorUserId) throw new Error("A separate reviewer must approve this high-impact safety action.");
+	  if (action.expiresAt && action.expiresAt.getTime() <= Date.now()) {
+	    await db.update(safetyEnforcementActions).set({ status: "expired", revokedAt: new Date(), revokedByUserId: actorUserId }).where(and(eq(safetyEnforcementActions.id, enforcementActionId), eq(safetyEnforcementActions.status, "proposed")));
+	    await createAuditLog(actorUserId, "safety.enforcement_expired_before_approval", "safety_enforcement_action", String(enforcementActionId), { separateApprover: true });
+	    throw new Error("This proposed safety action expired before separate approval and cannot be activated.");
+	  }
   const approvalResult = await db.update(safetyEnforcementActions).set({ status: "active", approvedByUserId: actorUserId, effectiveAt: new Date() }).where(and(eq(safetyEnforcementActions.id, enforcementActionId), eq(safetyEnforcementActions.status, "proposed")));
   const approvalSummary = Array.isArray(approvalResult) ? approvalResult[0] : approvalResult;
   if (typeof (approvalSummary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (approvalSummary as { affectedRows: number }).affectedRows === 0) {
@@ -113,7 +119,7 @@ async function activateSafetyEnforcement(actorUserId: number, enforcementActionI
   if (["feature_restriction", "integrity_hold", "temporary_suspension", "permanent_account_removal"].includes(action.actionType)) await db.update(memberProfiles).set({ searchVisible: false, profileStatus: ["temporary_suspension", "permanent_account_removal"].includes(action.actionType) ? "suspended" : undefined }).where(eq(memberProfiles.id, action.subjectProfileId));
   if (["messaging_restriction", "integrity_hold", "temporary_suspension", "permanent_account_removal"].includes(action.actionType)) {
     const memberMatches = await db.select({ id: matches.id }).from(matches).where(or(eq(matches.memberOneProfileId, action.subjectProfileId), eq(matches.memberTwoProfileId, action.subjectProfileId)));
-    if (memberMatches.length) await db.update(conversations).set({ status: "restricted" }).where(inArray(conversations.matchId, memberMatches.map(match => match.id)));
+	    if (memberMatches.length) await db.update(conversations).set({ status: "restricted", restrictedAt: new Date(), safetyRestrictionActionId: action.id }).where(and(inArray(conversations.matchId, memberMatches.map(match => match.id)), inArray(conversations.status, ["mutual_interest", "active"])));
   }
   if (scope.some(item => ["connection_readiness", "calls", "connection_initiation"].includes(item)) || ["connection_restriction", "integrity_hold", "temporary_suspension", "permanent_account_removal"].includes(action.actionType)) await revokeConnectionsForProfile(action.subjectProfileId, action.actionType === "temporary_suspension" ? "account_suspended" : "safety_restriction", { userId: actorUserId });
   if (["feature_restriction", "integrity_hold", "temporary_suspension", "permanent_account_removal"].includes(action.actionType)) await withdrawRecommendationsForProfile(action.subjectProfileId, "safety_restriction");
@@ -121,13 +127,27 @@ async function activateSafetyEnforcement(actorUserId: number, enforcementActionI
   if (notify && target) await emitTrustedNotification({ recipientUserId: target.userId, actorUserId, eventType: "trust_safety_action", notificationType: "safety", category: "safety", priority: "high", notificationClass: "transactional", sourceType: "safety_enforcement_action", sourceId: action.id, idempotencyKey: `safety-action:${action.id}`, actionPath: "/app/safety" });
 }
 
+async function restoreSafetyActionConversationEffects(actionId: number) {
+	const db = await requireDb();
+	await db.update(conversations).set({ status: "active", restrictedAt: null, safetyRestrictionActionId: null, lastActivityAt: new Date() }).where(and(eq(conversations.safetyRestrictionActionId, actionId), eq(conversations.status, "restricted")));
+}
+
+async function notifySafetyActionState(input: { actionId: number; actionType: string; subjectProfileId: number; actorUserId?: number | null; state: "expired" | "revoked" }) {
+	const db = await requireDb();
+	const target = (await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, input.subjectProfileId)).limit(1))[0];
+	if (!target) return;
+	await emitTrustedNotification({ recipientUserId: target.userId, actorUserId: input.actorUserId ?? null, eventType: "trust_safety_action", notificationType: "safety", category: "safety", priority: "high", notificationClass: "transactional", sourceType: "safety_enforcement_action", sourceId: input.actionId, idempotencyKey: `safety-action:${input.actionId}:${input.state}`, actionPath: "/app/safety" });
+}
+
 export async function expireSafetyEnforcements(actorUserId?: number | null, limit = 50) {
   const db = await requireDb();
   const expiring = await db.select().from(safetyEnforcementActions).where(and(eq(safetyEnforcementActions.status, "active"), lt(safetyEnforcementActions.expiresAt, new Date()))).limit(Math.min(limit, 100));
   for (const action of expiring) {
-    await db.update(safetyEnforcementActions).set({ status: "expired", revokedAt: new Date(), revokedByUserId: actorUserId ?? null }).where(eq(safetyEnforcementActions.id, action.id));
+	  await db.update(safetyEnforcementActions).set({ status: "expired", revokedAt: new Date(), revokedByUserId: actorUserId ?? null }).where(and(eq(safetyEnforcementActions.id, action.id), eq(safetyEnforcementActions.status, "active")));
     const remaining = await db.select({ id: safetyEnforcementActions.id }).from(safetyEnforcementActions).where(and(eq(safetyEnforcementActions.subjectProfileId, action.subjectProfileId), eq(safetyEnforcementActions.status, "active"), or(isNull(safetyEnforcementActions.expiresAt), gt(safetyEnforcementActions.expiresAt, new Date())))).limit(1);
     if (!remaining[0] && ["temporary_suspension", "feature_restriction", "integrity_hold"].includes(action.actionType)) await db.update(memberProfiles).set({ profileStatus: "active", searchVisible: true }).where(eq(memberProfiles.id, action.subjectProfileId));
+	  await restoreSafetyActionConversationEffects(action.id);
+	  await notifySafetyActionState({ actionId: action.id, actionType: action.actionType, subjectProfileId: action.subjectProfileId, actorUserId, state: "expired" });
     await createAuditLog(actorUserId ?? null, "safety.enforcement_expired", "safety_enforcement_action", String(action.id), { actionType: action.actionType, subjectProfileId: action.subjectProfileId });
   }
   return { expired: expiring.length };
@@ -138,6 +158,8 @@ export async function revokeSafetyEnforcement(actorUserId: number, enforcementAc
   const action = (await db.select().from(safetyEnforcementActions).where(and(eq(safetyEnforcementActions.id, enforcementActionId), inArray(safetyEnforcementActions.status, ["active", "proposed"]))).limit(1))[0];
   if (!action) throw new Error("This safety action is not active or awaiting approval.");
   await db.update(safetyEnforcementActions).set({ status: "revoked", revokedAt: new Date(), revokedByUserId: actorUserId }).where(eq(safetyEnforcementActions.id, action.id));
+	await restoreSafetyActionConversationEffects(action.id);
+	await notifySafetyActionState({ actionId: action.id, actionType: action.actionType, subjectProfileId: action.subjectProfileId, actorUserId, state: "revoked" });
   await createAuditLog(actorUserId, "safety.enforcement_revoked", "safety_enforcement_action", String(action.id), { reason: reason.trim().slice(0, 500) });
   return { revoked: true };
 }
@@ -164,6 +186,46 @@ export async function submitSafetyAppeal(userId: number, enforcementActionId: nu
   await db.update(reports).set({ status: "appealed" }).where(eq(reports.id, action.reportId));
   await createAuditLog(userId, "safety.appeal_submitted", "safety_appeal", String(appealId), { enforcementActionId });
   return { appealId };
+}
+
+export async function withdrawSafetyAppeal(userId: number, appealId: number) {
+	const db = await requireDb();
+	const appeal = (await db.select({ id: safetyAppeals.id, status: safetyAppeals.status, enforcementActionId: safetyAppeals.enforcementActionId }).from(safetyAppeals).where(and(eq(safetyAppeals.id, appealId), eq(safetyAppeals.appellantUserId, userId))).limit(1))[0];
+	if (!appeal || !["submitted", "information_requested"].includes(appeal.status)) throw new Error("This appeal can no longer be withdrawn.");
+	await db.update(safetyAppeals).set({ status: "withdrawn", decidedAt: new Date(), decisionSummary: "The member withdrew this appeal." }).where(and(eq(safetyAppeals.id, appeal.id), inArray(safetyAppeals.status, ["submitted", "information_requested"])));
+	await createAuditLog(userId, "safety.appeal_withdrawn", "safety_appeal", String(appeal.id), { enforcementActionId: appeal.enforcementActionId });
+	return { withdrawn: true };
+}
+
+export async function getMemberSafetyReports(userId: number) {
+	const db = await requireDb();
+	const profile = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, userId)).limit(1))[0];
+	if (!profile) return [];
+	return db.select({ id: reports.id, reason: reports.reason, status: reports.status, memberSafeSummary: reports.memberSafeSummary, memberMessage: reports.memberMessage, createdAt: reports.createdAt, updatedAt: reports.updatedAt, memberUpdatedAt: reports.memberUpdatedAt, memberWithdrawnAt: reports.memberWithdrawnAt }).from(reports).where(and(eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).orderBy(desc(reports.createdAt)).limit(50);
+}
+
+export async function updateMemberSafetyReport(userId: number, reportId: number, details: string) {
+	const db = await requireDb();
+	const profile = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, userId)).limit(1))[0];
+	if (!profile) throw new Error("A member profile is required to update a report.");
+	const record = (await db.select({ id: reports.id, status: reports.status }).from(reports).where(and(eq(reports.id, reportId), eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).limit(1))[0];
+	if (!record || !["open", "triage"].includes(record.status)) throw new Error("This report can no longer be updated because review has started.");
+	await db.update(reports).set({ details: details.trim(), memberUpdatedAt: new Date() }).where(and(eq(reports.id, record.id), inArray(reports.status, ["open", "triage"])));
+	await createAuditLog(userId, "safety.report_updated", "report", String(record.id), { memberOwned: true, detailLength: details.trim().length });
+	return { updated: true };
+}
+
+export async function withdrawMemberSafetyReport(userId: number, reportId: number) {
+	const db = await requireDb();
+	const profile = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, userId)).limit(1))[0];
+	if (!profile) throw new Error("A member profile is required to withdraw a report.");
+	const record = (await db.select({ id: reports.id, status: reports.status }).from(reports).where(and(eq(reports.id, reportId), eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).limit(1))[0];
+	if (!record || !["open", "triage"].includes(record.status)) throw new Error("This report can no longer be withdrawn because review has started.");
+	const now = new Date();
+	await db.update(reports).set({ status: "closed", memberWithdrawnAt: now, memberSafeSummary: "You withdrew this report before a review began.", memberMessage: "You withdrew this report before a review began." }).where(and(eq(reports.id, record.id), inArray(reports.status, ["open", "triage"])));
+	await db.update(integritySignals).set({ status: "dismissed", reviewedAt: now }).where(and(eq(integritySignals.reportId, record.id), eq(integritySignals.status, "new")));
+	await createAuditLog(userId, "safety.report_withdrawn", "report", String(record.id), { memberOwned: true });
+	return { withdrawn: true };
 }
 
 export async function reviewSafetyAppeal(input: { actorUserId: number; appealId: number; status: Exclude<AppealStatus, "submitted" | "withdrawn">; decisionSummary: string }) {

@@ -475,6 +475,7 @@ export const conversations = mysqlTable(
     lastMessageAt: timestamp("lastMessageAt"),
     lastActivityAt: timestamp("lastActivityAt"),
     restrictedAt: timestamp("restrictedAt"),
+	    safetyRestrictionActionId: int("safetyRestrictionActionId"),
     closedAt: timestamp("closedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -708,12 +709,15 @@ export const reports = mysqlTable(
 	    appealEligible: boolean("appealEligible").default(false).notNull(),
 	    memberSafeSummary: varchar("memberSafeSummary", { length: 500 }),
     assignedModeratorUserId: int("assignedModeratorUserId").references(() => users.id, { onDelete: "set null" }),
-    memberAction: mysqlEnum("memberAction", ["none", "warn", "restrict", "temporary_suspend"])
-      .default("none")
-      .notNull(),
-    memberMessage: varchar("memberMessage", { length: 500 }),
-    resolution: varchar("resolution", { length: 500 }),
-    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+	    memberAction: mysqlEnum("memberAction", ["none", "warn", "restrict", "temporary_suspend"])
+	      .default("none")
+	      .notNull(),
+	    memberMessage: varchar("memberMessage", { length: 500 }),
+	    resolution: varchar("resolution", { length: 500 }),
+	    clientRequestId: varchar("clientRequestId", { length: 96 }),
+	    memberUpdatedAt: timestamp("memberUpdatedAt"),
+	    memberWithdrawnAt: timestamp("memberWithdrawnAt"),
+	    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
     resolvedAt: timestamp("resolvedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -722,6 +726,7 @@ export const reports = mysqlTable(
 	    index("reports_queue_idx").on(table.status, table.priority, table.createdAt),
 	    index("reports_assignee_idx").on(table.assignedModeratorUserId, table.status),
 	    index("reports_family_link_idx").on(table.reportedFamilyLinkId, table.status),
+	    uniqueIndex("reports_reporter_request_unique").on(table.reporterProfileId, table.clientRequestId),
 	  ],
 );
 

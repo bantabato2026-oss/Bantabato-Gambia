@@ -169,6 +169,20 @@
       "when": 1787437576628,
       "tag": "0023_bizarre_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1787438354081,
+      "tag": "0024_daffy_red_skull",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1787438422525,
+      "tag": "0025_cheerful_iron_monger",
+      "breakpoints": true
     }
   ]
 }
