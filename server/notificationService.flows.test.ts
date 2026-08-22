@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getDb: vi.fn(), createAuditLog: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getDb: vi.fn(), createAuditLog: vi.fn(), deliverExternalNotification: vi.fn() }));
 vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog }));
+vi.mock("./domain/notificationDelivery", () => ({ deliverExternalNotification: mocks.deliverExternalNotification }));
 
-import { dismissNotification, emitLegacyNotification, emitTrustedNotification, markAllNotificationsRead, markNotificationReadState, saveNotificationPreferences } from "./notificationService";
+import { dismissNotification, emitLegacyNotification, emitTrustedNotification, markAllNotificationsRead, markNotificationReadState, processQueuedNotificationDeliveries, saveNotificationPreferences } from "./notificationService";
 
 function fakeDb(rows: unknown[][]) {
   const inserts: Array<{ table: unknown; values: Record<string, unknown> }> = []; const updates: Array<{ table: unknown; values: Record<string, unknown> }> = [];
@@ -14,7 +15,7 @@ function fakeDb(rows: unknown[][]) {
 }
 
 describe("Phase 9 centralized notification service", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("creates a privacy-safe in-app notification and records external channels as preference-suppressed without provider calls", async () => {
     const fake = fakeDb([[], [], [], []]); mocks.getDb.mockResolvedValue(fake.db);
@@ -69,5 +70,31 @@ describe("Phase 9 centralized notification service", () => {
     expect(fake.inserts.some(entry => entry.values.userId === 4 && entry.values.timezone === "Africa/Banjul")).toBe(true);
     expect(fake.inserts.some(entry => entry.values.category === "marketing" && entry.values.marketingOptIn === false)).toBe(true);
     expect(fake.inserts.flatMap(entry => Object.keys(entry.values))).not.toContain("recipientUserId");
+  });
+
+  it("moves a failed external delivery into a bounded retry state with privacy-safe provider input and no claimed delivery", async () => {
+    const job = { id: 71, notificationDeliveryId: 81, attempts: 0, maxAttempts: 3, status: "queued", availableAt: new Date("2026-08-01") };
+    const delivery = { id: 81, channel: "email", notificationEventId: 91 };
+    const event = { id: 91, recipientUserId: 4, eventType: "message_received", notificationType: "message", actionPath: "/app/messages/1", expiresAt: null };
+    const fake = fakeDb([[job], [delivery], [event]]); mocks.getDb.mockResolvedValue(fake.db); mocks.deliverExternalNotification.mockResolvedValue({ delivered: false, reason: "Provider unavailable" });
+
+    await expect(processQueuedNotificationDeliveries(99, 1)).resolves.toEqual({ processed: 1, delivered: 0, retrying: 1, failed: 0 });
+
+    expect(mocks.deliverExternalNotification).toHaveBeenCalledWith("email", expect.objectContaining({ recipientUserId: 4, notificationType: "message", subject: "You have a new message", body: "Open Bantabato to review your private conversation." }));
+    expect(JSON.stringify(mocks.deliverExternalNotification.mock.calls)).not.toMatch(/voice note|private profile|Sarah/i);
+    expect(fake.updates.some(entry => entry.values.status === "retrying" && entry.values.retryCount === 1)).toBe(true);
+    expect(fake.updates.some(entry => entry.values.status === "queued" && entry.values.lastError === "Provider unavailable")).toBe(true);
+  });
+
+  it("expires a due delivery before any provider attempt when its trusted event has passed its expiry boundary", async () => {
+    const job = { id: 72, notificationDeliveryId: 82, attempts: 0, maxAttempts: 3, status: "queued", availableAt: new Date("2026-08-01") };
+    const delivery = { id: 82, channel: "sms", notificationEventId: 92 };
+    const event = { id: 92, recipientUserId: 4, eventType: "verification_update", notificationType: "verification", actionPath: "/app/verification", expiresAt: new Date("2026-01-01") };
+    const fake = fakeDb([[job], [delivery], [event]]); mocks.getDb.mockResolvedValue(fake.db);
+
+    await expect(processQueuedNotificationDeliveries(99, 1)).resolves.toEqual({ processed: 1, delivered: 0, retrying: 0, failed: 0 });
+
+    expect(mocks.deliverExternalNotification).not.toHaveBeenCalled();
+    expect(fake.updates.filter(entry => entry.values.status === "expired")).toHaveLength(2);
   });
 });
