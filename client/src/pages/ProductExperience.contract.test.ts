@@ -25,7 +25,7 @@ describe("full product experience interaction contracts", () => {
   });
 
   it("keeps progressive interaction readable when motion is reduced or bandwidth is constrained", () => {
-    expect(styles).toContain(".onboarding-step-content{animation:none!important;transition:none!important}");
+    expect(styles).toContain(".onboarding-step-content,.voice-waveform span{animation:none!important;transition:none!important}");
     expect(styles).toContain('html[data-low-bandwidth="true"] .signup-intro-orbit{display:none}');
     expect(styles).toContain('html[data-low-bandwidth="true"] .signup-intro-panel');
   });

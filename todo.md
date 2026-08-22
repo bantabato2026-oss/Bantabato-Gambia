@@ -265,3 +265,8 @@
 - [x] Implement only verified internal product and interaction gaps while preserving deterministic matching, server enforcement, privacy, safety, consent, provider boundaries, and no-live-payment posture.
 - [x] Add focused regression coverage and validate desktop, mobile, loading, empty, error, reduced-motion, and low-bandwidth behavior without fabricating authenticated activity.
 - [x] Document implemented and remaining product gaps, save the BANTABATO — FULL PRODUCT EXPERIENCE IMPLEMENTATION checkpoint, and deliver an evidence-based product-completeness report.
+- [x] Audit current private voice-note, messaging, discovery, authenticated state, accessibility, and mobile implementation to identify verified internal communication and recovery gaps without duplicating existing controls.
+- [x] Design safe voice-note lifecycle, messaging, discovery, loading/recovery, empty-state, accessibility, and mobile improvements using existing motion, state, focus, low-bandwidth, and privacy primitives.
+- [x] Implement only verified internal communication, discovery, and shared authenticated-state improvements while preserving mutual-match, block, report, safety, consent, signed-media, ownership, and provider boundaries.
+- [x] Add focused communication, accessibility, recovery, reduced-motion, low-bandwidth, and mobile regression coverage; create an authenticated accessibility matrix without fabricating unavailable execution.
+- [x] Run full validation, document implemented and blocked work, save the BANTABATO — COMMUNICATION & AUTHENTICATED EXPERIENCE POLISH checkpoint, and deliver the requested evidence-based report.
