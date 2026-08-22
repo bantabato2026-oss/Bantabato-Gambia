@@ -42,17 +42,23 @@ describe("communication and authenticated experience contracts", () => {
     expect(styles).toContain("@keyframes voice-wave-pulse");
   });
 
-  it("uses one opaque per-conversation request key for member-initiated text and voice retries, with server-scoped duplicate lookup", () => {
+	  it("uses one opaque per-conversation request key for member-initiated text and voice retries, with server-scoped duplicate lookup", () => {
     expect(detailPages).toContain("const [messageRequestId, setMessageRequestId]");
     expect(detailPages).toContain("clientRequestId: requestId");
     expect(detailPages).toContain("clientRequestId: createClientRequestId()");
     expect(detailPages).toContain("Retry message");
     expect(detailPages).toContain("Retry voice note");
     expect(messagingRouter).toContain("clientRequestId: z.string().regex");
-    expect(messagingService).toContain("findExistingClientRequest(db, profileId, conversationId, requestId)");
+    expect(messagingService).toContain("resolveExistingClientRequest(db, profileId, conversationId, requestId, fingerprint");
     expect(schema).toContain('clientRequestId: varchar("clientRequestId", { length: 96 })');
-    expect(schema).toContain("messages_sender_conversation_client_request_unique");
-  });
+	    expect(schema).toContain("messages_sender_conversation_client_request_unique");
+	    expect(schema).toContain('requestFingerprint: varchar("requestFingerprint", { length: 64 })');
+	    expect(schema).toContain('"message_deduplicated"');
+	    expect(schema).toContain('"message_request_conflict"');
+	    expect(messagingService).toContain("createHmac(\"sha256\"");
+	    expect(messagingService).toContain("same_request_key");
+	    expect(messagingService).toContain("different_payload");
+	  });
 
   it("uses shared recovery states and factual status language for verification, Family Circle, and provider-bound billing", () => {
     expect(memberPages).toContain('StateSkeleton label="Loading your verification status…"');

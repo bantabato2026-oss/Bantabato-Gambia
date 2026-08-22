@@ -498,6 +498,7 @@ export const messages = mysqlTable(
     failureReason: varchar("failureReason", { length: 500 }),
     retryOfMessageId: int("retryOfMessageId"),
     clientRequestId: varchar("clientRequestId", { length: 96 }),
+    requestFingerprint: varchar("requestFingerprint", { length: 64 }),
     moderationStatus: mysqlEnum("moderationStatus", ["normal", "flagged", "under_review", "restricted"]).default("normal").notNull(),
     reportCount: int("reportCount").default(0).notNull(),
     metadata: json("metadata"),
@@ -539,7 +540,7 @@ export const conversationEvents = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     conversationId: int("conversationId").notNull().references(() => conversations.id, { onDelete: "cascade" }),
     actorProfileId: int("actorProfileId").references(() => memberProfiles.id, { onDelete: "set null" }),
-    eventType: mysqlEnum("eventType", ["mutual_interest", "conversation_started", "message_sent", "voice_note_sent", "message_read", "conversation_paused", "conversation_restricted", "conversation_closed", "safety_reported", "member_blocked"])
+    eventType: mysqlEnum("eventType", ["mutual_interest", "conversation_started", "message_sent", "voice_note_sent", "message_deduplicated", "message_request_conflict", "message_read", "conversation_paused", "conversation_restricted", "conversation_closed", "safety_reported", "member_blocked"])
       .notNull(),
     metadata: json("metadata"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),

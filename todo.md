@@ -275,3 +275,8 @@
 - [x] Implement only verified message/voice lifecycle, recovery, verification, Family Circle, billing, and shared route improvements while preserving security, privacy, consent, ownership, and provider boundaries.
 - [x] Add focused lifecycle, accessibility, motion, and state regression coverage; extend the manual authenticated accessibility matrix without fabricating unavailable execution.
 - [x] Run full validation, document implemented and remaining work, save the BANTABATO — COMMUNICATION LIFECYCLE & INTERACTION POLISH checkpoint, and deliver the requested evidence-based report.
+- [x] Audit concurrent request-key/idempotency behavior, audit evidence, active administration routes, staff workflow states, responsive presentation, accessibility, and product-facing completeness without duplicating existing controls.
+- [x] Design conflict-safe idempotency behavior and standardized staff state, permission, approval, recovery, motion, and responsive language using existing primitives and security boundaries.
+- [x] Implement only verified concurrency assurance, privacy-safe audit evidence, and administration experience improvements without weakening authorization, four-eyes controls, private-document/media boundaries, provider boundaries, or production infrastructure.
+- [x] Add focused concurrency, permission, approval, staff-state, accessibility, motion, keyboard, responsive, and reduced-motion regression coverage; extend the manual blocked-test matrix without fabricating execution.
+- [x] Run full validation, complete an evidence-based product-completeness audit, save the BANTABATO — CONCURRENCY ASSURANCE & ADMINISTRATION EXPERIENCE COMPLETION checkpoint, and deliver the requested report without claiming launch readiness.

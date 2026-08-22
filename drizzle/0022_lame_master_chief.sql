@@ -1,0 +1,2 @@
+ALTER TABLE `conversation_events` MODIFY COLUMN `eventType` enum('mutual_interest','conversation_started','message_sent','voice_note_sent','message_deduplicated','message_request_conflict','message_read','conversation_paused','conversation_restricted','conversation_closed','safety_reported','member_blocked') NOT NULL;--> statement-breakpoint
+ALTER TABLE `messages` ADD `requestFingerprint` varchar(64);

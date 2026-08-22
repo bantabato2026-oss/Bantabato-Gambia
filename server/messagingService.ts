@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { blocks, conversationEvents, conversationInteractionSignals, conversationPreferences, conversations, matches, memberProfiles, messageReads, messages, reports } from "../drizzle/schema";
 import { getCompatibilityExplanation } from "./compatibilityService";
 import { blockProfile, createAuditLog, createNotification, createReport, getDb } from "./db";
@@ -9,6 +9,7 @@ import { normalizeOptionalUserText, normalizeUserText } from "./inputSecurity";
 import { safePromptForDimension, validateVoiceNoteMeta } from "./domain/messagingPolicy";
 import { createIntegritySignal } from "./integrityService";
 import { revokeConnectionForConversation } from "./readinessService";
+import { ENV } from "./_core/env";
 
 const MAX_TEXT_LENGTH = 2_000;
 const MAX_VOICE_SECONDS = 180;
@@ -80,7 +81,8 @@ export async function sendText(profileId: number, conversationId: number, body: 
   if (!db) throw new Error("Database unavailable");
   await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active"]);
   const requestId = normalizeClientRequestId(clientRequestId);
-  const existing = await findExistingClientRequest(db, profileId, conversationId, requestId);
+  const fingerprint = requestFingerprint("text", clean);
+  const existing = await resolveExistingClientRequest(db, profileId, conversationId, requestId, fingerprint, "text");
   if (existing) return { id: existing.id, deliveryStatus: existing.deliveryStatus, duplicate: true };
   const recent = await db.select({ id: messages.id }).from(messages).where(and(eq(messages.conversationId, conversationId), eq(messages.senderProfileId, profileId), gt(messages.createdAt, new Date(Date.now() - 60_000)))).limit(9);
   if (recent.length >= 8) throw new Error("Please pause briefly before sending another message");
@@ -90,9 +92,9 @@ export async function sendText(profileId: number, conversationId: number, body: 
   }
   let result;
   try {
-    result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "text", body: clean, retryOfMessageId: retryOfMessageId ?? null, clientRequestId: requestId, deliveryStatus: "sent" });
+    result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "text", body: clean, retryOfMessageId: retryOfMessageId ?? null, clientRequestId: requestId, requestFingerprint: fingerprint, deliveryStatus: "sent" });
   } catch (error) {
-    const duplicate = await findExistingClientRequest(db, profileId, conversationId, requestId);
+    const duplicate = await resolveExistingClientRequest(db, profileId, conversationId, requestId, fingerprint, "text");
     if (duplicate) return { id: duplicate.id, deliveryStatus: duplicate.deliveryStatus, duplicate: true };
     throw error;
   }
@@ -107,17 +109,18 @@ export async function uploadVoiceNote(profileId: number, conversationId: number,
   if (!db) throw new Error("Database unavailable");
   await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active"]);
   const requestId = normalizeClientRequestId(clientRequestId);
-  const existing = await findExistingClientRequest(db, profileId, conversationId, requestId);
-  if (existing) return { id: existing.id, durationSeconds: existing.durationSeconds ?? durationSeconds, duplicate: true };
   const { buffer, mimeType, extension } = decodeVoice(dataUrl);
   const validation = validateVoiceNoteMeta({ mimeType, byteLength: buffer.length, durationSeconds });
   if (!validation.valid) throw new Error(validation.reason);
+  const fingerprint = requestFingerprint("voice", `${mimeType}:${durationSeconds}`, buffer);
+  const existing = await resolveExistingClientRequest(db, profileId, conversationId, requestId, fingerprint, "voice");
+  if (existing) return { id: existing.id, durationSeconds: existing.durationSeconds ?? durationSeconds, duplicate: true };
   const stored = await storagePut(`members/${profileId}/conversations/${conversationId}/voice/${requestId}.${extension}`, buffer, mimeType);
   let result;
   try {
-    result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "voice", mediaStorageKey: stored.key, mimeType, durationSeconds, clientRequestId: requestId, deliveryStatus: "sent", metadata: { optimizedFor: "low_bandwidth", download: "controlled_access" } });
+    result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "voice", mediaStorageKey: stored.key, mimeType, durationSeconds, clientRequestId: requestId, requestFingerprint: fingerprint, deliveryStatus: "sent", metadata: { optimizedFor: "low_bandwidth", download: "controlled_access" } });
   } catch (error) {
-    const duplicate = await findExistingClientRequest(db, profileId, conversationId, requestId);
+    const duplicate = await resolveExistingClientRequest(db, profileId, conversationId, requestId, fingerprint, "voice");
     if (duplicate) return { id: duplicate.id, durationSeconds: duplicate.durationSeconds ?? durationSeconds, duplicate: true };
     throw error;
   }
@@ -251,7 +254,7 @@ export async function recordInteraction(conversationId: number, profileId: numbe
   await db.insert(conversationInteractionSignals).values({ conversationId, profileId, firstParticipatedAt: now, lastParticipatedAt: now }).onDuplicateKeyUpdate({ set });
 }
 
-async function recordEvent(conversationId: number, actorProfileId: number | null, eventType: "mutual_interest" | "conversation_started" | "message_sent" | "voice_note_sent" | "message_read" | "conversation_paused" | "conversation_restricted" | "conversation_closed" | "safety_reported" | "member_blocked", metadata?: unknown) {
+async function recordEvent(conversationId: number, actorProfileId: number | null, eventType: "mutual_interest" | "conversation_started" | "message_sent" | "voice_note_sent" | "message_deduplicated" | "message_request_conflict" | "message_read" | "conversation_paused" | "conversation_restricted" | "conversation_closed" | "safety_reported" | "member_blocked", metadata?: unknown) {
   const db = await getDb();
   if (!db) return;
   await db.insert(conversationEvents).values({ conversationId, actorProfileId, eventType, metadata: metadata ?? null });
@@ -273,8 +276,31 @@ function normalizeClientRequestId(value?: string) {
 }
 
 async function findExistingClientRequest(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, profileId: number, conversationId: number, clientRequestId: string) {
-  const existing = await db.select({ id: messages.id, deliveryStatus: messages.deliveryStatus, durationSeconds: messages.durationSeconds }).from(messages).where(and(eq(messages.senderProfileId, profileId), eq(messages.conversationId, conversationId), eq(messages.clientRequestId, clientRequestId))).limit(1);
+  const existing = await db.select({ id: messages.id, deliveryStatus: messages.deliveryStatus, durationSeconds: messages.durationSeconds, requestFingerprint: messages.requestFingerprint }).from(messages).where(and(eq(messages.senderProfileId, profileId), eq(messages.conversationId, conversationId), eq(messages.clientRequestId, clientRequestId))).limit(1);
   return existing[0];
+}
+
+function requestFingerprint(kind: "text" | "voice", payload: string, binary?: Buffer) {
+  const secret = ENV.cookieSecret || "bantabato-development-request-fingerprint";
+  const hmac = createHmac("sha256", secret).update(`${kind}\u0000${payload}\u0000`);
+  if (binary) hmac.update(binary);
+  return hmac.digest("hex");
+}
+
+function sameFingerprint(existing: string | null | undefined, next: string) {
+  if (!existing || existing.length !== next.length) return false;
+  return timingSafeEqual(Buffer.from(existing, "utf8"), Buffer.from(next, "utf8"));
+}
+
+async function resolveExistingClientRequest(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, profileId: number, conversationId: number, clientRequestId: string, fingerprint: string, messageType: "text" | "voice") {
+  const existing = await findExistingClientRequest(db, profileId, conversationId, clientRequestId);
+  if (!existing) return undefined;
+  if (!sameFingerprint(existing.requestFingerprint, fingerprint)) {
+    await recordEvent(conversationId, profileId, "message_request_conflict", { messageType, outcome: "different_payload" });
+    throw new Error("This retry key is already linked to a different private message. Start a new message or voice note instead.");
+  }
+  await recordEvent(conversationId, profileId, "message_deduplicated", { messageType, outcome: "same_request_key" });
+  return existing;
 }
 
 function decodeVoice(dataUrl: string) {
