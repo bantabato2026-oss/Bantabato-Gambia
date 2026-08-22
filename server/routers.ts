@@ -7,6 +7,7 @@ import {
   createReport,
   getAdminOverview,
   getConversationsForProfile,
+  getInterestConnectionState,
   getDiscoveryProfiles,
   getMatchesForProfile,
   getMessagesForProfile,
@@ -32,6 +33,7 @@ import {
   sendTextMessage,
   submitIdentityVerification,
   withdrawSuccessDeclaration,
+  withdrawInterest,
   uploadIdentityDocument,
   uploadProfilePhoto,
   upsertFamilyLink,
@@ -207,6 +209,8 @@ export const appRouter = router({
 	    incoming: protectedProcedure.query(async ({ ctx }) => listIncomingInterests((await requireProfile(ctx.user.id)).id)),
 	    send: protectedProcedure.input(z.object({ recipientProfileId: z.number().int().positive(), message: z.string().max(500).optional() })).mutation(async ({ ctx, input }) => createInterest((await requireProfile(ctx.user.id)).id, input.recipientProfileId, input.message)),
 	    respond: protectedProcedure.input(z.object({ interestId: z.number().int().positive(), response: z.enum(["accepted", "declined"]) })).mutation(async ({ ctx, input }) => respondToInterest((await requireProfile(ctx.user.id)).id, input.interestId, input.response)),
+	    withdraw: protectedProcedure.input(z.object({ interestId: z.number().int().positive() })).mutation(async ({ ctx, input }) => withdrawInterest((await requireProfile(ctx.user.id)).id, input.interestId)),
+	    connectionState: protectedProcedure.input(z.object({ profileId: z.number().int().positive() })).query(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const visible = await getProfileForMember(profile.id, input.profileId); if (!visible) return { state: "unavailable" as const, interestId: null, conversationId: null }; return getInterestConnectionState(profile.id, input.profileId); }),
 	  }),
 	  recommendations: router({
 	    list: protectedProcedure.input(z.object({ cursor: z.number().int().positive().optional(), limit: z.number().int().min(1).max(18).optional(), category: z.enum(["recommended_for_you", "strong_compatibility", "nearby_potential_matches", "similar_marriage_goals", "recently_joined", "verified_members", "worth_exploring"]).optional() }).optional()).query(async ({ ctx, input }) => getRecommendationsForMember((await requireProfile(ctx.user.id)).id, input)),
@@ -214,7 +218,7 @@ export const appRouter = router({
 	    feedback: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), response: z.enum(["not_interested", "not_relevant", "already_considered", "hide_profile"]) })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); return submitRecommendationFeedback(profile.id, ctx.user.id, input.recommendationId, input.response); }),
 	    settings: protectedProcedure.query(async ({ ctx }) => getRecommendationSettings((await requireProfile(ctx.user.id)).id)),
 	    saveSettings: protectedProcedure.input(z.object({ recommendationsEnabled: z.boolean(), showVerifiedCategory: z.boolean(), showNearbyCategory: z.boolean(), showRecentCategory: z.boolean() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); return saveRecommendationSettings(profile.id, ctx.user.id, input); }),
-	    startInterest: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), message: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId); await createInterest(profile.id, recommendation.candidateProfileId, input.message); return { success: true }; }),
+	    startInterest: protectedProcedure.input(z.object({ recommendationId: z.number().int().positive(), message: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId, false); const interest = await createInterest(profile.id, recommendation.candidateProfileId, input.message); if (!interest.duplicate) await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId); return { success: true, duplicate: interest.duplicate, state: interest.state }; }),
 	  }),
   billing: router({
 	    options: betaMemberProcedure.input(z.object({ currency: z.string().trim().length(3).optional() }).optional()).query(async ({ input }) => listMembershipOptions(input?.currency ?? "GMD")),

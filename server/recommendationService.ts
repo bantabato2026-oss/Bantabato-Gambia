@@ -173,13 +173,15 @@ export async function submitRecommendationFeedback(profileId: number, actorUserI
   return { success: true };
 }
 
-export async function recordRecommendationInterest(profileId: number, actorUserId: number, recommendationId: number) {
+export async function recordRecommendationInterest(profileId: number, actorUserId: number, recommendationId: number, recordEvent = true) {
   const db = await requireDb();
   const record = await db.select().from(recommendations).where(and(eq(recommendations.id, recommendationId), eq(recommendations.profileId, profileId), eq(recommendations.status, "active"))).limit(1);
   if (!record[0]) throw new Error("This recommendation is unavailable");
-  const policy = await db.select({ policyVersion: recommendationPolicies.policyVersion }).from(recommendationPolicies).where(eq(recommendationPolicies.id, record[0].recommendationPolicyId)).limit(1);
-  await db.insert(recommendationEvents).values({ recommendationId, profileId, eventType: "interest_started", policyVersion: policy[0]?.policyVersion ?? RECOMMENDATION_FALLBACK_VERSION });
-  await createAuditLog(actorUserId, "recommendation.interest_started", "recommendation", String(recommendationId));
+  if (recordEvent) {
+    const policy = await db.select({ policyVersion: recommendationPolicies.policyVersion }).from(recommendationPolicies).where(eq(recommendationPolicies.id, record[0].recommendationPolicyId)).limit(1);
+    await db.insert(recommendationEvents).values({ recommendationId, profileId, eventType: "interest_started", policyVersion: policy[0]?.policyVersion ?? RECOMMENDATION_FALLBACK_VERSION });
+    await createAuditLog(actorUserId, "recommendation.interest_started", "recommendation", String(recommendationId));
+  }
   return { candidateProfileId: record[0].candidateProfileId };
 }
 
