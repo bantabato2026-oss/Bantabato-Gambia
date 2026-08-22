@@ -65,6 +65,7 @@ function Router() {
     <Route path="/" component={Home} />
     <Route path="/about">{() => <PublicInfoPage page="about" />}</Route>
     <Route path="/how-it-works">{() => <PublicInfoPage page="how-it-works" />}</Route>
+    <Route path="/family-circle">{() => <PublicInfoPage page="family" />}</Route>
     <Route path="/safety">{() => <PublicInfoPage page="safety" />}</Route>
     <Route path="/privacy">{() => <PublicInfoPage page="privacy" />}</Route>
     <Route path="/terms">{() => <PublicInfoPage page="terms" />}</Route>

@@ -1,0 +1,37 @@
+# BANTABATO — MAJOR PRODUCT CAPABILITY SPRINT 8
+
+## Public Website, Registration, Onboarding, Profile Completion & Core Experience
+
+Sprint 8 audited the public-to-member journey and completed only genuine internal experience gaps. It preserves the existing forest, cream, and gold brand system; official supplied brand assets; privacy, safety, verification, eligibility, Family Circle, and consent boundaries; and a truthful no-provider/no-real-account/no-launch posture.
+
+| Requested capability area | Sprint 8 completion and boundary |
+|---|---|
+| Public website architecture | The public shell now consistently presents Home, About, How it works, Family & Wali, Membership, Safety, Stories, FAQ, Contact, privacy, and terms through a responsive official-brand layout. Public content remains read-only and does not depend on a real member account. |
+| Landing page | The existing hero, explicit primary actions, trust cues, Gambian and diaspora context, marriage-first journey, member-controlled family invitation explanation, and footer were audited and retained. The review confirmed a readable desktop and mobile hierarchy. |
+| Public Family Circle and Wali journey | Added `/family-circle`, a public explanatory route for optional member-controlled Parent/Wali involvement. It states account-bound invitations, purpose-specific permissions, revocation, and categorical exclusions for messages, voice, documents, safety, billing, and unrestricted profile data. It does not expose participant or member information. |
+| Brand and navigation | The official logo/brand, dark forest, cream, gold, display/sans typography, public footer, PWA artwork, and social metadata remain consistent. The primary and mobile navigation now include Family & Wali and Stories; active-route indication, a skip link, mobile initial-focus transfer, Escape-close/focus return, and current metadata updates were added. |
+| SEO and sharing | Existing canonical, description, Open Graph, Twitter, title, PWA, icon, and social artwork configuration were retained. Public routes now update title, description, canonical, Open Graph, and Twitter fields client-side without representing unsupported server rendering as SEO proof. |
+| Registration and secure entry | `/register` now explains secure entry, private draft creation, readiness steps, no automatic eligibility, and recovery truthfully. Failure copy states that no profile, payment, verification, or membership state changes when secure sign-in cannot finish. It does not claim credentials, provider operation, or account creation execution. |
+| Onboarding | The existing Essentials → Life & marriage → Privacy flow remains the active progressive path. It retains required first-step validation and focus recovery, device-local safe drafts, offline submission prevention, previous/continue navigation, progress announcement, and server-authoritative final save. |
+| Profile completion | The protected preview now provides a factual readiness summary for profile foundation, approved photos, manual verification, and marriage preferences. It distinguishes complete, incomplete/action-required, and under-review states without revealing safety reasoning, documents, contact data, or private photos. |
+| Five-photo workflow | The factual `X/5 approved` requirement, review statuses, private gallery, secure-upload limits, offline/retry state, and eligibility synchronization remain intact. A member can now remove only their own profile photo, which marks it withdrawn from normal use, preserves review/audit history, recalculates eligibility, and frees a replacement slot. No photo is exposed publicly by this work. |
+| Verification guidance | Existing manual-review status, duplicate-submission prevention, resubmission, escalation, restricted state, and private document boundaries remain unchanged. Sprint 8 connects verification status to factual profile-readiness guidance rather than creating an automated badge or exposing reviewer detail. |
+| Privacy and safety | Public content still omits member profiles, contact data, precise location, messages, voice, documents, Family Circle data, safety reports, and billing. Profile preview and public Family Circle copy explicitly retain those boundaries. No score, popularity, premium advantage, provider, or external channel was added. |
+| Motion, loading, and recovery | Existing route-entry motion, shared state panels, skeletons, reduced-motion/low-bandwidth support, and device draft behavior were retained. The shared branded loader now supports truthful public or private loading language. Membership catalog error state gained a visible retry control without creating checkout or a transaction. |
+| Success stories | The public stories route continues to show only voluntary, independently approved, currently published content. Its no-story state, consent/approval wording, privacy exclusions, and immediate withdrawal explanation remain explicit; no testimonial, review, statistic, or member story was fabricated. |
+| Accessibility and mobile | Added public skip navigation, mobile-menu keyboard recovery, menu Escape behavior, focus return, semantic current-page state, labels, live onboarding progress, factual status copy, and readable stacked layouts. The 375px review showed legible landing, family, registration, stories, onboarding, and photo surfaces. Formal assistive-technology testing remains manual work. |
+| Tests and validation | Added `server/sprint8PublicEntry.contract.test.ts` with six focused public/entry contracts and extended the photo upload contract. Final validation passed with **302 tests across 66 files**, TypeScript, production build, and clean production dependency audit. |
+
+## Visual evidence and validation limits
+
+Safe read-only desktop and 375px mobile reviews were recorded in `docs/major-product-capability-sprint-8-visual-validation.md`. They covered the landing page, public Family Circle route, registration, stories, onboarding, and photos. The reviews did not create an account, sign in, save a profile, upload/remove a file, invoke a provider, submit a story, invite family, or claim an authenticated workflow executed.
+
+## Remaining genuine gaps and classification
+
+The public and entry experience is materially more complete internally but **not launch-ready**. Authorized fictional-member browser validation remains needed for secure sign-in failure/recovery, onboarding save/resume, the full profile-to-five-photo-to-verification completion path, photo removal/replacement/review, mobile keyboard menu behavior, screen-reader behavior, and reduced-motion/low-bandwidth operation. Legal text approval, public support configuration, provider decisions, real operational staffing, and launch authorization remain external-action work.
+
+> **Highest-value remaining internal capability:** build a test-only public-to-member journey harness that uses fictional personas and verifies secure-entry handoff, onboarding draft resume, factual readiness transitions, photo remove/replace/review, verification status, privacy preview, and public-story consent/withdrawal without creating real accounts or asserting browser execution.
+
+## Boundaries retained
+
+No real user, account, payment, provider, provider credential, payment result, success story, review, testimonial, statistic, external communication channel, infrastructure component, AI matching, Trust Score, popularity ranking, premium matching advantage, protected-trait scoring, live calling, or launch claim was introduced.

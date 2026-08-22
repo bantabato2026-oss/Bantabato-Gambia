@@ -12,9 +12,10 @@ export function Stagger({ children, className = "" }: { children: ReactNode; cla
   return <div className={`motion-stagger ${className}`}>{children}</div>;
 }
 
-export function BrandedRouteLoading() {
+export function BrandedRouteLoading({ audience = "member" }: { audience?: "member" | "public" }) {
+	const message = audience === "public" ? "Preparing Bantabato…" : "Preparing your private Bantabato space…";
   return <main className="brand-route-loading" role="status" aria-live="polite" aria-label="Loading Bantabato">
     <div className="brand-loader-mark" aria-hidden="true"><span /><span /><span /></div>
-    <p className="mt-5 text-sm font-medium text-forest">Preparing your private Bantabato space…</p>
+	    <p className="mt-5 text-sm font-medium text-forest">{message}</p>
   </main>;
 }

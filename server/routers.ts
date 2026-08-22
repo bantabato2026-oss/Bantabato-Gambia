@@ -26,7 +26,8 @@ import {
   listFamilyLinks,
   listIncomingInterests,
   listOwnProfilePhotos,
-  listProfilePhotoReviewQueue,
+	  listProfilePhotoReviewQueue,
+	  removeOwnProfilePhoto,
   markNotificationRead,
   respondToInterest,
   saveMemberProfile,
@@ -194,6 +195,7 @@ export const appRouter = router({
 	  uploads: router({
     profilePhotos: protectedProcedure.query(async ({ ctx }) => listOwnProfilePhotos((await requireProfile(ctx.user.id)).id)),
     uploadProfilePhoto: protectedProcedure.input(z.object({ dataUrl: z.string().max(12_000_000) })).mutation(async ({ ctx, input }) => uploadProfilePhoto((await requireProfile(ctx.user.id)).id, input.dataUrl)),
+	    removeProfilePhoto: protectedProcedure.input(z.object({ photoId: z.number().int().positive() })).mutation(async ({ ctx, input }) => removeOwnProfilePhoto((await requireProfile(ctx.user.id)).id, input.photoId)),
     uploadIdentityDocument: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]), dataUrl: z.string().max(15_000_000) })).mutation(async ({ ctx, input }) => uploadIdentityDocument((await requireProfile(ctx.user.id)).id, input.documentType, input.dataUrl)),
   }),
   discovery: router({

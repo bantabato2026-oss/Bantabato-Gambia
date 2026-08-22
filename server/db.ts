@@ -669,6 +669,18 @@ export async function uploadProfilePhoto(profileId: number, dataUrl: string) {
   return { queuedForReview: true };
 }
 
+/** Removes a member-owned profile photo from normal access and frees a private upload slot; it never alters review history or invents approval. */
+export async function removeOwnProfilePhoto(profileId: number, photoId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [photo] = await db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus }).from(profilePhotos).where(and(eq(profilePhotos.id, photoId), eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).limit(1);
+  if (!photo) throw new Error("This profile photo is unavailable.");
+  await db.update(profilePhotos).set({ deletedAt: new Date() }).where(eq(profilePhotos.id, photo.id));
+  const eligibility = await synchronizeProfileEligibility(profileId);
+  await createAuditLog(null, "profile_photo.withdrawn", "profile_photo", String(photo.id), { profileId, previousReviewStatus: photo.reviewStatus, approvedPhotoCount: eligibility.approvedPhotoCount });
+  return { photoId: photo.id, eligibility };
+}
+
 export async function listOwnProfilePhotos(profileId: number) {
   const db = await getDb();
   if (!db) return [];
