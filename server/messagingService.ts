@@ -157,12 +157,12 @@ export async function setConversationPreference(profileId: number, conversationI
   return db.select().from(conversationPreferences).where(and(eq(conversationPreferences.conversationId, conversationId), eq(conversationPreferences.profileId, profileId))).limit(1);
 }
 
-export async function setConversationState(profileId: number, conversationId: number, state: "paused" | "closed") {
+export async function setConversationState(profileId: number, conversationId: number, state: "active" | "paused" | "closed") {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active", "paused", "reported", "restricted"]);
   await db.update(conversations).set({ status: state, closedAt: state === "closed" ? new Date() : null, lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
-  await recordEvent(conversationId, profileId, state === "closed" ? "conversation_closed" : "conversation_paused");
+  await recordEvent(conversationId, profileId, state === "closed" ? "conversation_closed" : state === "paused" ? "conversation_paused" : "conversation_started");
 }
 
 export async function blockConversationMember(profileId: number, conversationId: number, reason?: string) {
