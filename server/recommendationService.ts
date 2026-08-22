@@ -1,9 +1,10 @@
 import { and, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
-import { blocks, matches, memberPreferences, memberProfiles, memberRecommendationSettings, profileFieldVisibilities, recommendationEvents, recommendationFeedback, recommendationPolicies, recommendations, verificationRecords } from "../drizzle/schema";
+import { blocks, matches, memberInternationalPreferences, memberPreferredCountries, memberPreferences, memberProfiles, memberRecommendationSettings, profileFieldVisibilities, recommendationEvents, recommendationFeedback, recommendationPolicies, recommendations, verificationRecords } from "../drizzle/schema";
 import { createAuditLog, createNotification, getDb, getMemberEligibility } from "./db";
 import { evaluateCompatibility, type CompatibilityPreferences, type CompatibilityProfile } from "./domain/compatibility";
 import { buildRecommendationDecision, DEFAULT_RECOMMENDATION_POLICY, isEligibleForRecommendation, memberSafeConsideration, memberSafeExplanation, rankRecommendationCandidates, type RecommendationCategory, type RecommendationFeedbackResponse, type RecommendationPolicy } from "./domain/recommendationPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
+import { permitsInternationalDiscovery, type InternationalDiscoveryState } from "./domain/internationalDiscovery";
 
 const MAX_PAGE_SIZE = 18;
 
@@ -91,7 +92,7 @@ export async function getRecommendationsForMember(profileId: number, input: { cu
   const candidateIds = candidatePool.map(candidate => candidate.id);
   if (!candidateIds.length) return { items: [], nextCursor: undefined, policyVersion: policy.policyVersion };
   const eligibleCandidateIds = new Set((await Promise.all(candidateIds.map(async id => ({ id, eligible: (await getMemberEligibility(id)).discoveryEligible })))).filter(candidate => candidate.eligible).map(candidate => candidate.id));
-  const [viewerPreferenceRows, candidatePreferenceRows, blockRows, verificationRows, visibilityRows, candidateSettings, existingRecommendations, existingMatches, viewerVerification] = await Promise.all([
+  const [viewerPreferenceRows, candidatePreferenceRows, blockRows, verificationRows, visibilityRows, candidateSettings, existingRecommendations, existingMatches, viewerVerification, internationalPreferenceRows, preferredCountryRows] = await Promise.all([
     db.select().from(memberPreferences).where(eq(memberPreferences.profileId, profileId)).limit(1),
     db.select().from(memberPreferences).where(inArray(memberPreferences.profileId, candidateIds)),
     db.select().from(blocks).where(or(eq(blocks.blockerProfileId, profileId), eq(blocks.blockedProfileId, profileId))),
@@ -101,6 +102,8 @@ export async function getRecommendationsForMember(profileId: number, input: { cu
     db.select().from(recommendations).where(and(eq(recommendations.profileId, profileId), eq(recommendations.recommendationPolicyId, policyRow.id), inArray(recommendations.candidateProfileId, candidateIds))),
     db.select().from(matches).where(and(eq(matches.status, "active"), or(inArray(matches.memberOneProfileId, candidateIds), inArray(matches.memberTwoProfileId, candidateIds)))),
     db.select({ id: verificationRecords.id }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"), eq(verificationRecords.status, "approved"))).limit(1),
+    db.select().from(memberInternationalPreferences).where(inArray(memberInternationalPreferences.profileId, [profileId, ...candidateIds])),
+    db.select({ profileId: memberPreferredCountries.profileId, countryId: memberPreferredCountries.countryId }).from(memberPreferredCountries).where(and(inArray(memberPreferredCountries.profileId, [profileId, ...candidateIds]), eq(memberPreferredCountries.preferencePurpose, "discovery"))),
   ]);
   const excluded = new Set(blockRows.map(block => block.blockerProfileId === profileId ? block.blockedProfileId : block.blockerProfileId));
   const preferencesByProfile = new Map(candidatePreferenceRows.map(row => [row.profileId, normalizePreferences(row)]));
@@ -111,7 +114,12 @@ export async function getRecommendationsForMember(profileId: number, input: { cu
   const visibilityByProfile = new Map<number, Map<string, string>>();
   visibilityRows.forEach(row => { const fields = visibilityByProfile.get(row.profileId) ?? new Map<string, string>(); fields.set(row.fieldKey, row.audience); visibilityByProfile.set(row.profileId, fields); });
   const viewerPreferences = normalizePreferences(viewerPreferenceRows[0]);
-  const evaluations = candidatePool.filter(candidate => eligibleCandidateIds.has(candidate.id) && !excluded.has(candidate.id) && !matchedCandidateIds.has(candidate.id)).map(candidate => {
+  const internationalPreferenceByProfile = new Map(internationalPreferenceRows.map(row => [row.profileId, row]));
+  const preferredCountriesByProfile = new Map<number, Set<number>>();
+  preferredCountryRows.forEach(row => { const selected = preferredCountriesByProfile.get(row.profileId) ?? new Set<number>(); selected.add(row.countryId); preferredCountriesByProfile.set(row.profileId, selected); });
+  const internationalState = (profile: typeof memberProfiles.$inferSelect): InternationalDiscoveryState => ({ residenceCountryId: profile.residenceCountryId, longDistancePreference: internationalPreferenceByProfile.get(profile.id)?.longDistancePreference ?? "no_preference", preferredDiscoveryCountryIds: preferredCountriesByProfile.get(profile.id) ?? new Set<number>() });
+  const viewerInternationalState = internationalState(viewer[0]);
+  const evaluations = candidatePool.filter(candidate => eligibleCandidateIds.has(candidate.id) && !excluded.has(candidate.id) && !matchedCandidateIds.has(candidate.id) && permitsInternationalDiscovery(viewerInternationalState, internationalState(candidate))).map(candidate => {
     const own = evaluateCompatibility(viewer[0] as CompatibilityProfile, candidate as CompatibilityProfile, viewerPreferences);
     const reciprocal = evaluateCompatibility(candidate as CompatibilityProfile, viewer[0] as CompatibilityProfile, preferencesByProfile.get(candidate.id) ?? {});
     const compatibility = { eligible: own.eligible && reciprocal.eligible, dimensions: [...own.dimensions, ...reciprocal.dimensions], compatibleCount: own.compatibleCount + reciprocal.compatibleCount, considerationCount: own.considerationCount + reciprocal.considerationCount };

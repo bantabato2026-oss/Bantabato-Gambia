@@ -1,0 +1,2 @@
+ALTER TABLE `family_acknowledgments` ADD CONSTRAINT `family_acknowledgments_pending_share_unique` UNIQUE(`familyShareId`,`status`);--> statement-breakpoint
+ALTER TABLE `family_feedback` ADD CONSTRAINT `family_feedback_share_link_unique` UNIQUE(`familyShareId`,`familyLinkId`);

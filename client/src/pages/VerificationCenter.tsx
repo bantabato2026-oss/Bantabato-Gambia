@@ -6,12 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { trpc } from "@/lib/trpc";
 import { FileUp, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import { useState } from "react";
 
 export default function VerificationCenter() {
   const summary = trpc.verification.summary.useQuery();
   const utils = trpc.useUtils();
-  const upload = trpc.uploads.uploadIdentityDocument.useMutation({ onSuccess: () => { utils.verification.summary.invalidate(); setFile(null); } });
+  const upload = trpc.uploads.uploadIdentityDocument.useMutation({ onSuccess: result => { void utils.verification.summary.invalidate(); setFile(null); toast.success(result.duplicate ? "Your existing private document is already in review. No duplicate was created." : "Your document was submitted for private manual review."); } });
   const [documentType, setDocumentType] = useState<"national_id" | "passport">("national_id");
   const [file, setFile] = useState<File | null>(null);
   const [fileReadError, setFileReadError] = useState("");

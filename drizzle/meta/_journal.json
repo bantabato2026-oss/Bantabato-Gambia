@@ -162,6 +162,13 @@
       "when": 1787421679052,
       "tag": "0022_lame_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1787437576628,
+      "tag": "0023_bizarre_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

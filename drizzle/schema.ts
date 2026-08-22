@@ -399,7 +399,7 @@ export const familyAcknowledgments = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("family_acknowledgments_share_idx").on(table.familyShareId, table.status)],
+  table => [index("family_acknowledgments_share_idx").on(table.familyShareId, table.status), uniqueIndex("family_acknowledgments_pending_share_unique").on(table.familyShareId, table.status)],
 );
 
 export const familyFeedback = mysqlTable(
@@ -412,7 +412,7 @@ export const familyFeedback = mysqlTable(
     note: varchar("note", { length: 1200 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => [index("family_feedback_share_idx").on(table.familyShareId, table.createdAt)],
+  table => [index("family_feedback_share_idx").on(table.familyShareId, table.createdAt), uniqueIndex("family_feedback_share_link_unique").on(table.familyShareId, table.familyLinkId)],
 );
 
 export const familyEvents = mysqlTable(

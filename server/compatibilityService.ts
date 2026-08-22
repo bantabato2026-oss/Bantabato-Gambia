@@ -1,10 +1,11 @@
 import { and, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
-import { blocks, memberPreferences, memberProfiles, profileFieldVisibilities, verificationRecords } from "../drizzle/schema";
+import { blocks, memberInternationalPreferences, memberPreferredCountries, memberPreferences, memberProfiles, profileFieldVisibilities, verificationRecords } from "../drizzle/schema";
 import { evaluatePair, type CompatibilityPreferences, type CompatibilityProfile, type PreferenceImportance } from "./domain/compatibility";
 import { compareCuratedOrder, isEligibleForDiscovery } from "./domain/discoveryPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
 import { safeLocationDisplay } from "./domain/internationalPolicy";
 import { getDb, getMemberEligibility } from "./db";
+import { permitsInternationalDiscovery, type InternationalDiscoveryState } from "./domain/internationalDiscovery";
 
 export type CompatibilityPreferenceInput = {
   minAge?: number;
@@ -84,13 +85,20 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
   const candidates = await db.select().from(memberProfiles).where(and(...conditions)).orderBy(desc(memberProfiles.updatedAt), desc(memberProfiles.id)).limit(limit * 4 + 1);
   const candidateIds = candidates.map(candidate => candidate.id);
   const eligibleCandidateIds = new Set((await Promise.all(candidateIds.map(async id => ({ id, eligible: (await getMemberEligibility(id)).discoveryEligible })))).filter(candidate => candidate.eligible).map(candidate => candidate.id));
-  const [preferenceRows, verificationRows, visibilityRows] = await Promise.all([
+  const [preferenceRows, verificationRows, visibilityRows, internationalPreferenceRows, preferredCountryRows] = await Promise.all([
     candidateIds.length ? db.select().from(memberPreferences).where(inArray(memberPreferences.profileId, candidateIds)) : Promise.resolve([]),
     candidateIds.length ? db.select({ profileId: verificationRecords.profileId }).from(verificationRecords).where(and(inArray(verificationRecords.profileId, candidateIds), eq(verificationRecords.verificationType, "identity_document"), eq(verificationRecords.status, "approved"))) : Promise.resolve([]),
     candidateIds.length ? db.select({ profileId: profileFieldVisibilities.profileId, fieldKey: profileFieldVisibilities.fieldKey, audience: profileFieldVisibilities.audience }).from(profileFieldVisibilities).where(inArray(profileFieldVisibilities.profileId, candidateIds)) : Promise.resolve([]),
+    db.select().from(memberInternationalPreferences).where(inArray(memberInternationalPreferences.profileId, [viewerProfileId, ...candidateIds])),
+    db.select({ profileId: memberPreferredCountries.profileId, countryId: memberPreferredCountries.countryId }).from(memberPreferredCountries).where(and(inArray(memberPreferredCountries.profileId, [viewerProfileId, ...candidateIds]), eq(memberPreferredCountries.preferencePurpose, "discovery"))),
   ]);
   const preferencesByProfile = new Map(preferenceRows.map(row => [row.profileId, normalizePreferences(row)]));
   const verifiedProfiles = new Set(verificationRows.map(row => row.profileId));
+  const internationalPreferenceByProfile = new Map(internationalPreferenceRows.map(row => [row.profileId, row]));
+  const preferredCountriesByProfile = new Map<number, Set<number>>();
+  preferredCountryRows.forEach(row => { const selected = preferredCountriesByProfile.get(row.profileId) ?? new Set<number>(); selected.add(row.countryId); preferredCountriesByProfile.set(row.profileId, selected); });
+  const internationalState = (profile: typeof memberProfiles.$inferSelect): InternationalDiscoveryState => ({ residenceCountryId: profile.residenceCountryId, longDistancePreference: internationalPreferenceByProfile.get(profile.id)?.longDistancePreference ?? "no_preference", preferredDiscoveryCountryIds: preferredCountriesByProfile.get(profile.id) ?? new Set<number>() });
+  const viewerInternationalState = internationalState(viewer[0]);
   const visibilitiesByProfile = new Map<number, Map<string, string>>();
   visibilityRows.forEach(row => {
     const fields = visibilitiesByProfile.get(row.profileId) ?? new Map<string, string>();
@@ -99,7 +107,7 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
   });
 
   const items = candidates
-    .filter(candidate => eligibleCandidateIds.has(candidate.id) && isEligibleForDiscovery({ profileStatus: candidate.profileStatus, searchVisible: candidate.searchVisible, deletedAt: candidate.deletedAt, profileVisibility: candidate.profileVisibility, blocked: excluded.has(candidate.id) }))
+    .filter(candidate => eligibleCandidateIds.has(candidate.id) && isEligibleForDiscovery({ profileStatus: candidate.profileStatus, searchVisible: candidate.searchVisible, deletedAt: candidate.deletedAt, profileVisibility: candidate.profileVisibility, blocked: excluded.has(candidate.id) }) && permitsInternationalDiscovery(viewerInternationalState, internationalState(candidate)))
     .map(candidate => {
       const compatibility = evaluatePair(viewer[0] as CompatibilityProfile, candidate as CompatibilityProfile, viewerPreferences, preferencesByProfile.get(candidate.id) ?? {});
       return { candidate, compatibility, identityVerified: verifiedProfiles.has(candidate.id), visibility: visibilitiesByProfile.get(candidate.id) ?? new Map<string, string>() };

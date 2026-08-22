@@ -21,7 +21,8 @@ const statusTone = (status: string) => status === "available" ? "bg-emerald-50 t
 
 export default function InternationalPage() {
   const settings = trpc.international.settings.useQuery();
-  const save = trpc.international.saveSettings.useMutation({ onSuccess: () => { void settings.refetch(); toast.success("International settings saved securely."); }, onError: () => toast.error("International settings could not be saved. Please try again.") });
+  const utils = trpc.useUtils();
+  const save = trpc.international.saveSettings.useMutation({ onSuccess: () => { void settings.refetch(); void utils.discovery.curated.invalidate(); void utils.discovery.list.invalidate(); void utils.recommendations.list.invalidate(); toast.success("International settings saved securely. Discovery and recommendations will now respect your current country and long-distance choices."); }, onError: () => toast.error("International settings could not be saved. Please try again.") });
   const [residenceCountryId, setResidenceCountryId] = useState(0); const [timezone, setTimezone] = useState("Africa/Banjul"); const [locale, setLocale] = useState("en");
   const [region, setRegion] = useState(""); const [city, setCity] = useState(""); const [visibility, setVisibility] = useState<Visibility>("eligible_members"); const [detail, setDetail] = useState<Detail>("country");
   const [diaspora, setDiaspora] = useState<Diaspora>("living_in_gambia"); const [phone, setPhone] = useState(""); const [phoneCountryId, setPhoneCountryId] = useState<number | null>(null); const [longDistance, setLongDistance] = useState<LongDistance>("no_preference");

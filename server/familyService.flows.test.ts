@@ -11,13 +11,14 @@ function fakeDb(rows: unknown[][]) {
   const updates: Array<{ table: unknown; values: Record<string, unknown> }> = [];
   const select = () => {
     const result = rows.shift() ?? [];
-    const query = { limit: async () => result, orderBy: async () => result, then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve) };
+    const query = { limit: async () => result, orderBy: async () => result, for: () => query, then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve) };
     const joined = { where: () => query, innerJoin: () => joined };
     return { from: () => ({ where: () => query, innerJoin: () => joined }) };
   };
   const insert = (table: unknown) => ({ values: (values: Record<string, unknown>) => { inserts.push({ table, values }); return Object.assign([{ insertId: inserts.length }], { onDuplicateKeyUpdate: async () => undefined }); } });
-  const update = (table: unknown) => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updates.push({ table, values }); } }) });
-  return { db: { select, insert, update }, inserts, updates };
+  const update = (table: unknown) => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updates.push({ table, values }); return [{ affectedRows: 1 }]; } }) });
+  const db = { select, insert, update, transaction: async <T>(callback: (tx: { select: typeof select; insert: typeof insert; update: typeof update }) => Promise<T>) => callback({ select, insert, update }) };
+  return { db, inserts, updates };
 }
 
 const parentLink = { id: 31, memberProfileId: 3, relationship: "parent" as const, contactName: "Awa", contactEmail: "parent@example.test", status: "accepted" as const, familyParticipantUserId: 44, waliVerificationStatus: "not_required" as const };
@@ -34,7 +35,7 @@ describe("Phase 6 Family Circle service flows", () => {
     expect(invitation.invitationCode).toHaveLength(24);
 	    expect(fake.inserts[0]?.values).toMatchObject({ memberProfileId: 3, relationship: "parent", status: "invited", contactEmail: "parent@example.test" });
     expect(fake.inserts[0]?.values.invitationCodeHash).not.toBe(invitation.invitationCode);
-    expect(mocks.createAuditLog).toHaveBeenCalledWith(9, "family.invitation_sent", "family_link", expect.any(String), { relationship: "parent" });
+    expect(mocks.createAuditLog).toHaveBeenCalledWith(9, "family.invitation_sent", "family_link", expect.any(String), { relationship: "parent", reissued: false });
   });
 
   it("binds a Wali/Guardian invitation only to the invited participant account and keeps verification pending", async () => {
@@ -106,10 +107,10 @@ describe("Phase 6 Family Circle service flows", () => {
 	  });
 
 	  it("records an acknowledgment request separately from the match and allows only the linked Family Circle participant to respond", async () => {
-	    const fake = fakeDb([[{ share: { id: 71, status: "active" }, link: parentLink }], [{ id: 1 }], [{ acknowledgment: { id: 81, status: "requested" }, share: { id: 71 }, link: parentLink }], [{ userId: 9 }]]);
+    const fake = fakeDb([[{ share: { id: 71, status: "active" }, link: parentLink }], [{ id: 1 }], [], [{ acknowledgment: { id: 81, status: "requested" }, share: { id: 71 }, link: parentLink }], [{ userId: 9 }]]);
 	    mocks.getDb.mockResolvedValue(fake.db);
 
-	    await expect(requestFamilyAcknowledgment(3, 9, 71)).resolves.toEqual({ acknowledgmentId: 1 });
+    await expect(requestFamilyAcknowledgment(3, 9, 71)).resolves.toEqual({ acknowledgmentId: 1, duplicate: false });
 	    await expect(respondToFamilyAcknowledgment(44, 81, "acknowledged")).resolves.toEqual({ success: true });
 
 	    expect(fake.inserts.some(insert => insert.values.familyShareId === 71 && insert.values.status === "requested")).toBe(true);
@@ -118,9 +119,9 @@ describe("Phase 6 Family Circle service flows", () => {
 	  });
 
   it("records advisory family feedback without altering any member-to-member match or consent state", async () => {
-    const fake = fakeDb([[{ share: { id: 71, status: "active" }, link: parentLink }], [{ id: 1 }], [{ userId: 9 }]]);
+    const fake = fakeDb([[{ share: { id: 71, status: "active" }, link: parentLink }], [{ id: 1 }], [], [], [{ userId: 9 }]]);
     mocks.getDb.mockResolvedValue(fake.db);
-    await expect(submitFamilyFeedback(44, 71, "has_concerns", "Please consider timing.")).resolves.toEqual({ feedbackId: 1 });
+    await expect(submitFamilyFeedback(44, 71, "has_concerns", "Please consider timing.")).resolves.toEqual({ feedbackId: 1, duplicate: false });
 
     expect(fake.inserts.some(insert => insert.values.response === "has_concerns" && insert.values.note === "Please consider timing.")).toBe(true);
     expect(fake.updates).toHaveLength(0);

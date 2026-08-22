@@ -32,7 +32,7 @@ export default function MemberDashboardPage() {
   const pendingPhotos = member?.completeness?.pendingPhotoCount ?? 0;
   const unreadNotifications = (notifications.data ?? []).filter(item => !item.readAt).length;
   const unreadMessages = (conversations.data?.items ?? []).reduce((sum, item) => sum + (item.unreadCount ?? 0), 0);
-  const pendingFamily = (family.data ?? []).filter(link => ["pending", "pending_verification"].includes(link.status)).length;
+  const pendingFamily = (family.data ?? []).filter(link => ["invited", "pending", "pending_verification", "unverified", "expired"].includes(link.status)).length;
   const membership = billing.data?.membership;
   const pendingRefund = (billing.data?.refunds ?? []).filter(refund => ["requested", "processing"].includes(refund.status)).length;
   const recommendationCount = recommendations.data?.items.length ?? 0;
@@ -41,7 +41,7 @@ export default function MemberDashboardPage() {
     latestVerification?.status !== "approved" ? { title: "Review your verification status", detail: latestVerification ? `Current private status: ${statusLabel(latestVerification.status)}.` : "Identity review has not started.", href: "/app/verification", label: "Open verification" } : null,
     incoming.data?.length ? { title: `${incoming.data.length} introduction${incoming.data.length === 1 ? "" : "s"} awaiting your choice`, detail: "An introduction stays one-sided until you respond. No conversation opens automatically.", href: "/app/matches", label: "Review introductions" } : null,
     unreadMessages ? { title: `${unreadMessages} unread private message${unreadMessages === 1 ? "" : "s"}`, detail: "Messages exist only within an active mutual connection and retain report/block controls.", href: "/app/messages", label: "Open messages" } : null,
-    pendingFamily ? { title: `${pendingFamily} Family Circle invitation or verification item`, detail: "A pending Family Circle link grants no private message, document, decision, or call-consent access.", href: "/app/family", label: "Review Family Circle" } : null,
+    pendingFamily ? { title: `${pendingFamily} Family Circle invitation or verification item`, detail: "Review its factual invitation, expiry, or role-verification state. A pending Family Circle link grants no private message, document, decision, or call-consent access.", href: "/app/family", label: "Review Family Circle" } : null,
     pendingRefund ? { title: `${pendingRefund} refund request${pendingRefund === 1 ? "" : "s"} pending`, detail: "Finance/provider review is not a completed refund and does not change protections or membership status.", href: "/app/billing", label: "Review billing" } : null,
   ].filter(Boolean) as Array<{ title: string; detail: string; href: string; label: string }>;
 

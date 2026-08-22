@@ -706,11 +706,16 @@ export async function reviewProfilePhoto(actorUserId: number, photoId: number, d
 
 export async function uploadIdentityDocument(profileId: number, documentType: "national_id" | "passport", dataUrl: string) {
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "application/pdf"], 10 * 1024 * 1024);
-  const stored = await storagePut(`members/${profileId}/verification/identity-${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await db.insert(verificationRecords).values({ profileId, verificationType: "identity_document", documentType, documentStorageKey: stored.key, status: "submitted", submittedAt: new Date() });
-  return { submitted: true };
+  return db.transaction(async tx => {
+    await tx.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update");
+    const open = await tx.select({ id: verificationRecords.id, status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"), inArray(verificationRecords.status, ["submitted", "under_review", "escalated"]))).limit(1);
+    if (open[0]) return { submitted: true, duplicate: true, status: open[0].status };
+    const stored = await storagePut(`members/${profileId}/verification/identity-${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
+    await tx.insert(verificationRecords).values({ profileId, verificationType: "identity_document", documentType, documentStorageKey: stored.key, status: "submitted", submittedAt: new Date() });
+    return { submitted: true, duplicate: false, status: "submitted" as const };
+  });
 }
 
 export async function getVerificationSummary(profileId: number) {

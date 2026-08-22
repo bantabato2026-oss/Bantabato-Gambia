@@ -31,6 +31,10 @@ function createInvitationCode() {
   return randomBytes(18).toString("base64url");
 }
 
+function isDuplicateKey(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "ER_DUP_ENTRY");
+}
+
 async function requireDb() {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
@@ -77,11 +81,34 @@ export async function createFamilyInvitation(memberProfileId: number, actorUserI
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000);
   const waliVerificationStatus = input.relationship === "wali_guardian" ? "unverified" : "not_required" as const;
-  const inserted = await db.insert(familyLinks).values({ memberProfileId, relationship: input.relationship, contactName: input.contactName, contactEmail: input.contactEmail.toLowerCase(), contactPhone: input.contactPhone || null, preferredContactMethod: input.preferredContactMethod, status: "invited", waliVerificationStatus, invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, canReceiveMatchNotifications: false, invitedAt: now });
-  const familyLinkId = Number(inserted[0]?.insertId ?? 0);
-  await recordEvent(familyLinkId, actorUserId, "invitation_sent", { relationship: input.relationship, preferredContactMethod: input.preferredContactMethod });
-  await createAuditLog(actorUserId, "family.invitation_sent", "family_link", String(familyLinkId), { relationship: input.relationship });
-  return { familyLinkId, invitationCode: code, expiresAt };
+  const contactEmail = input.contactEmail.toLowerCase();
+  const outcome = await db.transaction(async tx => {
+    await tx.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.id, memberProfileId)).for("update");
+    const existing = await tx.select().from(familyLinks).where(and(eq(familyLinks.memberProfileId, memberProfileId), eq(familyLinks.relationship, input.relationship), eq(familyLinks.contactEmail, contactEmail))).limit(1);
+    if (existing[0] && activeParticipantStatuses.includes(existing[0].status as typeof activeParticipantStatuses[number])) throw new Error("This Family Circle participant is already active. Change their permissions or remove access instead of creating another invitation.");
+    if (existing[0]) {
+      await tx.update(familyLinks).set({ contactName: input.contactName, contactPhone: input.contactPhone || null, preferredContactMethod: input.preferredContactMethod, familyParticipantUserId: null, status: "invited", waliVerificationStatus, invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, canReceiveMatchNotifications: false, consentedAt: null, invitedAt: now, acceptedAt: null, declinedAt: null, restrictedAt: null, removedAt: null, revokedAt: null }).where(eq(familyLinks.id, existing[0].id));
+      return { familyLinkId: existing[0].id, reissued: true };
+    }
+    const inserted = await tx.insert(familyLinks).values({ memberProfileId, relationship: input.relationship, contactName: input.contactName, contactEmail, contactPhone: input.contactPhone || null, preferredContactMethod: input.preferredContactMethod, status: "invited", waliVerificationStatus, invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, canReceiveMatchNotifications: false, invitedAt: now });
+    return { familyLinkId: Number(inserted[0]?.insertId ?? 0), reissued: false };
+  });
+  await recordEvent(outcome.familyLinkId, actorUserId, "invitation_sent", { relationship: input.relationship, preferredContactMethod: input.preferredContactMethod, reissued: outcome.reissued });
+  await createAuditLog(actorUserId, "family.invitation_sent", "family_link", String(outcome.familyLinkId), { relationship: input.relationship, reissued: outcome.reissued });
+  return { ...outcome, invitationCode: code, expiresAt };
+}
+
+export async function reissueFamilyInvitation(memberProfileId: number, actorUserId: number, familyLinkId: number) {
+  const db = await requireDb();
+  const code = createInvitationCode();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+  const link = await ownedLink(memberProfileId, familyLinkId);
+  if (link.status !== "invited") throw new Error("Only a pending Family Circle invitation can be resent.");
+  await db.update(familyLinks).set({ invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, invitedAt: now }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited")));
+  await recordEvent(familyLinkId, actorUserId, "invitation_sent", { relationship: link.relationship, reissued: true });
+  await createAuditLog(actorUserId, "family.invitation_resent", "family_link", String(familyLinkId), { relationship: link.relationship });
+  return { familyLinkId, invitationCode: code, expiresAt, reissued: true };
 }
 
 export async function acceptFamilyInvitation(userId: number, email: string | null | undefined, code: string) {
@@ -94,7 +121,8 @@ export async function acceptFamilyInvitation(userId: number, email: string | nul
   if (owner === userId) throw new Error("A member cannot become their own Family Circle participant");
   const now = new Date();
   const status = link.relationship === "wali_guardian" ? "pending_verification" : "accepted" as const;
-  await db.update(familyLinks).set({ familyParticipantUserId: userId, status, acceptedAt: now, consentedAt: now, invitationCodeHash: null }).where(eq(familyLinks.id, link.id));
+  const accepted = await db.update(familyLinks).set({ familyParticipantUserId: userId, status, acceptedAt: now, consentedAt: now, invitationCodeHash: null }).where(and(eq(familyLinks.id, link.id), eq(familyLinks.status, "invited"), eq(familyLinks.invitationCodeHash, invitationHash(code))));
+  if (!Number((accepted[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This Family Circle invitation is unavailable");
   await recordEvent(link.id, userId, "invitation_accepted", { relationship: link.relationship, status });
   await createAuditLog(userId, "family.invitation_accepted", "family_link", String(link.id), { relationship: link.relationship });
   if (owner) await createNotification(owner, "family", "Family Circle invitation accepted", `${link.contactName} accepted your ${link.relationship === "wali_guardian" ? "Wali/Guardian" : "Parent"} invitation.`, "/app/family", `family-accepted:${link.id}`);
@@ -107,7 +135,8 @@ export async function declineFamilyInvitation(userId: number, email: string | nu
   const rows = await db.select().from(familyLinks).where(and(eq(familyLinks.invitationCodeHash, invitationHash(code)), eq(familyLinks.status, "invited"), gt(familyLinks.invitationExpiresAt, new Date()))).limit(1);
   const link = rows[0];
   if (!link || link.contactEmail?.toLowerCase() !== email.toLowerCase()) throw new Error("This Family Circle invitation is unavailable");
-  await db.update(familyLinks).set({ status: "declined", declinedAt: new Date(), invitationCodeHash: null }).where(eq(familyLinks.id, link.id));
+  const declined = await db.update(familyLinks).set({ status: "declined", declinedAt: new Date(), invitationCodeHash: null }).where(and(eq(familyLinks.id, link.id), eq(familyLinks.status, "invited"), eq(familyLinks.invitationCodeHash, invitationHash(code))));
+  if (!Number((declined[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This Family Circle invitation is unavailable");
   await recordEvent(link.id, userId, "invitation_declined", { relationship: link.relationship });
   const owner = await memberUserId(link.memberProfileId);
   if (owner) await createNotification(owner, "family", "Family Circle invitation declined", `${link.contactName} declined your Family Circle invitation.`, "/app/family", `family-declined:${link.id}`);
@@ -121,11 +150,12 @@ export async function listMemberFamilyCircle(memberProfileId: number) {
   const shares = links.length ? await db.select().from(familyShares).where(and(inArray(familyShares.familyLinkId, links.map(link => link.id)), eq(familyShares.status, "active"))) : [];
   const events = links.length ? await db.select().from(familyEvents).where(inArray(familyEvents.familyLinkId, links.map(link => link.id))).orderBy(desc(familyEvents.createdAt)).limit(120) : [];
   const visibleEventTypes = new Set(["invitation_sent", "invitation_accepted", "invitation_declined", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted"]);
+  const now = new Date();
   return links.map(link => ({
     id: link.id,
     relationship: link.relationship,
     contactName: link.contactName,
-    status: link.status,
+    status: link.status === "invited" && link.invitationExpiresAt && link.invitationExpiresAt <= now ? "expired" : link.status,
     canReceiveMatchNotifications: link.canReceiveMatchNotifications,
     waliVerificationStatus: link.waliVerificationStatus,
     invitationExpiresAt: link.invitationExpiresAt,
@@ -190,11 +220,19 @@ export async function requestFamilyAcknowledgment(memberProfileId: number, actor
   const row = rows[0];
   if (!row) throw new Error("Shared potential match not found");
   await requireGrantedPermission(row.link.id, "acknowledgment_status");
-  const inserted = await db.insert(familyAcknowledgments).values({ familyShareId, status: "requested" });
+  const existing = await db.select({ id: familyAcknowledgments.id }).from(familyAcknowledgments).where(and(eq(familyAcknowledgments.familyShareId, familyShareId), eq(familyAcknowledgments.status, "requested"))).limit(1);
+  if (existing[0]) return { acknowledgmentId: existing[0].id, duplicate: true };
+  let inserted;
+  try { inserted = await db.insert(familyAcknowledgments).values({ familyShareId, status: "requested" }); } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    const concurrent = await db.select({ id: familyAcknowledgments.id }).from(familyAcknowledgments).where(and(eq(familyAcknowledgments.familyShareId, familyShareId), eq(familyAcknowledgments.status, "requested"))).limit(1);
+    if (concurrent[0]) return { acknowledgmentId: concurrent[0].id, duplicate: true };
+    throw error;
+  }
   const acknowledgmentId = Number(inserted[0]?.insertId ?? 0);
   await recordEvent(row.link.id, actorUserId, "acknowledgment_requested", { familyShareId, acknowledgmentId });
   if (row.link.familyParticipantUserId) await createNotification(row.link.familyParticipantUserId, "family", "Family acknowledgment requested", "A member has asked you to acknowledge that you are aware of a shared potential match. This does not approve or change any member decision.", "/family", `family-acknowledgment:${acknowledgmentId}`);
-  return { acknowledgmentId };
+  return { acknowledgmentId, duplicate: false };
 }
 
 export async function respondToFamilyAcknowledgment(userId: number, acknowledgmentId: number, response: "acknowledged" | "declined") {
@@ -215,12 +253,21 @@ export async function submitFamilyFeedback(userId: number, familyShareId: number
   const row = rows[0];
   if (!row) throw new Error("Shared potential match is unavailable");
   await requireGrantedPermission(row.link.id, "potential_match");
-  const inserted = await db.insert(familyFeedback).values({ familyShareId, familyLinkId: row.link.id, response, note: normalizeOptionalUserText(note) || null });
+  await db.select({ id: familyLinks.id }).from(familyLinks).where(eq(familyLinks.id, row.link.id)).for("update");
+  const existing = await db.select({ id: familyFeedback.id }).from(familyFeedback).where(and(eq(familyFeedback.familyShareId, familyShareId), eq(familyFeedback.familyLinkId, row.link.id))).limit(1);
+  if (existing[0]) return { feedbackId: existing[0].id, duplicate: true };
+  let inserted;
+  try { inserted = await db.insert(familyFeedback).values({ familyShareId, familyLinkId: row.link.id, response, note: normalizeOptionalUserText(note) || null }); } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    const concurrent = await db.select({ id: familyFeedback.id }).from(familyFeedback).where(and(eq(familyFeedback.familyShareId, familyShareId), eq(familyFeedback.familyLinkId, row.link.id))).limit(1);
+    if (concurrent[0]) return { feedbackId: concurrent[0].id, duplicate: true };
+    throw error;
+  }
   const feedbackId = Number(inserted[0]?.insertId ?? 0);
   await recordEvent(row.link.id, userId, "feedback_submitted", { familyShareId, feedbackId, response });
   const owner = await memberUserId(row.link.memberProfileId);
   if (owner) await createNotification(owner, "family", "Family feedback received", `${row.link.contactName} shared Family Circle feedback. It is advisory and does not change your match or communication access.`, "/app/family", `family-feedback:${feedbackId}`);
-  return { feedbackId };
+  return { feedbackId, duplicate: false };
 }
 
 export async function removeFamilyParticipant(memberProfileId: number, actorUserId: number, familyLinkId: number) {
