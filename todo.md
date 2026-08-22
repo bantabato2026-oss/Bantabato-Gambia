@@ -292,3 +292,6 @@
 - [x] Audit the completed product for genuine freeze-blocking defects, missing user journeys, accessibility/security/state-consistency gaps, and obvious design-system inconsistencies without adding cosmetic functionality.
 - [x] Formalize TEST ONLY browser personas and executable single-account, multi-account, accessibility, media, security, recovery, and expiry workflow matrices without creating any account or claiming execution.
 - [x] Run final automated and read-only validation, publish the BANTABATO — CONTROLLED BROWSER VALIDATION PACKAGE & FINAL PRODUCT FREEZE REVIEW report, and checkpoint without a readiness claim.
+- [x] Reconcile the frozen baseline, automated/visual evidence, browser-validation package, accessibility matrix, external dependencies, responsibilities, and launch obligations against the Master Product Acceptance scope.
+- [x] Create the authoritative BANTABATO — MASTER PRODUCT ACCEPTANCE & LAUNCH VALIDATION MATRIX with explicit capability IDs, evidence standards, current statuses, dependency register, RACI-style assignments, objective launch gates, and no fabricated execution claims.
+- [x] Run final frozen-baseline validation, complete the master acceptance dashboard and blockers, checkpoint the artifact, and deliver the evidence without launch or readiness claims.
