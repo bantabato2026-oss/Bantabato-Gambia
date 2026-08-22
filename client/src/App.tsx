@@ -36,6 +36,7 @@ const ProfileMediaPage = lazy(() => import("@/pages/ProfileMediaPage"));
 const VerificationCenter = lazy(() => import("@/pages/VerificationCenter"));
 const CompatibilityPreferencesPage = lazy(() => import("@/pages/CompatibilityPreferencesPage"));
 const ProfileDetailsPage = lazy(() => import("@/pages/ProfileDetailsPage"));
+const ProfilePreviewPage = lazy(() => import("@/pages/ProfilePreviewPage"));
 const RecommendationsPage = lazy(() => import("@/pages/RecommendationsPage"));
 const BillingPage = lazy(() => import("@/pages/BillingPage"));
 const SafetyCenterPage = lazy(() => import("@/pages/SafetyCenterPage"));
@@ -78,6 +79,7 @@ function Router() {
     <Route path="/app/onboarding" component={OnboardingPage} />
     <Route path="/app/profile" component={ProfilePage} />
     <Route path="/app/profile/details" component={ProfileDetailsPage} />
+		<Route path="/app/profile/preview" component={ProfilePreviewPage} />
 	    <Route path="/app/compatibility" component={CompatibilityPreferencesPage} />
 		<Route path="/app/international" component={InternationalPage} />
 		<Route path="/app/device" component={DeviceExperiencePage} />

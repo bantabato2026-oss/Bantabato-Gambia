@@ -46,11 +46,14 @@ export async function getMemberBilling(profileId: number) {
     db.select().from(subscriptions).where(eq(subscriptions.profileId, profileId)).orderBy(desc(subscriptions.createdAt)).limit(20),
     db.select().from(paymentTransactions).where(eq(paymentTransactions.profileId, profileId)).orderBy(desc(paymentTransactions.createdAt)).limit(50),
   ]);
+  const transactionIds = transactions.map((transaction: any) => transaction.id);
+  const refunds = transactionIds.length ? await db.select().from(paymentRefunds).where(inArray(paymentRefunds.paymentTransactionId, transactionIds)).orderBy(desc(paymentRefunds.createdAt)).limit(50) : [];
   const active = subscriptionsForProfile.find((subscription: any) => ["trial", "active", "past_due", "grace_period"].includes(subscription.status)) ?? null;
   return {
     membership: active ? { subscriptionId: active.id, level: active.plan === "premium" ? "premium" : "free", status: active.status, currentPeriodEndsAt: active.currentPeriodEndsAt, gracePeriodEndsAt: active.gracePeriodEndsAt, cancelAtPeriodEnd: active.cancelAtPeriodEnd, autoRenew: active.autoRenew } : { subscriptionId: null, level: "free", status: "active", currentPeriodEndsAt: null, gracePeriodEndsAt: null, cancelAtPeriodEnd: false, autoRenew: false },
     billingSettings: settings[0] ?? { preferredCurrency: "GMD", receiptEmail: null },
     transactions: transactions.map((transaction: any) => safeBillingSummary(transaction)),
+    refunds: refunds.map((refund: any) => ({ id: refund.id, transactionReference: transactions.find((transaction: any) => transaction.id === refund.paymentTransactionId)?.internalReference ?? "Private payment record", amountMinor: refund.amountMinor, status: refund.status, createdAt: refund.createdAt, processedAt: refund.processedAt ?? null })),
   };
 }
 
@@ -202,7 +205,8 @@ export async function requestRefund(actorUserId: number, transactionId: number, 
   if (alreadyRefunded + amountMinor > transaction[0].amountMinor) throw new Error("Refunds cannot exceed the confirmed payment amount.");
   const inserted = await db.insert(paymentRefunds).values({ paymentTransactionId: transactionId, amountMinor, reason: reason?.trim() || null, requestedByUserId: actorUserId, status: "requested" }).$returningId();
   const refundId = Number(inserted[0]?.id ?? 0);
-  await db.update(paymentTransactions).set({ status: alreadyRefunded + amountMinor === transaction[0].amountMinor ? "refunded" : "partially_refunded" }).where(eq(paymentTransactions.id, transactionId));
+  const userId = transaction[0].profileId ? await profileUser(transaction[0].profileId) : null;
+  if (userId) await createNotification(userId, "billing", "Refund request received", "A refund request is recorded for provider review. Your membership conveniences and account protections have not changed while the request is pending.", "/app/billing", `billing-refund-requested:${refundId}`);
   await createAuditLog(actorUserId, "billing.refund_requested", "payment_refund", String(refundId), { transactionId, amountMinor });
   return { refundId, status: "requested" as const };
 }

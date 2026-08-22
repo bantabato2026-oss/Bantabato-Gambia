@@ -11,6 +11,8 @@ const profileMedia = readFileSync(join(process.cwd(), "client/src/pages/ProfileM
 const memberRouteStates = readFileSync(join(process.cwd(), "client/src/pages/MemberRouteStates.tsx"), "utf8");
 const international = readFileSync(join(process.cwd(), "client/src/pages/InternationalPage.tsx"), "utf8");
 const recommendations = readFileSync(join(process.cwd(), "client/src/pages/RecommendationsPage.tsx"), "utf8");
+const verification = readFileSync(join(process.cwd(), "client/src/pages/VerificationCenter.tsx"), "utf8");
+const profilePreview = readFileSync(join(process.cwd(), "client/src/pages/ProfilePreviewPage.tsx"), "utf8");
 
 describe("full product experience interaction contracts", () => {
   it("gives registration a branded, privacy-first orientation while retaining the existing secure sign-in action", () => {
@@ -69,5 +71,26 @@ describe("full product experience interaction contracts", () => {
     expect(recommendations).toContain("Loading your considered introductions…");
     expect(recommendations).toContain("This explanation is unavailable right now.");
     expect(recommendations).not.toContain("animate-pulse");
+  });
+
+  it("uses the newest identity record and gives every implemented private verification outcome member-safe, non-duplicating guidance", () => {
+    expect(verification).toContain('const latestIdentityRecord = summary.data?.find(item => item.verificationType === "identity_document")');
+    expect(verification).toContain('["submitted", "under_review", "escalated"]');
+    expect(verification).toContain("A private review is already open.");
+    expect(verification).toContain('normalized === "requires_resubmission"');
+    expect(verification).toContain('normalized === "expired"');
+    expect(verification).toContain('normalized === "escalated"');
+    expect(verification).toContain("Private reviewer detail is not shown here");
+    expect(verification).not.toContain("records.at(-1)");
+  });
+
+  it("gives members a privacy-aware profile preview without presenting a public link, private media, contact data, or an eligibility bypass", () => {
+    expect(profilePreview).toContain("trpc.profile.mine.useQuery()");
+    expect(profilePreview).toContain("trpc.profile.fieldVisibilities.useQuery()");
+    expect(profilePreview).toContain("Actual discovery and profile viewing still depend on your current eligibility");
+    expect(profilePreview).toContain("Contact details, verification documents, messages, and Family Circle information are never previewed here.");
+    expect(profilePreview).toContain('audiences.get(key) !== "private"');
+    expect(profilePreview).toContain("Approved photos are not fetched into this private text preview.");
+    expect(profilePreview).toContain('setLocation("/app/compatibility")');
   });
 });

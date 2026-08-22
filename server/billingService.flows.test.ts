@@ -59,13 +59,13 @@ describe("Phase 8 billing service flows", () => {
     expect(fake.updates.flatMap(entry => Object.keys(entry.values))).not.toContain("profileStatus");
   });
 
-  it("records only a role-controlled refund request within the confirmed amount and never invokes a provider from the generic workflow", async () => {
-    const transaction = { id: 8, status: "successful", amountMinor: 15000, provider: "paystack" };
+  it("records only a role-controlled pending refund request within the confirmed amount without falsely marking payment completion or invoking a provider", async () => {
+    const transaction = { id: 8, profileId: 3, status: "successful", amountMinor: 15000, provider: "paystack" };
     const fake = fakeDb([[transaction], []]);
     mocks.getDb.mockResolvedValue(fake.db);
     await expect(requestRefund(99, 8, 5000, "Member request")).resolves.toEqual({ refundId: 1, status: "requested" });
     expect(fake.inserts.some(entry => entry.values.paymentTransactionId === 8 && entry.values.status === "requested" && entry.values.amountMinor === 5000)).toBe(true);
-    expect(fake.updates.some(entry => entry.values.status === "partially_refunded")).toBe(true);
+    expect(fake.updates.some(entry => entry.values.status === "partially_refunded" || entry.values.status === "refunded")).toBe(false);
     expect(mocks.createAuditLog).toHaveBeenCalledWith(99, "billing.refund_requested", "payment_refund", "1", { transactionId: 8, amountMinor: 5000 });
   });
 

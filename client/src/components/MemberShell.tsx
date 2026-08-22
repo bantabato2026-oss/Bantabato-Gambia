@@ -7,7 +7,7 @@ import { startLogin } from "@/const";
 import { useNetworkState } from "@/hooks/useDeviceExperience";
 import { useIsMobile } from "@/hooks/useMobile";
 import { clearAllMobileDrafts } from "@/lib/mobileExperience";
-import { Bell, Camera, ChevronRight, CircleUserRound, Compass, CreditCard, Globe2, HeartHandshake, Home, Lightbulb, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound, WifiOff, Smartphone } from "lucide-react";
+import { Bell, Camera, ChevronRight, CircleUserRound, Compass, CreditCard, Eye, Globe2, HeartHandshake, Home, Lightbulb, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound, WifiOff, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 
@@ -20,6 +20,7 @@ const primaryLinks = [
 ];
 const secondaryLinks = [
   { label: "My profile", href: "/app/profile", icon: CircleUserRound },
+	  { label: "Profile preview", href: "/app/profile/preview", icon: Eye },
 	  { label: "Compatibility", href: "/app/compatibility", icon: SlidersHorizontal },
 	  { label: "International", href: "/app/international", icon: Globe2 },
 	  { label: "Profile photos", href: "/app/photos", icon: Camera },

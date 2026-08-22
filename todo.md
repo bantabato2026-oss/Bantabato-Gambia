@@ -295,3 +295,6 @@
 - [x] Reconcile the frozen baseline, automated/visual evidence, browser-validation package, accessibility matrix, external dependencies, responsibilities, and launch obligations against the Master Product Acceptance scope.
 - [x] Create the authoritative BANTABATO — MASTER PRODUCT ACCEPTANCE & LAUNCH VALIDATION MATRIX with explicit capability IDs, evidence standards, current statuses, dependency register, RACI-style assignments, objective launch gates, and no fabricated execution claims.
 - [x] Run final frozen-baseline validation, complete the master acceptance dashboard and blockers, checkpoint the artifact, and deliver the evidence without launch or readiness claims.
+- [x] Audit the active member, verification, discovery, communication, readiness, Family Circle, safety, billing, notification, administration, country, mobile/PWA, public, and editorial journeys for high-value genuine internal capability gaps.
+- [x] Implement only verified high-value internal product completions and recovery states without weakening server authority, privacy, consent, safety, provider boundaries, or documented product philosophy.
+- [x] Add focused regression coverage, revalidate cross-module integrity and desktop/mobile presentation, publish the BANTABATO — MAJOR PRODUCT CAPABILITY COMPLETION SPRINT report, and checkpoint without external activation or a launch claim.

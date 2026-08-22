@@ -653,7 +653,7 @@ export async function reviewProfilePhoto(actorUserId: number, photoId: number, d
 
 export async function uploadIdentityDocument(profileId: number, documentType: "national_id" | "passport", dataUrl: string) {
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "application/pdf"], 10 * 1024 * 1024);
-  const stored = await storagePut(`members/${profileId}/verification/identity.${safeExtension(mimeType)}`, buffer, mimeType);
+  const stored = await storagePut(`members/${profileId}/verification/identity-${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.insert(verificationRecords).values({ profileId, verificationType: "identity_document", documentType, documentStorageKey: stored.key, status: "submitted", submittedAt: new Date() });

@@ -1,0 +1,48 @@
+import { MemberShell } from "@/components/MemberShell";
+import { StatePanel, StateSkeleton } from "@/components/StatePanel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import { ArrowLeft, CheckCircle2, Eye, LockKeyhole, Pencil, ShieldCheck, UserRound } from "lucide-react";
+import { useLocation } from "wouter";
+
+type Audience = "public" | "verified_members" | "potential_matches" | "matched_members" | "family_circle" | "private" | "admin_restricted";
+
+function audienceCopy(audience?: Audience) {
+  if (audience === "public") return "Public profile view";
+  if (audience === "verified_members") return "Verified members";
+  if (audience === "potential_matches") return "Potential matches";
+  if (audience === "matched_members") return "Mutual matches";
+  if (audience === "family_circle") return "Family Circle only";
+  return "Private to you";
+}
+
+export default function ProfilePreviewPage() {
+  const profile = trpc.profile.mine.useQuery();
+  const visibility = trpc.profile.fieldVisibilities.useQuery();
+  const [, setLocation] = useLocation();
+
+  if (profile.isLoading || visibility.isLoading) return <MemberShell eyebrow="Profile preview" title="See your introduction with care." description="Preparing a privacy-aware preview of your current profile."><StateSkeleton label="Loading your private profile preview…" /></MemberShell>;
+  if (profile.isError || visibility.isError) return <MemberShell eyebrow="Profile preview" title="See your introduction with care." description="This preview never changes your profile or privacy choices."><StatePanel kind="error" title="Your profile preview is unavailable right now." description="No profile, photo, or visibility setting has been changed. Please try again." action={<Button className="btn-forest" onClick={() => { void profile.refetch(); void visibility.refetch(); }}>Try again</Button>} /></MemberShell>;
+
+  const current = profile.data as any;
+  const audiences = new Map((visibility.data ?? []).map(field => [field.fieldKey, field.audience as Audience]));
+  const show = (key: string) => audiences.get(key) !== "private";
+  const privateFields = (visibility.data ?? []).filter(field => field.audience === "private");
+  const approvedPhotos = current?.eligibility?.approvedPhotoCount ?? 0;
+  const eligibility = current?.eligibility;
+
+  return <MemberShell eyebrow="Profile preview" title="See your introduction with care." description="This privacy-aware preview helps you review your current profile presentation before connecting. It is not a public link or a guarantee that every member can see every field.">
+    <div className="mx-auto max-w-6xl space-y-7">
+      <section className="welcome-panel"><div className="flex flex-wrap items-start justify-between gap-5"><div><Eye className="text-gold" size={27} /><p className="mt-5 text-xs font-semibold uppercase tracking-[.16em] text-gold">Your current profile presentation</p><h2 className="mt-3 max-w-3xl font-display text-4xl text-cream">Private review, clear boundaries.</h2><p className="mt-4 max-w-3xl text-sm leading-6 text-cream/80">Actual discovery and profile viewing still depend on your current eligibility, profile visibility, a viewer’s authorized relationship, blocks, safety states, and both members’ choices. Contact details, verification documents, messages, and Family Circle information are never previewed here.</p></div><Badge className="border border-gold/30 bg-cream/10 text-cream">{current?.profileStatus?.replace(/_/g, " ") || "draft"}</Badge></div></section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]"><article className="surface-card"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="eyebrow text-gold-dark">Member introduction</p><h2 className="mt-2 font-display text-4xl text-ink">{current?.displayName || "Your profile draft"}</h2><p className="mt-2 text-sm text-muted-foreground">{current?.city ? `${current.city}${current.country ? `, ${current.country}` : ""}` : "Your broad location has not been added."}</p></div><UserRound className="text-gold-dark" size={26} /></div><p className="mt-7 text-sm leading-7 text-muted-foreground">{current?.about || "Your introduction will appear here after you add a short reflection on your values, life, and hopes for marriage."}</p><div className="mt-6 flex flex-wrap gap-2">{[current?.religion, current?.practiceLevel, current?.educationLevel, current?.profession, current?.maritalStatus].filter(Boolean).map((item: string) => <Badge key={item} variant="outline" className="border-forest/15 bg-cream text-forest">{item.replace(/_/g, " ")}</Badge>)}</div><div className="mt-7 grid gap-3 sm:grid-cols-2">{show("values") && current?.values ? <PreviewField label={`Values · ${audienceCopy(audiences.get("values"))}`} value={current.values} /> : null}{show("interests") && current?.interests?.length ? <PreviewField label={`Interests · ${audienceCopy(audiences.get("interests"))}`} value={current.interests.join(", ")} /> : null}{show("lifestyle") && current?.lifestyle ? <PreviewField label={`Lifestyle · ${audienceCopy(audiences.get("lifestyle"))}`} value={current.lifestyle} /> : null}{show("marriageExpectations") && current?.marriageExpectations ? <PreviewField label={`Marriage expectations · ${audienceCopy(audiences.get("marriageExpectations"))}`} value={current.marriageExpectations} /> : null}</div></article>
+        <aside className="space-y-5"><section className="surface-card"><div className="flex gap-3"><ShieldCheck className="shrink-0 text-gold-dark" size={21} /><div><p className="eyebrow text-gold-dark">Profile readiness</p><h2 className="mt-2 font-display text-2xl text-ink">{approvedPhotos}/5 approved photos</h2></div></div><p className="mt-4 text-sm leading-6 text-muted-foreground">Approved photos are not fetched into this private text preview. Their permitted display still follows your photo visibility, review status, and viewer relationship.</p><div className="mt-5 grid grid-cols-5 gap-2">{Array.from({ length: 5 }, (_, index) => <div key={index} className={`grid aspect-square place-items-center rounded-xl ${index < approvedPhotos ? "bg-forest text-cream" : "border border-dashed border-forest/20 bg-cream text-gold-dark"}`}>{index < approvedPhotos ? <CheckCircle2 size={15} /> : <span className="text-xs font-semibold">{index + 1}</span>}</div>)}</div><p className="mt-4 text-xs leading-5 text-muted-foreground">{eligibility?.photosComplete ? "Your approved-photo requirement is complete." : `Add ${eligibility?.photosRemaining ?? 5} more approved photo${(eligibility?.photosRemaining ?? 5) === 1 ? "" : "s"} to meet the profile requirement.`}</p></section>
+          <section className="surface-card"><div className="flex gap-3"><LockKeyhole className="shrink-0 text-gold-dark" size={20} /><div><p className="eyebrow text-gold-dark">Your private fields</p><h2 className="mt-2 font-display text-2xl text-ink">You control the pace.</h2></div></div><p className="mt-4 text-sm leading-6 text-muted-foreground">{privateFields.length ? `${privateFields.map(field => field.fieldKey.replace(/([A-Z])/g, " $1")).join(", ")} ${privateFields.length === 1 ? "is" : "are"} currently private and omitted from this preview.` : "No configured preview field is currently marked private. Contact details and protected information remain private regardless."}</p></section></aside></section>
+
+      <section className="surface-card"><p className="eyebrow text-gold-dark">Adjust your presentation</p><h2 className="mt-2 font-display text-3xl text-ink">Make a change before you connect.</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">This preview is read-only. It never changes eligibility, discovery, verification, privacy, safety, or any relationship state. Return to the relevant member setting to update each part safely.</p><div className="mt-6 flex flex-wrap gap-3"><Button className="btn-forest" onClick={() => setLocation("/app/profile/details")}><Pencil size={16} />Edit profile details</Button><Button variant="outline" onClick={() => setLocation("/app/compatibility")}>Review field privacy</Button><Button variant="outline" onClick={() => setLocation("/app/photos")}>Manage profile photos</Button><Button variant="ghost" onClick={() => setLocation("/app/profile")}><ArrowLeft size={16} />Back to profile</Button></div></section>
+    </div>
+  </MemberShell>;
+}
+
+function PreviewField({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-cream/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-gold-dark">{label}</p><p className="mt-2 text-sm leading-6 text-ink">{value}</p></div>; }
