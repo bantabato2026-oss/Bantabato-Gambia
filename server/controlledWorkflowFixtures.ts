@@ -23,6 +23,7 @@ export function createControlledWorkflowFixtures() {
     editorialReviewer: { userId: 1204, role: "content_policy_manager" as const, email: "editorial@example.test" },
     supportOperator: { userId: 1205, role: "customer_support_officer" as const, email: "support@example.test" },
     financeOperator: { userId: 1206, role: "finance_officer" as const, email: "finance@example.test" },
+    countryOperator: { userId: 1207, role: "platform_administrator" as const, email: "country-operations@example.test" },
     profilePhotos: [
       { id: 1, photoPurpose: "profile" as const, reviewStatus: "approved" as const, deletedAt: null as Date | null },
       { id: 2, photoPurpose: "profile" as const, reviewStatus: "approved" as const, deletedAt: null as Date | null },
