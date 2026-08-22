@@ -27,15 +27,17 @@ const price = { id: 3, membershipPlanVersionId: 2, currency: "GMD", amountMinor:
 describe("Phase 8 billing service flows", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("records an idempotent server-side payment intent but grants no Premium entitlement when the provider is unavailable", async () => {
+  it("returns a truthful unavailable checkout state without creating a transaction or Premium entitlement when no provider boundary is configured", async () => {
     const fake = fakeDb([[], [price], [version], [plan], []]);
     mocks.getDb.mockResolvedValue(fake.db);
     const result = await initiatePayment(3, 9, { membershipPriceId: 3, provider: "paystack", idempotencyKey: "idempotency-key-0001", acknowledgedTerms: true });
 
     expect(result.providerAvailable).toBe(false);
-    expect(fake.inserts.some(entry => entry.values.status === "created" && entry.values.idempotencyKey === "idempotency-key-0001")).toBe(true);
+    expect(result.checkoutState).toBe("payment_not_configured");
+	  expect(result.transaction).toBeNull();
+	  expect(fake.inserts.some(entry => entry.values.status === "created" && entry.values.idempotencyKey === "idempotency-key-0001")).toBe(false);
     expect(fake.inserts.flatMap(entry => Object.keys(entry.values))).not.toEqual(expect.arrayContaining(["entitlementKey", "cardNumber", "cvv", "providerSecret"]));
-    expect(mocks.createAuditLog).toHaveBeenCalledWith(9, "billing.payment_initiated", "payment_transaction", "1", expect.objectContaining({ planVersion: "premium-monthly-v1" }));
+	  expect(mocks.createAuditLog).toHaveBeenCalledWith(9, "billing.checkout_unavailable", "membership_price", "3", expect.objectContaining({ checkoutState: "payment_not_configured", planVersion: "premium-monthly-v1" }));
   });
 
   it("requires explicit checkout consent before creating even a pending transaction", async () => {
@@ -125,10 +127,10 @@ describe("Phase 8 billing service flows", () => {
 	    expect(mocks.createAuditLog).toHaveBeenCalledWith(99, "billing.plan_version_created", "membership_plan_version", "2", expect.objectContaining({ planCode: "premium", versionCode: "premium-monthly-v1" }));
 	  });
 
-	  it("records provider availability metadata without accepting or persisting live credentials", async () => {
+	  it("records provider availability environment metadata without accepting or persisting live credentials", async () => {
 	    const fake = fakeDb([]);
 	    mocks.getDb.mockResolvedValue(fake.db);
-	    await expect(savePaymentProviderAvailability(99, { provider: "Paystack", enabled: false, supportedCurrencies: ["gmd", "usd"], supportedMethods: ["provider_hosted"], configurationNote: "No credentials stored" })).resolves.toEqual({ provider: "paystack", enabled: false, supportedCurrencies: ["GMD", "USD"] });
+	    await expect(savePaymentProviderAvailability(99, { provider: "Paystack", enabled: false, environment: "not_configured", supportedCurrencies: ["gmd", "usd"], supportedMethods: ["provider_hosted"], configurationNote: "No credentials stored" })).resolves.toEqual({ provider: "paystack", enabled: false, environment: "not_configured", supportedCurrencies: ["GMD", "USD"] });
 	    expect(fake.inserts.some(entry => entry.values.provider === "paystack" && entry.values.enabled === false && Array.isArray(entry.values.supportedCurrencies))).toBe(true);
 	    expect(fake.inserts.flatMap(entry => Object.keys(entry.values))).not.toEqual(expect.arrayContaining(["apiKey", "secret", "webhookSecret", "password"]));
 	  });

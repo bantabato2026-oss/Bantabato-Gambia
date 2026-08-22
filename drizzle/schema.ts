@@ -910,6 +910,8 @@ export const membershipPrices = mysqlTable(
     provider: varchar("provider", { length: 80 }),
     providerPriceReference: varchar("providerPriceReference", { length: 255 }),
     status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(),
+	    effectiveFrom: timestamp("effectiveFrom"),
+	    effectiveUntil: timestamp("effectiveUntil"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -1028,7 +1030,9 @@ export const paymentReconciliations = mysqlTable(
   "payment_reconciliations",
   {
     id: int("id").autoincrement().primaryKey(),
-    paymentTransactionId: int("paymentTransactionId").notNull().references(() => paymentTransactions.id, { onDelete: "cascade" }),
+	    paymentTransactionId: int("paymentTransactionId").references(() => paymentTransactions.id, { onDelete: "cascade" }),
+	    subscriptionId: int("subscriptionId").references(() => subscriptions.id, { onDelete: "cascade" }),
+	    issueCode: varchar("issueCode", { length: 100 }),
     status: mysqlEnum("status", ["open", "reconciled", "needs_review"]).default("open").notNull(),
     providerObservedStatus: varchar("providerObservedStatus", { length: 120 }),
     note: varchar("note", { length: 500 }),
@@ -1037,7 +1041,7 @@ export const paymentReconciliations = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("payment_reconciliations_status_idx").on(table.status, table.createdAt), uniqueIndex("payment_reconciliations_transaction_unique").on(table.paymentTransactionId)],
+	  table => [index("payment_reconciliations_status_idx").on(table.status, table.createdAt), uniqueIndex("payment_reconciliations_transaction_unique").on(table.paymentTransactionId), uniqueIndex("payment_reconciliations_subscription_issue_unique").on(table.subscriptionId, table.issueCode)],
 );
 
 /** Availability metadata deliberately excludes provider credentials and can differ by provider, currency, and method. */
@@ -1047,6 +1051,7 @@ export const paymentProviderConfigurations = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     provider: varchar("provider", { length: 80 }).notNull(),
     enabled: boolean("enabled").default(false).notNull(),
+	    environment: mysqlEnum("environment", ["not_configured", "sandbox", "live"]).default("not_configured").notNull(),
     supportedCurrencies: json("supportedCurrencies").notNull(),
     supportedMethods: json("supportedMethods").notNull(),
     configurationNote: varchar("configurationNote", { length: 500 }),

@@ -52,7 +52,7 @@ describe("administration experience state contracts", () => {
     expect(billing).toContain("transactions.refetch(); refundRequests.refetch(); reconciliation.refetch(); configuration.refetch();");
     expect(billing).toContain("Member refund review");
     expect(billing).toContain("does not move money");
-    expect(billing).toContain("never card data, payment credentials, private member content");
+	    expect(billing).toContain("never card data, credentials, private member content");
     expect(support).toContain('StateSkeleton label="Loading support tickets…"');
     expect(support).toContain("tickets.refetch()");
     expect(support).toContain("this queue cannot decide a safety action");

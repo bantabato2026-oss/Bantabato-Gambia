@@ -10,9 +10,9 @@ describe("public membership experience", () => {
     expect(routes).toContain('path="/membership"');
     expect(pages).toContain("Bantabato Free");
     expect(pages).toContain("Bantabato Premium");
-    expect(pages).toContain("Payment processing is currently being configured.");
-    expect(pages).toContain("Configuration required.");
-    expect(pages).toContain("No card details or checkout are collected here");
+	    expect(pages).toContain("trpc.publicContent.membershipCatalog.useQuery");
+	    expect(pages).toContain("The public page never begins checkout, collects payment data");
+	    expect(pages).toContain("No active, currently effective Premium plan is available for this currency.");
     expect(pages).not.toContain("Payment successful");
   });
 });

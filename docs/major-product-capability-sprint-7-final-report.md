@@ -1,0 +1,39 @@
+# BANTABATO — MAJOR PRODUCT CAPABILITY SPRINT 7
+
+## Membership, Billing, Subscription, Entitlements & Payments
+
+Sprint 7 audited and completed genuine internal membership and finance product gaps while retaining a provider-independent boundary. It does not activate a payment provider, create a provider account, accept a credential, create a real payment, issue a refund, create a sandbox transaction, alter infrastructure, or claim launch readiness.
+
+| Requested capability | Sprint 7 implementation and retained boundary |
+|---|---|
+| Public membership journey | `/membership` now reads a credential-free public catalog of active, currently effective Premium terms. It presents Free and Premium comparisons, currency controls, a no-current-plan state, provider-state labels, no-pressure copy, and no public checkout. It never exposes member financial records, provider notes, credentials, or a payment action. |
+| Plan and price versioning | Existing plan/version/price records remain the source of truth. Prices now carry additive `effectiveFrom` and `effectiveUntil` values. Current catalog and checkout resolution exclude inactive, archived, future, and expired terms. Admin creates a new version and price rather than rewriting existing member terms. |
+| Provider architecture | Provider configuration now records an explicit `not_configured`, `sandbox`, or `live` environment alongside non-secret availability metadata. The adapter registry remains empty by default. Provider configuration, adapter availability, and provider verification are distinct requirements. |
+| Checkout boundary | Selecting a plan is non-financial. If payment is not configured or the adapter is unavailable, member checkout returns a factual unavailable state **without creating a transaction, charge, subscription, entitlement, refund, or provider outcome**. Sandbox and live labels remain informational until an independent provider verification result exists. |
+| Transactions and payment state | Existing payment transitions remain policy-validated. A successful activation now resolves the transaction’s recorded historical price/version/plan, not current availability, preserving audit context after a term retires or expires. A redirect remains non-authoritative; server verification is required. |
+| Duplicate and replay safety | Checkout idempotency keys are profile-owned, preventing a reused key from exposing another member record. Provider event IDs remain durable replay keys, with insert-race recovery returning the existing webhook state. Provider reference and reconciliation constraints remain additive. |
+| Subscription lifecycle and entitlements | Active, trial, past-due, grace, cancelled, expired, inactive, suspended, and refunded states are rendered factually in member UI. Renewal cancellation adds a private in-app state notification and retains the current period. Expiry includes due past-due records, expires active entitlements, and uses deterministic notification keys. |
+| Refund lifecycle | Member refund intake stays transaction-owned, locked, duplicate-safe, and restricted to confirmed payments. Finance can prepare a provider handoff or reject a request. Neither action moves money, changes a transaction to refunded, changes membership, or overrides safety/privacy/consent. |
+| Reconciliation | Reconciliation records now support categorized transaction or subscription findings. An authorized scan records internal anomalies such as a confirmed payment without a subscription, an active subscription without confirmed payment, unconfirmed payment state, or provider-pending refund. The scan never corrects financial state automatically. |
+| Notifications and account/marriage behavior | Billing notifications remain private and idempotent. An engaged or married declaration does not automatically archive an account or change membership. Account closure stops future renewal while retaining necessary financial evidence. |
+| Finance operations | The scoped Admin Billing workbench now shows transaction history, reconciliation scan/results, refund-review queue, versioned terms, effective dates, provider environment, and visible no-live-provider boundaries. Finance cannot access or change matching, safety, verification, privacy, Family Circle, readiness, or consent state. |
+| Privacy and Family Circle | Billing settings, transactions, refunds, provider references, and provider configuration remain private. Family Circle participants cannot view billing, payment, refund, message, document, or provider data; Premium never changes Family Circle permissions. |
+| Premium neutrality | Premium remains limited to configured product conveniences. It cannot affect compatibility or discovery rank, safety/moderation, verification, blocks, privacy, hard compatibility, consent, Family Circle, readiness, voice/video eligibility, or access to people. No pay-to-match behavior was introduced. |
+| Mobile and accessibility | Read-only desktop and 375px mobile review confirmed stacked, readable public membership, billing empty/recovery, refund-boundary, finance queue, reconciliation, effective-date, and provider-environment surfaces. Buttons, inputs, select controls, labels, status panels, and retry affordances remain visible. |
+| Tests and validation | Added `server/sprint7MembershipBilling.contract.test.ts` with six focused contracts and updated affected billing/public/admin contracts. Final validation passed with **295 tests across 65 files**, TypeScript, production build, and clean production dependency audit. |
+
+## Migrations and evidence boundaries
+
+Two additive migrations were reviewed and applied. `0026_cheerful_sugar_man.sql` adds nullable price effective dates and a non-secret provider environment field. `0027_mighty_cable.sql` adds categorized subscription-aware reconciliation support while retaining existing transaction reconciliation records. Neither migration rewrites historical prices, transactions, subscriptions, or provider records.
+
+The visual record is in `docs/major-product-capability-sprint-7-visual-validation.md`. It is read-only evidence only; it does not demonstrate an authenticated checkout, provider connection, payment verification, webhook signature, refund, reconciliation decision, plan activation, provider metadata save, notification dispatch, or real financial activity.
+
+## Remaining genuine gaps and classification
+
+The membership and financial product surface is more complete internally but is **not launch-ready**. An authorized provider decision is still required before any sandbox or live adapter, hosted checkout, credential, webhook, refund movement, cancellation synchronization, receipts, taxes, or compliance obligations can be configured. Fictional multi-member and fictional finance-role browser validation remains required for plan activation/effective dates, checkout retry, provider verification, webhook replay, entitlement expiry, refund workflow, reconciliation decisions, permissions, screen-reader use, and constrained-network recovery.
+
+> **Highest-value remaining internal capability:** add a test-only finance state-machine scenario harness that proves current/effective plan resolution, unavailable-checkout no-record behavior, provider-confirmed activation, pending-payment recovery, cancellation/expiry, partial/full refund confirmations, webhook replay, reconciliation findings, and account-closure retention—without adding a provider or real account.
+
+## Boundaries retained
+
+No payment or provider was activated. No real account, transaction, membership charge, refund, receipt, card data, provider credential, sandbox operation, provider callback, external notification, infrastructure change, AI matchmaking, Trust Score, premium ranking advantage, paid access to people, safety bypass, verification bypass, consent bypass, Family Circle bypass, live calling, or launch claim was introduced.
