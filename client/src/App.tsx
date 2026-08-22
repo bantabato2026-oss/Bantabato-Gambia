@@ -23,13 +23,13 @@ const MemberProfileDetailPage = lazy(() => import("@/pages/MemberDetailPages").t
 const MessageThreadPage = lazy(() => import("@/pages/MemberDetailPages").then(module => ({ default: module.MessageThreadPage })));
 const FamilyCirclePage = lazy(() => import("@/pages/FamilyCirclePages").then(module => ({ default: module.FamilyCirclePage })));
 const FamilyParticipantPage = lazy(() => import("@/pages/FamilyCirclePages").then(module => ({ default: module.FamilyParticipantPage })));
-const MemberHomePage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.MemberHomePage })));
+const MemberHomePage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberHomeRoute })));
 const OnboardingPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.OnboardingPage })));
-const ProfilePage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.ProfilePage })));
+const ProfilePage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberProfileRoute })));
 const FamilyPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.FamilyPage })));
-const MatchesPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.MatchesPage })));
-const MessagesPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.MessagesPage })));
-const NotificationsPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.NotificationsPage })));
+const MatchesPage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberMatchesRoute })));
+const MessagesPage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberMessagesRoute })));
+const NotificationsPage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberNotificationsRoute })));
 const SettingsPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.SettingsPage })));
 const CuratedDiscoveryPage = lazy(() => import("@/pages/CuratedDiscoveryPage"));
 const ProfileMediaPage = lazy(() => import("@/pages/ProfileMediaPage"));

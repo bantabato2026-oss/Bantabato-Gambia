@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle2, Globe2, Languages, MapPin, Phone, ShieldCheck, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -20,7 +21,7 @@ const statusTone = (status: string) => status === "available" ? "bg-emerald-50 t
 
 export default function InternationalPage() {
   const settings = trpc.international.settings.useQuery();
-  const save = trpc.international.saveSettings.useMutation({ onSuccess: () => { void settings.refetch(); toast.success("International settings saved securely."); }, onError: error => toast.error(error.message) });
+  const save = trpc.international.saveSettings.useMutation({ onSuccess: () => { void settings.refetch(); toast.success("International settings saved securely."); }, onError: () => toast.error("International settings could not be saved. Please try again.") });
   const [residenceCountryId, setResidenceCountryId] = useState(0); const [timezone, setTimezone] = useState("Africa/Banjul"); const [locale, setLocale] = useState("en");
   const [region, setRegion] = useState(""); const [city, setCity] = useState(""); const [visibility, setVisibility] = useState<Visibility>("eligible_members"); const [detail, setDetail] = useState<Detail>("country");
   const [diaspora, setDiaspora] = useState<Diaspora>("living_in_gambia"); const [phone, setPhone] = useState(""); const [phoneCountryId, setPhoneCountryId] = useState<number | null>(null); const [longDistance, setLongDistance] = useState<LongDistance>("no_preference");
@@ -30,8 +31,8 @@ export default function InternationalPage() {
   const toggle = (ids: number[], setIds: (ids: number[]) => void, id: number) => setIds(ids.includes(id) ? ids.filter(item => item !== id) : [...ids, id]);
   const toggleOption = (option: string) => setFutureOptions(options => options.includes(option) ? options.filter(item => item !== option) : [...options, option]);
   const submit = () => { if (!residenceCountryId) return toast.error("Choose your country of residence."); save.mutate({ residenceCountryId, region: region || null, city: city || null, timezone, interfaceLocale: locale, locationVisibility: visibility, locationDetailLevel: detail, diasporaStatus: diaspora, phone: phone || null, phoneCountryId, originCountryIds: origins, preferredDiscoveryCountryIds: preferred, futureResidenceCountryIds: futureCountries, futureResidenceOptions: futureOptions as Array<"the_gambia" | "senegal" | "my_current_country" | "partners_country" | "another_country" | "open_to_discussion">, longDistancePreference: longDistance }); };
-  if (settings.isLoading) return <MemberShell eyebrow="International access" title="International settings"><div className="h-96 animate-pulse rounded-[1.5rem] bg-forest/8" /></MemberShell>;
-  if (settings.error || !settings.data) return <MemberShell eyebrow="International access" title="International settings"><div className="surface-card text-sm text-destructive">{settings.error?.message ?? "International settings are unavailable right now."}</div></MemberShell>;
+  if (settings.isLoading) return <MemberShell eyebrow="International access" title="International settings"><StateSkeleton label="Loading your international settings…" /></MemberShell>;
+  if (settings.isError || !settings.data) return <MemberShell eyebrow="International access" title="International settings"><StatePanel kind="error" title="International settings are unavailable right now." description="No country, location, language, phone, or cross-border preference has been changed. Please try again." action={<Button onClick={() => settings.refetch()} className="btn-forest">Try again</Button>} /></MemberShell>;
   if (settings.data.needsProfile) return <MemberShell eyebrow="International access" title="International settings" description="Complete your core profile first, then return to add any voluntary diaspora and cross-border preferences."><section className="surface-card max-w-2xl"><Globe2 className="text-gold-dark" size={24} /><h2 className="mt-4 font-display text-3xl text-ink">Start with your core profile.</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">International settings build on your marriage intentions and core profile privacy controls. They do not replace onboarding or create a separate profile.</p><Link href="/app/onboarding" className="btn-forest mt-6 inline-flex">Complete your profile</Link></section></MemberShell>;
   return <MemberShell eyebrow="Diaspora & cross-border" title="International settings" description="Bantabato remains Gambian at its heart. These voluntary details help you state practical, marriage-focused preferences without exposing your address, private phone number, travel patterns, or immigration intentions.">
     <div className="grid gap-6 xl:grid-cols-[1.35fr_.65fr]">
