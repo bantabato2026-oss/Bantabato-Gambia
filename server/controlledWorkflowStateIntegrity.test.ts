@@ -21,7 +21,7 @@ describe("controlled workflow state integrity", () => {
   it("uses deterministic fictional-only fixture identities without representing real members or staff", () => {
     const fixtures = createControlledWorkflowFixtures();
     expect(fixtures.isTestFixture).toBe(true);
-    expect([fixtures.member, fixtures.marriedMember, fixtures.parent, fixtures.waliGuardian, fixtures.reviewer, fixtures.approver, fixtures.editorialReviewer, fixtures.supportOperator].every(item => item.email.endsWith("@example.test"))).toBe(true);
+    expect([fixtures.member, fixtures.marriedMember, fixtures.parent, fixtures.waliGuardian, fixtures.reviewer, fixtures.trustSafetyReviewer, fixtures.approver, fixtures.editorialReviewer, fixtures.supportOperator, fixtures.financeOperator].every(item => item.email.endsWith("@example.test"))).toBe(true);
     expect(fixtures.parent.role).toBe("parent");
     expect(fixtures.waliGuardian.role).toBe("wali_guardian");
   });
