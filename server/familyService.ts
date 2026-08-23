@@ -161,6 +161,7 @@ export async function listMemberFamilyCircle(memberProfileId: number) {
   const links = await db.select().from(familyLinks).where(eq(familyLinks.memberProfileId, memberProfileId)).orderBy(desc(familyLinks.createdAt));
   const permissions = links.length ? await db.select().from(familyPermissions).where(inArray(familyPermissions.familyLinkId, links.map(link => link.id))) : [];
   const shares = links.length ? await db.select().from(familyShares).where(and(inArray(familyShares.familyLinkId, links.map(link => link.id)), eq(familyShares.status, "active"))) : [];
+  const acknowledgments = shares.length ? await db.select().from(familyAcknowledgments).where(inArray(familyAcknowledgments.familyShareId, shares.map(share => share.id))) : [];
   const events = links.length ? await db.select().from(familyEvents).where(inArray(familyEvents.familyLinkId, links.map(link => link.id))).orderBy(desc(familyEvents.createdAt)).limit(120) : [];
   const visibleEventTypes = new Set(["invitation_sent", "invitation_accepted", "invitation_declined", "invitation_revoked", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted"]);
   const now = new Date();
@@ -174,7 +175,10 @@ export async function listMemberFamilyCircle(memberProfileId: number) {
     invitationExpiresAt: link.invitationExpiresAt,
     createdAt: link.createdAt,
     permissions: permissions.filter(permission => permission.familyLinkId === link.id).map(permission => ({ permission: permission.permission, isGranted: permission.isGranted, grantedAt: permission.grantedAt, revokedAt: permission.revokedAt })),
-    activeShares: shares.filter(share => share.familyLinkId === link.id).map(share => ({ id: share.id, sharedProfileId: share.sharedProfileId, createdAt: share.createdAt })),
+    activeShares: shares.filter(share => share.familyLinkId === link.id).map(share => {
+      const acknowledgment = acknowledgments.find(item => item.familyShareId === share.id);
+      return { id: share.id, sharedProfileId: share.sharedProfileId, createdAt: share.createdAt, acknowledgment: acknowledgment ? { status: acknowledgment.status, requestedAt: acknowledgment.requestedAt, respondedAt: acknowledgment.respondedAt, withdrawnAt: acknowledgment.withdrawnAt } : null };
+    }),
     history: events.filter(event => event.familyLinkId === link.id && visibleEventTypes.has(event.eventType)).slice(0, 12).map(event => {
       const details = event.details && typeof event.details === "object" ? event.details as Record<string, unknown> : {};
       const permission = typeof details.permission === "string" && (FAMILY_PERMISSIONS as readonly string[]).includes(details.permission) ? details.permission : null;
@@ -225,6 +229,25 @@ export async function withdrawFamilyShare(memberProfileId: number, actorUserId: 
   await recordEvent(row.link.id, actorUserId, "share_withdrawn", { familyShareId });
   await createAuditLog(actorUserId, "family.share_withdrawn", "family_share", String(familyShareId));
   return { success: true };
+}
+
+/** A Family Circle share is advisory and remains available only while its underlying mutual connection remains available. */
+export async function withdrawFamilySharesForProfilePair(firstProfileId: number, secondProfileId: number, reason: "connection_unavailable" | "safety_restriction" | "profile_unavailable") {
+  const db = await requireDb();
+  const now = new Date();
+  const withdrawn = await db.transaction(async tx => {
+    const rows = await tx.select({ share: familyShares, link: familyLinks }).from(familyShares).innerJoin(familyLinks, eq(familyShares.familyLinkId, familyLinks.id)).where(and(eq(familyShares.status, "active"), or(and(eq(familyLinks.memberProfileId, firstProfileId), eq(familyShares.sharedProfileId, secondProfileId)), and(eq(familyLinks.memberProfileId, secondProfileId), eq(familyShares.sharedProfileId, firstProfileId))))).for("update");
+    for (const row of rows) {
+      await tx.update(familyShares).set({ status: "withdrawn", withdrawnAt: now }).where(and(eq(familyShares.id, row.share.id), eq(familyShares.status, "active")));
+      await tx.update(familyAcknowledgments).set({ status: "withdrawn", withdrawnAt: now }).where(and(eq(familyAcknowledgments.familyShareId, row.share.id), eq(familyAcknowledgments.status, "requested")));
+    }
+    return rows;
+  });
+  for (const row of withdrawn) {
+    await recordEvent(row.link.id, null, "share_withdrawn", { reason });
+    await createAuditLog(null, "family.share_withdrawn_connection", "family_share", String(row.share.id), { familyLinkId: row.link.id, reason });
+  }
+  return { withdrawn: withdrawn.length };
 }
 
 export async function requestFamilyAcknowledgment(memberProfileId: number, actorUserId: number, familyShareId: number) {

@@ -4,6 +4,7 @@ import { getCompatibilityExplanation } from "./compatibilityService";
 import { createAuditLog, createNotification, getDb, getMemberEligibility } from "./db";
 import { DEFAULT_READINESS_POLICY, evaluateConnectionReadiness, type ParticipantSignals, type ReadinessPolicy } from "./domain/readinessPolicy";
 import { createIntegritySignal } from "./integrityService";
+import { withdrawFamilySharesForProfilePair } from "./familyService";
 import { addCaseNote, getCaseNotes } from "./operations";
 
 const STAGE_CONFIG = ["mutual_interest", "text_conversation", "voice_note_conversation", "ready_for_review", "voice_call_eligible", "video_call_eligible"];
@@ -77,7 +78,12 @@ export async function withdrawConnectionConsent(profileId: number, conversationI
 }
 
 export async function revokeConnectionForConversation(conversationId: number, reason: RevocationReason, actor: { profileId?: number; userId?: number } = {}) {
+  const db = await getDb();
+  if (!db) return;
   const state = await findConnectionState(conversationId);
+  const conversation = await db.select({ matchId: conversations.matchId }).from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  const match = conversation[0] ? (await db.select({ firstProfileId: matches.memberOneProfileId, secondProfileId: matches.memberTwoProfileId }).from(matches).where(eq(matches.id, conversation[0].matchId)).limit(1))[0] : null;
+  if (match) await withdrawFamilySharesForProfilePair(match.firstProfileId, match.secondProfileId, reason === "safety_restriction" || reason === "account_suspended" ? "safety_restriction" : "connection_unavailable");
   if (!state) return;
   await revokeConnectionState(state.id, "all", reason, { actorProfileId: actor.profileId, actorUserId: actor.userId });
 }
