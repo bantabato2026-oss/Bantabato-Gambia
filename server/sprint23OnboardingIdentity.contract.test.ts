@@ -69,7 +69,7 @@ describe("Sprint 23 onboarding, profile completion, and member identity contract
     expect(photos).toContain("5 approved photos");
     expect(photos).toContain("The selected file stays only on this page until you reconnect.");
     expect(photos).not.toContain("mediaStorageKey");
-    expect(verification).toContain("not shown in discovery, messages, Family Circle, profile preview, stories, or notifications");
+    expect(verification).toContain("not shown in discovery, messages, Family Circle, profile preview, stories, notifications");
     expect(preview).toContain("This privacy-aware preview");
     expect(preview).toContain("Contact details, verification documents, messages, and Family Circle information are never previewed here.");
     expect(eligibility).toContain("MIN_APPROVED_PROFILE_PHOTOS");

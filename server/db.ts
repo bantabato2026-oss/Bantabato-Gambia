@@ -756,7 +756,7 @@ export async function uploadIdentityDocument(profileId: number, documentType: "n
     return { submitted: true, duplicate: false, status: "submitted" as const, verificationId: Number(inserted[0]?.id ?? 0), userId: member.userId };
   });
   if (!result.duplicate) {
-    await createNotification(result.userId, "verification", "Verification submitted", "Your private identity document is ready for manual review.", "/app/verification", `verification:${result.verificationId}:submitted`);
+    await createNotification(result.userId, "verification", "Verification submitted", "Your private identity document is ready for manual review.", "/app/verification", `verification:${result.verificationId}:submitted`, "verification_submission_received");
     await createAuditLog(result.userId, "verification.submitted", "verification_record", String(result.verificationId), { profileId, documentType, mimeType });
   }
   return { submitted: result.submitted, duplicate: result.duplicate, status: result.status, verificationId: result.verificationId };
@@ -780,8 +780,8 @@ export async function markNotificationRead(userId: number, notificationId: numbe
   await db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
 }
 
-export async function createNotification(userId: number, notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family" | "connection" | "recommendation" | "billing", title: string, body: string, actionPath?: string, eventKey?: string) {
-  await emitLegacyNotification(userId, notificationType, title, body, actionPath, eventKey);
+export async function createNotification(userId: number, notificationType: "interest" | "match" | "message" | "verification" | "safety" | "family" | "connection" | "recommendation" | "billing", title: string, body: string, actionPath?: string, eventKey?: string, eventTypeOverride?: string) {
+  await emitLegacyNotification(userId, notificationType, title, body, actionPath, eventKey, eventTypeOverride);
 }
 
 export async function createReport(reporterProfileId: number, input: { reportedProfileId?: number; conversationId?: number; messageId?: number; reason: "fake_profile" | "impersonation" | "scam" | "harassment" | "inappropriate_content" | "financial_solicitation" | "suspicious_behavior" | "safety_concern" | "other"; details?: string; clientRequestId?: string }) {
@@ -868,11 +868,13 @@ export async function getVerificationDocumentForReview(verificationId: number) {
 export async function reviewIdentityVerification(reviewerUserId: number, verificationId: number, decision: "approved" | "rejected", reviewNotes?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const record = await db.select().from(verificationRecords).where(and(eq(verificationRecords.id, verificationId), eq(verificationRecords.verificationType, "identity_document"), inArray(verificationRecords.status, ["submitted", "under_review"]))).limit(1);
+  const record = await db.select({ id: verificationRecords.id, profileId: verificationRecords.profileId, status: verificationRecords.status, updatedAt: verificationRecords.updatedAt }).from(verificationRecords).where(and(eq(verificationRecords.id, verificationId), eq(verificationRecords.verificationType, "identity_document"), inArray(verificationRecords.status, ["submitted", "under_review"]))).limit(1);
   if (!record[0]) throw new Error("This verification record is not awaiting review");
-  await db.update(verificationRecords).set({ status: decision, reviewNotes: reviewNotes || null, reviewedByUserId: reviewerUserId, reviewedAt: new Date() }).where(eq(verificationRecords.id, verificationId));
+  const outcome = await db.update(verificationRecords).set({ status: decision, reviewNotes: reviewNotes || null, reviewedByUserId: reviewerUserId, reviewedAt: new Date() }).where(and(eq(verificationRecords.id, verificationId), eq(verificationRecords.status, record[0].status), eq(verificationRecords.updatedAt, record[0].updatedAt)));
+  if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This verification case changed before the decision was recorded. Refresh the case and try again.");
+  await synchronizeProfileEligibility(record[0].profileId);
   const profile = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, record[0].profileId)).limit(1);
-  if (profile[0]) await createNotification(profile[0].userId, "verification", decision === "approved" ? "Identity verification approved" : "Identity verification needs attention", decision === "approved" ? "Your identity-document review has been approved and your verified badge is now available." : "Your identity-document review was not approved. Review the feedback and submit an updated document when available.", "/app/verification", `verification:${verificationId}:${decision}`);
+  if (profile[0]) await createNotification(profile[0].userId, "verification", decision === "approved" ? "Identity verification approved" : "Identity verification needs attention", decision === "approved" ? "Your identity-document review has been approved and your verified badge is now available." : "Your identity-document review was not approved. Review the feedback and submit an updated document when available.", "/app/verification", `verification:${verificationId}:${decision}`, decision === "approved" ? "verification_completed" : "verification_changes_required");
   await createAuditLog(reviewerUserId, `verification.${decision}`, "verification_record", String(verificationId), { reviewNotes: reviewNotes || null });
 }
 

@@ -338,7 +338,7 @@ export const appRouter = router({
       await claimVerificationCase(ctx.user.id, input.verificationId);
       return { success: true };
     }),
-    decideVerification: protectedProcedure.input(z.object({ verificationId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "requires_resubmission", "escalated"]), reason: z.enum(["document_unclear", "document_expired", "document_unsupported", "information_mismatch", "image_quality_insufficient", "verification_image_insufficient", "suspected_duplicate", "suspected_fraud", "requires_additional_review", "other"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), priority: z.enum(["standard", "attention", "high"]).optional() })).mutation(async ({ ctx, input }) => {
+    decideVerification: protectedProcedure.input(z.object({ verificationId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "requires_resubmission", "escalated"]), reason: z.enum(["document_unclear", "document_expired", "document_unsupported", "information_mismatch", "image_quality_insufficient", "verification_image_insufficient", "suspected_duplicate", "suspected_fraud", "requires_additional_review", "other"]).optional(), internalNote: z.string().max(2000).optional(), memberMessage: z.string().max(500).optional(), priority: z.enum(["standard", "attention", "high"]).optional(), expectedUpdatedAt: z.coerce.date().optional() })).mutation(async ({ ctx, input }) => {
       await requireOperationalAccess(ctx.user, ["verification_reviewer", "platform_admin"]);
       await decideVerificationCase({ actorUserId: ctx.user.id, ...input });
       return { success: true };

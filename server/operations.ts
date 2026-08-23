@@ -19,9 +19,11 @@ type WorkflowDependencies = {
   getDb: () => Promise<any>;
   createAuditLog: (...args: any[]) => Promise<void>;
   createNotification: (...args: any[]) => Promise<void>;
+  synchronizeProfileEligibility?: (profileId: number) => Promise<unknown>;
 };
 
-const productionWorkflowDependencies: WorkflowDependencies = { getDb, createAuditLog, createNotification };
+const synchronizeVerificationEligibility = async (profileId: number) => (await import("./db")).synchronizeProfileEligibility(profileId);
+const productionWorkflowDependencies: WorkflowDependencies = { getDb, createAuditLog, createNotification, synchronizeProfileEligibility: synchronizeVerificationEligibility };
 
 export async function getActiveAdminScopes(userId: number): Promise<AdminScope[]> {
   const db = await getDb();
@@ -94,6 +96,7 @@ export async function getVerificationCase(verificationId: number) {
       reviewedAt: verificationRecords.reviewedAt,
       escalatedAt: verificationRecords.escalatedAt,
       closedAt: verificationRecords.closedAt,
+      updatedAt: verificationRecords.updatedAt,
     })
     .from(verificationRecords)
     .where(eq(verificationRecords.id, verificationId))
@@ -113,22 +116,25 @@ export async function getVerificationDocumentForAuthorizedReview(actorUserId: nu
 export async function claimVerificationCase(actorUserId: number, verificationId: number, dependencies: WorkflowDependencies = productionWorkflowDependencies) {
   const db = await dependencies.getDb();
   if (!db) throw new Error("Database unavailable");
-  const record = await db.select({ status: verificationRecords.status, assignedReviewerUserId: verificationRecords.assignedReviewerUserId }).from(verificationRecords).where(eq(verificationRecords.id, verificationId)).limit(1);
+  const record = await db.select({ status: verificationRecords.status, assignedReviewerUserId: verificationRecords.assignedReviewerUserId, profileId: verificationRecords.profileId }).from(verificationRecords).where(eq(verificationRecords.id, verificationId)).limit(1);
   if (!record[0] || !canDecideVerification(record[0].status)) throw new Error("This verification case is not available to claim");
   if (record[0].assignedReviewerUserId && record[0].assignedReviewerUserId !== actorUserId) throw new Error("This verification case is already assigned to another reviewer");
   const outcome = await db.update(verificationRecords).set({ status: "under_review", assignedReviewerUserId: actorUserId }).where(and(eq(verificationRecords.id, verificationId), eq(verificationRecords.status, record[0].status), or(isNull(verificationRecords.assignedReviewerUserId), eq(verificationRecords.assignedReviewerUserId, actorUserId))));
   if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This verification case changed before it could be claimed. Refresh the queue and try again.");
   await dependencies.createAuditLog(actorUserId, "verification.claimed", "verification_record", String(verificationId), { previousStatus: record[0].status, newStatus: "under_review" });
+  const profile = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, record[0].profileId)).limit(1);
+  if (profile[0]) await dependencies.createNotification(profile[0].userId, "verification", "Verification review is in progress", "Your private identity document is in manual review.", "/app/verification", `verification:${verificationId}:under_review`, "verification_pending_review");
 }
 
-export async function decideVerificationCase(input: { actorUserId: number; verificationId: number; decision: VerificationDecision; reason?: VerificationReason; internalNote?: string; memberMessage?: string; priority?: "standard" | "attention" | "high" }, dependencies: WorkflowDependencies = productionWorkflowDependencies) {
+export async function decideVerificationCase(input: { actorUserId: number; verificationId: number; decision: VerificationDecision; reason?: VerificationReason; internalNote?: string; memberMessage?: string; priority?: "standard" | "attention" | "high"; expectedUpdatedAt?: Date }, dependencies: WorkflowDependencies = productionWorkflowDependencies) {
   const db = await dependencies.getDb();
   if (!db) throw new Error("Database unavailable");
-  const record = await db.select({ status: verificationRecords.status, profileId: verificationRecords.profileId, assignedReviewerUserId: verificationRecords.assignedReviewerUserId }).from(verificationRecords).where(eq(verificationRecords.id, input.verificationId)).limit(1);
+  const record = await db.select({ status: verificationRecords.status, profileId: verificationRecords.profileId, assignedReviewerUserId: verificationRecords.assignedReviewerUserId, updatedAt: verificationRecords.updatedAt }).from(verificationRecords).where(eq(verificationRecords.id, input.verificationId)).limit(1);
   if (!record[0] || !canDecideVerification(record[0].status)) throw new Error("This verification case is not awaiting an operational decision");
   if (record[0].assignedReviewerUserId && record[0].assignedReviewerUserId !== input.actorUserId) throw new Error("This verification case is assigned to another reviewer");
   const memberMessage = memberSafeVerificationMessage(input.memberMessage, input.decision, input.reason);
   const closed = input.decision !== "escalated";
+  const decisionConditions = [eq(verificationRecords.id, input.verificationId), eq(verificationRecords.status, record[0].status), or(isNull(verificationRecords.assignedReviewerUserId), eq(verificationRecords.assignedReviewerUserId, input.actorUserId)), ...(input.expectedUpdatedAt ? [eq(verificationRecords.updatedAt, input.expectedUpdatedAt)] : [])];
   const outcome = await db.update(verificationRecords).set({
     status: input.decision,
     reviewReason: input.reason ?? null,
@@ -139,12 +145,13 @@ export async function decideVerificationCase(input: { actorUserId: number; verif
     reviewedAt: new Date(),
     escalatedAt: input.decision === "escalated" ? new Date() : null,
     closedAt: closed ? new Date() : null,
-  }).where(and(eq(verificationRecords.id, input.verificationId), eq(verificationRecords.status, record[0].status), or(isNull(verificationRecords.assignedReviewerUserId), eq(verificationRecords.assignedReviewerUserId, input.actorUserId))));
+  }).where(and(...decisionConditions));
   if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This verification case changed before the decision was recorded. Refresh the case and try again.");
   if (["suspected_duplicate", "suspected_fraud", "requires_additional_review"].includes(input.reason ?? "") && ["escalated", "requires_resubmission", "rejected"].includes(input.decision)) await createIntegritySignal({ actorUserId: input.actorUserId, subjectProfileId: record[0].profileId, source: "verification", category: input.reason === "suspected_duplicate" ? "multiple_account_indicator" : "verification_anomaly", severity: input.reason === "suspected_fraud" ? "high" : "medium", evidenceConfidence: "limited", idempotencyKey: `verification-anomaly:${input.verificationId}:${input.decision}:${input.reason}` });
   if (input.internalNote?.trim()) await addCaseNote(input.actorUserId, "verification", input.verificationId, input.internalNote);
+  await dependencies.synchronizeProfileEligibility?.(record[0].profileId);
   const profile = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, record[0].profileId)).limit(1);
-  if (profile[0]) await dependencies.createNotification(profile[0].userId, "verification", verificationTitle(input.decision), memberMessage, "/app/verification", `verification:${input.verificationId}:${input.decision}`);
+  if (profile[0]) await dependencies.createNotification(profile[0].userId, "verification", verificationTitle(input.decision), memberMessage, "/app/verification", `verification:${input.verificationId}:${input.decision}`, input.decision === "approved" ? "verification_completed" : input.decision === "requires_resubmission" || input.decision === "rejected" ? "verification_changes_required" : "verification_additional_review");
   await dependencies.createAuditLog(input.actorUserId, `verification.${input.decision}`, "verification_record", String(input.verificationId), { previousStatus: record[0].status, newStatus: input.decision, reason: input.reason ?? null, priority: input.priority ?? "standard" });
 }
 

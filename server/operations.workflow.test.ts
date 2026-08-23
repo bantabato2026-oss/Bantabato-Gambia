@@ -22,7 +22,7 @@ describe("operational workflow transitions", () => {
     const decisionHarness = createWorkflowHarness([[{ status: "under_review", profileId: 72 }], [{ userId: 88 }]]);
     await decideVerificationCase({ actorUserId: 31, verificationId: 401, decision: "approved" }, decisionHarness.dependencies);
     expect(decisionHarness.updates[0]).toMatchObject({ status: "approved", reviewedByUserId: 31, assignedReviewerUserId: 31 });
-    expect(decisionHarness.notify).toHaveBeenCalledWith(88, "verification", "Identity verification approved", "Your identity verification has been approved.", "/app/verification", expect.any(String));
+    expect(decisionHarness.notify).toHaveBeenCalledWith(88, "verification", "Identity verification approved", "Your identity verification has been approved.", "/app/verification", "verification:401:approved", "verification_completed");
     expect(decisionHarness.audit).toHaveBeenCalledWith(31, "verification.approved", "verification_record", "401", expect.objectContaining({ previousStatus: "under_review", newStatus: "approved" }));
   });
 
@@ -41,7 +41,21 @@ describe("operational workflow transitions", () => {
     const safeCopy = createWorkflowHarness([[{ status: "under_review", profileId: 72, assignedReviewerUserId: 31 }], [{ userId: 88 }]]);
     await decideVerificationCase({ actorUserId: 31, verificationId: 401, decision: "escalated", memberMessage: "An internal investigation is in progress." }, safeCopy.dependencies);
     expect(safeCopy.updates[0]).toMatchObject({ memberMessage: "Your verification requires additional review. We will notify you when there is an update." });
-    expect(safeCopy.notify).toHaveBeenCalledWith(88, "verification", "Verification review update", "Your verification requires additional review. We will notify you when there is an update.", "/app/verification", "verification:401:escalated");
+    expect(safeCopy.notify).toHaveBeenCalledWith(88, "verification", "Verification review update", "Your verification requires additional review. We will notify you when there is an update.", "/app/verification", "verification:401:escalated", "verification_additional_review");
+  });
+
+  it("uses a factual resubmission notification without exposing reviewer context", async () => {
+    const harness = createWorkflowHarness([[{ status: "under_review", profileId: 72, assignedReviewerUserId: 31 }], [{ userId: 88 }]]);
+    await decideVerificationCase({ actorUserId: 31, verificationId: 401, decision: "requires_resubmission", reason: "document_unclear", memberMessage: "An internal fraud investigation is open." }, harness.dependencies);
+    expect(harness.updates[0]).toMatchObject({ status: "requires_resubmission", memberMessage: "Action is required before verification can continue: please submit a clearer image of your valid document." });
+    expect(harness.notify).toHaveBeenCalledWith(88, "verification", "Verification action required", "Action is required before verification can continue: please submit a clearer image of your valid document.", "/app/verification", "verification:401:requires_resubmission", "verification_changes_required");
+  });
+
+  it("rejects an observed-version verification decision when a concurrent reviewer wins the conditional write", async () => {
+    const stale = createWorkflowHarness([[{ status: "escalated", profileId: 72, assignedReviewerUserId: 31, updatedAt: new Date("2026-01-01T00:00:00.000Z") }]], 0);
+    await expect(decideVerificationCase({ actorUserId: 31, verificationId: 401, decision: "escalated", expectedUpdatedAt: new Date("2026-01-01T00:00:00.000Z") }, stale.dependencies)).rejects.toThrow("changed before the decision was recorded");
+    expect(stale.audit).not.toHaveBeenCalled();
+    expect(stale.notify).not.toHaveBeenCalled();
   });
 
   it("claims and resolves a report case with an auditable controlled action", async () => {

@@ -13,7 +13,22 @@ describe("Phase 9 notification policy", () => {
   it("treats security, safety, verification, and billing transactional events as essential in-app records", () => {
     expect(essentialTransactionalEvent({ ...base, category: "security", priority: "high" })).toBe(true);
     expect(essentialTransactionalEvent({ ...base, category: "safety", priority: "normal" })).toBe(true);
+    expect(essentialTransactionalEvent({ ...base, category: "verification", priority: "normal" })).toBe(true);
     expect(essentialTransactionalEvent({ ...base, category: "recommendations", priority: "normal" })).toBe(false);
+  });
+
+  it("uses distinct factual verification lifecycle copy without document, reviewer, or internal-safety detail", () => {
+    const submitted = privacySafeCopy("verification_submission_received");
+    const pending = privacySafeCopy("verification_pending_review");
+    const changes = privacySafeCopy("verification_changes_required");
+    const completed = privacySafeCopy("verification_completed");
+    const additional = privacySafeCopy("verification_additional_review");
+    expect(submitted.title).toContain("submission received");
+    expect(pending.title).toContain("in progress");
+    expect(changes.title).toContain("attention");
+    expect(completed.title).toContain("completed");
+    expect(additional.title).toContain("continues");
+    expect(`${submitted.body} ${pending.body} ${changes.body} ${completed.body} ${additional.body}`).not.toMatch(/document number|passport number|reviewer|fraud|storage|internal/i);
   });
 
   it("does not let preference controls suppress essential in-app transactional events", () => {

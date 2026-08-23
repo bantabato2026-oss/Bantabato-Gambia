@@ -90,8 +90,8 @@ export async function emitTrustedNotification(event: TrustedNotificationEvent) {
 }
 
 /** Compatibility seam for completed phases: copy arguments are deliberately ignored in favour of central privacy-safe event copy. */
-export async function emitLegacyNotification(userId: number, notificationType: LegacyNotificationType, _title: string, _body: string, actionPath?: string, eventKey?: string) {
-  const eventType = legacyEventType[notificationType];
+export async function emitLegacyNotification(userId: number, notificationType: LegacyNotificationType, _title: string, _body: string, actionPath?: string, eventKey?: string, eventTypeOverride?: string) {
+  const eventType = eventTypeOverride ?? legacyEventType[notificationType];
   return emitTrustedNotification({ recipientUserId: userId, eventType, notificationType, category: legacyCategory[notificationType], priority: notificationType === "safety" ? "high" : "normal", notificationClass: "transactional", idempotencyKey: eventKey ?? `${eventType}:${userId}:${Date.now()}`, actionPath });
 }
 

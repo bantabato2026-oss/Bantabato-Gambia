@@ -38,7 +38,7 @@ describe("Sprint 10 verification, credibility, and eligibility contracts", () =>
     expect(dashboard).toContain("<ProfileReadinessPanel");
     expect(verification).toContain("<ProfileReadinessPanel");
     expect(preview).toContain("<ProfileReadinessPanel");
-    expect(verification).toContain("not shown in discovery, messages, Family Circle, profile preview, stories, or notifications");
+    expect(verification).toContain("not shown in discovery, messages, Family Circle, profile preview, stories, notifications");
   });
 
   it("keeps prerequisite recovery factual by disabling protected member queries until a profile exists", () => {
