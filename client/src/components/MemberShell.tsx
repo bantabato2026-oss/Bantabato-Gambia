@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
 import { useNetworkState } from "@/hooks/useDeviceExperience";
 import { useIsMobile } from "@/hooks/useMobile";
+import { trpc } from "@/lib/trpc";
 import { clearAllMobileDrafts } from "@/lib/mobileExperience";
 import { Bell, Camera, ChevronRight, CircleUserRound, Compass, CreditCard, Eye, Globe2, HeartHandshake, Home, Lightbulb, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound, WifiOff, Smartphone } from "lucide-react";
 import { useState } from "react";
@@ -44,6 +45,8 @@ export function MemberShell({ children, eyebrow, title, description }: { childre
   const [menuOpen, setMenuOpen] = useState(false);
   const mobile = useIsMobile();
   const network = useNetworkState();
+  const notificationSummary = trpc.notifications.summary.useQuery(undefined, { refetchInterval: 30_000, refetchIntervalInBackground: false, retry: 1 });
+  const unreadNotifications = notificationSummary.data?.unreadCount ?? 0;
 
   if (loading) return <div className="app-loading"><StateSkeleton label="Loading your Bantabato experience" /></div>;
   if (!isAuthenticated) return <div className="app-guard"><div className="app-guard-card"><Brand /><StatePanel className="mt-8" kind="empty" title="A private space for serious intentions." description="Sign in to continue your Bantabato journey. Your profile and conversations remain private to you and the members you choose to connect with." action={<div className="space-y-4"><Button onClick={() => startLogin()} className="w-full btn-forest">Sign in to continue <ChevronRight size={16} /></Button><Link href="/" className="block text-center text-sm font-medium text-forest hover:underline">Return to Bantabato</Link></div>} /></div></div>;
@@ -67,7 +70,7 @@ export function MemberShell({ children, eyebrow, title, description }: { childre
         {network === "offline" ? <div role="status" aria-live="polite" className="member-network-status"><WifiOff size={16} /><span>You’re offline. We’ll reconnect when your connection returns. Private information is not available offline.</span></div> : null}
         <header className="member-topbar">
           <div className="flex items-center gap-3"><button onClick={() => setMenuOpen(true)} className="rounded-full p-2.5 hover:bg-forest/5 lg:hidden" aria-label="Open navigation"><Menu size={19} /></button><div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-dark">{eyebrow ?? "Member space"}</p><h1 className="font-display text-2xl text-ink sm:text-3xl">{title}</h1></div></div>
-          <div className="flex items-center gap-3"><Link href="/app/notifications" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-forest/10 bg-white text-forest transition-colors hover:bg-forest/5" aria-label="Notifications"><Bell size={18} /></Link><div className="hidden text-right sm:block"><p className="text-sm font-semibold text-ink">{user?.name || "Member"}</p><p className="text-xs text-muted-foreground">Bantabato member</p></div><Avatar className="h-10 w-10 border border-gold/30"><AvatarFallback className="bg-gold/15 text-sm font-semibold text-gold-dark">{user?.name?.slice(0, 1).toUpperCase() || "B"}</AvatarFallback></Avatar></div>
+          <div className="flex items-center gap-3"><Link href="/app/notifications" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-forest/10 bg-white text-forest transition-colors hover:bg-forest/5" aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : "Notifications"}><Bell size={18} />{unreadNotifications ? <span aria-hidden="true" className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-gold px-1 text-[10px] font-bold text-forest shadow-sm">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}</Link><div className="hidden text-right sm:block"><p className="text-sm font-semibold text-ink">{user?.name || "Member"}</p><p className="text-xs text-muted-foreground">Bantabato member</p></div><Avatar className="h-10 w-10 border border-gold/30"><AvatarFallback className="bg-gold/15 text-sm font-semibold text-gold-dark">{user?.name?.slice(0, 1).toUpperCase() || "B"}</AvatarFallback></Avatar></div>
         </header>
         <div className="member-content"><p className="mb-7 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>{children}</div>
 	      </main>

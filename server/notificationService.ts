@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import { memberNotificationSettings, notificationDeliveries, notificationEvents, notificationJobs, notificationPreferences, notificationProviderConfigurations, notificationTemplates, notifications } from "../drizzle/schema";
 import { createAuditLog, getDb } from "./db";
 import { deliverExternalNotification } from "./domain/notificationDelivery";
@@ -29,42 +29,63 @@ export async function emitTrustedNotification(event: TrustedNotificationEvent) {
   const db = await getDb();
   if (!db) return { notificationId: null, duplicate: false, external: [] as Array<{ channel: string; status: string }> };
   if (!isAllowedNotificationActionPath(event.actionPath) && event.actionPath) throw new Error("Notification action path is invalid.");
-  const existing = await db.select().from(notificationEvents).where(and(eq(notificationEvents.recipientUserId, event.recipientUserId), eq(notificationEvents.idempotencyKey, event.idempotencyKey))).limit(1);
-  if (existing[0]) return { notificationId: null, duplicate: true, external: [] as Array<{ channel: string; status: string }> };
-  const eventId = Number((await db.insert(notificationEvents).values({ recipientUserId: event.recipientUserId, actorUserId: event.actorUserId ?? null, eventType: event.eventType, notificationType: event.notificationType, notificationClass: event.notificationClass, priority: event.priority, sourceType: event.sourceType ?? null, sourceId: event.sourceId === undefined ? null : String(event.sourceId), idempotencyKey: event.idempotencyKey, safeMetadata: null, actionPath: event.actionPath ?? null, expiresAt: event.expiresAt ?? null }).$returningId())[0]?.id ?? 0);
+  let existing = (await db.select().from(notificationEvents).where(and(eq(notificationEvents.recipientUserId, event.recipientUserId), eq(notificationEvents.idempotencyKey, event.idempotencyKey))).limit(1))[0];
+  let duplicate = Boolean(existing);
   const { settings, preference } = await getSettingsAndPreference(event.recipientUserId, event.category);
   const copy = privacySafeCopy(event.eventType);
   const activeTemplate = (await db.select().from(notificationTemplates).where(and(eq(notificationTemplates.eventType, event.eventType), eq(notificationTemplates.channel, "in_app"), eq(notificationTemplates.locale, settings.locale), eq(notificationTemplates.status, "active"))).orderBy(desc(notificationTemplates.createdAt)).limit(1))[0];
   const inAppAllowed = canUseChannel(event, "in_app", preference);
-  let notificationId: number | null = null;
-  if (inAppAllowed) {
-    notificationId = Number((await db.insert(notifications).values({ userId: event.recipientUserId, notificationType: safeType(event), title: copy.title, body: copy.body, actionPath: event.actionPath ?? null, eventKey: event.idempotencyKey, eventType: event.eventType, priority: event.priority, notificationClass: event.notificationClass, templateVersion: activeTemplate?.templateVersion ?? "system-v1", expiresAt: event.expiresAt ?? null }).$returningId())[0]?.id ?? 0);
-    await db.insert(notificationDeliveries).values({ notificationId, notificationEventId: eventId, recipientUserId: event.recipientUserId, channel: "in_app", templateVersion: activeTemplate?.templateVersion ?? "system-v1", status: "delivered", deliveredAt: new Date() });
+  if (!existing) {
+    try {
+      const eventId = Number((await db.insert(notificationEvents).values({ recipientUserId: event.recipientUserId, actorUserId: event.actorUserId ?? null, eventType: event.eventType, notificationType: event.notificationType, notificationClass: event.notificationClass, priority: event.priority, sourceType: event.sourceType ?? null, sourceId: event.sourceId === undefined ? null : String(event.sourceId), idempotencyKey: event.idempotencyKey, safeMetadata: null, actionPath: event.actionPath ?? null, expiresAt: event.expiresAt ?? null }).$returningId())[0]?.id ?? 0);
+      existing = { id: eventId } as typeof notificationEvents.$inferSelect;
+    } catch (error) {
+      const raced = await db.select().from(notificationEvents).where(and(eq(notificationEvents.recipientUserId, event.recipientUserId), eq(notificationEvents.idempotencyKey, event.idempotencyKey))).limit(1);
+      if (!raced[0]) throw error;
+      existing = raced[0];
+      duplicate = true;
+    }
   }
+  const existingInApp = (await db.select().from(notifications).where(and(eq(notifications.userId, event.recipientUserId), eq(notifications.eventKey, event.idempotencyKey))).limit(1))[0];
+  let notificationId: number | null = existingInApp?.id ?? null;
+  let createdInApp = false;
+  if (!notificationId && inAppAllowed) {
+    try {
+      notificationId = Number((await db.insert(notifications).values({ userId: event.recipientUserId, notificationType: safeType(event), title: copy.title, body: copy.body, actionPath: event.actionPath ?? null, eventKey: event.idempotencyKey, eventType: event.eventType, priority: event.priority, notificationClass: event.notificationClass, templateVersion: activeTemplate?.templateVersion ?? "system-v1", expiresAt: event.expiresAt ?? null }).$returningId())[0]?.id ?? 0);
+      createdInApp = Boolean(notificationId);
+    } catch (error) {
+      const raced = await db.select().from(notifications).where(and(eq(notifications.userId, event.recipientUserId), eq(notifications.eventKey, event.idempotencyKey))).limit(1);
+      if (!raced[0]) throw error;
+      notificationId = raced[0].id;
+      duplicate = true;
+    }
+  }
+  if (createdInApp && notificationId) await db.insert(notificationDeliveries).values({ notificationId, notificationEventId: existing.id, recipientUserId: event.recipientUserId, channel: "in_app", templateVersion: activeTemplate?.templateVersion ?? "system-v1", status: "delivered", deliveredAt: new Date() });
+  if (duplicate) return { notificationId, duplicate: true, external: [] as Array<{ channel: string; status: string }> };
   const external: Array<{ channel: string; status: string }> = [];
   for (const channel of externalChannels) {
     if (!canUseChannel(event, channel, preference)) {
-      await db.insert(notificationDeliveries).values({ notificationEventId: eventId, recipientUserId: event.recipientUserId, channel, status: "suppressed", failureReason: event.notificationClass === "marketing" && !preference.marketingOptIn ? "Marketing opt-in is disabled" : "Member channel preference is disabled" });
+      await db.insert(notificationDeliveries).values({ notificationEventId: existing.id, recipientUserId: event.recipientUserId, channel, status: "suppressed", failureReason: event.notificationClass === "marketing" && !preference.marketingOptIn ? "Marketing opt-in is disabled" : "Member channel preference is disabled" });
       external.push({ channel, status: "suppressed" });
       continue;
     }
     const quiet = quietHoursOutcome({ quietHoursEnabled: settings.quietHoursEnabled, quietHoursStart: settings.quietHoursStart, quietHoursEnd: settings.quietHoursEnd, timezone: settings.timezone, priority: event.priority, notificationClass: event.notificationClass });
     if (quiet.state === "suppress") {
-      await db.insert(notificationDeliveries).values({ notificationEventId: eventId, recipientUserId: event.recipientUserId, channel, status: "suppressed", failureReason: "Suppressed during quiet hours" });
+      await db.insert(notificationDeliveries).values({ notificationEventId: existing.id, recipientUserId: event.recipientUserId, channel, status: "suppressed", failureReason: "Suppressed during quiet hours" });
       external.push({ channel, status: "suppressed" });
       continue;
     }
     const configured = (await db.select().from(notificationProviderConfigurations).where(and(eq(notificationProviderConfigurations.channel, channel), eq(notificationProviderConfigurations.enabled, true))).limit(1))[0];
     if (!configured) {
-      await db.insert(notificationDeliveries).values({ notificationEventId: eventId, recipientUserId: event.recipientUserId, channel, status: "unavailable", failureReason: `${channel.toUpperCase()} provider is not configured` });
+      await db.insert(notificationDeliveries).values({ notificationEventId: existing.id, recipientUserId: event.recipientUserId, channel, status: "unavailable", failureReason: `${channel.toUpperCase()} provider is not configured` });
       external.push({ channel, status: "unavailable" });
       continue;
     }
-    const deliveryId = Number((await db.insert(notificationDeliveries).values({ notificationEventId: eventId, recipientUserId: event.recipientUserId, channel, provider: configured.provider, templateVersion: "system-v1", status: "queued", scheduledAt: quiet.availableAt ?? new Date() }).$returningId())[0]?.id ?? 0);
+    const deliveryId = Number((await db.insert(notificationDeliveries).values({ notificationEventId: existing.id, recipientUserId: event.recipientUserId, channel, provider: configured.provider, templateVersion: "system-v1", status: "queued", scheduledAt: quiet.availableAt ?? new Date() }).$returningId())[0]?.id ?? 0);
     await db.insert(notificationJobs).values({ notificationDeliveryId: deliveryId, priority: event.priority, availableAt: quiet.availableAt ?? new Date(), maxAttempts: 3 });
     external.push({ channel, status: quiet.state === "delay" ? "queued_for_quiet_hours" : "queued" });
   }
-  await createAuditLog(event.actorUserId ?? null, "notification.event_created", "notification_event", String(eventId), { eventType: event.eventType, recipientUserId: event.recipientUserId, notificationClass: event.notificationClass, priority: event.priority, inAppCreated: Boolean(notificationId), external: external.map(item => ({ channel: item.channel, status: item.status })) });
+  await createAuditLog(event.actorUserId ?? null, "notification.event_created", "notification_event", String(existing.id), { eventType: event.eventType, recipientUserId: event.recipientUserId, notificationClass: event.notificationClass, priority: event.priority, inAppCreated: createdInApp, external: external.map(item => ({ channel: item.channel, status: item.status })) });
   return { notificationId, duplicate: false, external };
 }
 
@@ -76,7 +97,25 @@ export async function emitLegacyNotification(userId: number, notificationType: L
 
 export async function getNotificationCenter(userId: number) {
   const db = await getDb(); if (!db) return [];
-  return db.select().from(notifications).where(and(eq(notifications.userId, userId), isNull(notifications.dismissedAt), or(isNull(notifications.expiresAt), gt(notifications.expiresAt, new Date())))).orderBy(desc(notifications.createdAt)).limit(100);
+  const rows = await db.select().from(notifications).where(and(eq(notifications.userId, userId), isNull(notifications.dismissedAt), or(isNull(notifications.expiresAt), gt(notifications.expiresAt, new Date())))).orderBy(desc(notifications.createdAt)).limit(100);
+  return rows.map(row => ({ ...row, category: notificationCategory(row.notificationType), actionable: Boolean(row.actionPath) && (!row.expiresAt || row.expiresAt > new Date()) }));
+}
+
+export async function getNotificationSummary(userId: number) {
+  const db = await getDb(); if (!db) return { unreadCount: 0 };
+  const [row] = await db.select({ unreadCount: count() }).from(notifications).where(and(eq(notifications.userId, userId), isNull(notifications.dismissedAt), isNull(notifications.readAt), or(isNull(notifications.expiresAt), gt(notifications.expiresAt, new Date()))));
+  return { unreadCount: Number(row?.unreadCount ?? 0) };
+}
+
+function notificationCategory(notificationType: TrustedNotificationEvent["notificationType"]) {
+  if (notificationType === "interest" || notificationType === "match" || notificationType === "connection") return "connections";
+  if (notificationType === "message") return "messages";
+  if (notificationType === "verification") return "verification";
+  if (notificationType === "family") return "family";
+  if (notificationType === "safety") return "safety";
+  if (notificationType === "billing") return "membership";
+  if (notificationType === "recommendation") return "recommendations";
+  return notificationType === "security" ? "security" : "product_updates";
 }
 
 export async function markNotificationReadState(userId: number, notificationId: number) { const db = await getDb(); if (!db) throw new Error("Notification service is temporarily unavailable."); await db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId))); }

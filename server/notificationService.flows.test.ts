@@ -35,10 +35,12 @@ describe("Phase 9 centralized notification service", () => {
     expect(String(notification?.values.body)).not.toMatch(/wali|feedback|contact/i);
   });
 
-  it("makes application-event creation idempotent before creating another in-app item or delivery record", async () => {
+  it("recovers a missing in-app item for an existing application event without re-queueing external delivery", async () => {
     const fake = fakeDb([[{ id: 99 }]]); mocks.getDb.mockResolvedValue(fake.db);
     const result = await emitTrustedNotification({ recipientUserId: 4, eventType: "recommendation_available", notificationType: "recommendation", category: "recommendations", priority: "normal", notificationClass: "transactional", idempotencyKey: "recommendation:4:current", actionPath: "/app/recommendations" });
-    expect(result).toEqual({ notificationId: null, duplicate: true, external: [] }); expect(fake.inserts).toHaveLength(0);
+    expect(result).toEqual({ notificationId: 1, duplicate: true, external: [] });
+    expect(fake.inserts.some(entry => entry.values.eventKey === "recommendation:4:current")).toBe(true);
+    expect(fake.inserts.some(entry => entry.values.channel === "email" || entry.values.channel === "sms" || entry.values.channel === "push")).toBe(false);
   });
 
   it("keeps essential safety notifications in-app even when a member disabled ordinary in-app channels", async () => {
