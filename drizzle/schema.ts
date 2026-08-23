@@ -184,6 +184,43 @@ export const memberProfiles = mysqlTable(
   ],
 );
 
+/** Member account lifecycle is separate from matrimonial profile content. Pending deletion is a request, never an automatic record purge. */
+export const memberAccountStates = mysqlTable("member_account_states", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lifecycleStatus: mysqlEnum("lifecycleStatus", ["active", "paused", "deletion_requested"]).default("active").notNull(),
+  previousProfileStatus: mysqlEnum("previousProfileStatus", ["draft", "under_review", "active", "paused", "suspended"]),
+  previousSearchVisible: boolean("previousSearchVisible"),
+  pausedAt: timestamp("pausedAt"),
+  deletionRequestedAt: timestamp("deletionRequestedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("member_account_states_user_unique").on(table.userId), index("member_account_states_lifecycle_idx").on(table.lifecycleStatus, table.updatedAt)]);
+
+/** A member can request an export or deletion review, but a request never claims that a file was produced or records were erased. */
+export const memberDataRightsRequests = mysqlTable("member_data_rights_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestType: mysqlEnum("requestType", ["data_export", "account_deletion"]).notNull(),
+  status: mysqlEnum("status", ["requested", "processing", "ready", "expired", "cancelled", "unavailable", "failed"]).default("requested").notNull(),
+  requestedAt: timestamp("requestedAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  expiresAt: timestamp("expiresAt"),
+  safeSummary: json("safeSummary"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("member_data_rights_user_status_idx").on(table.userId, table.requestType, table.status, table.updatedAt)]);
+
+/** Append-only member lifecycle evidence excludes credentials, documents, message content, staff notes, and safety detail. */
+export const memberAccountEvents = mysqlTable("member_account_events", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  eventType: mysqlEnum("eventType", ["account_paused", "account_reactivated", "deletion_requested", "deletion_cancelled", "data_export_requested", "data_request_cancelled"]).notNull(),
+  requestId: int("requestId").references(() => memberDataRightsRequests.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("member_account_events_user_idx").on(table.userId, table.createdAt)]);
+
 /** Origins may be multiple but remain private unless existing field-level visibility grants an audience. */
 export const memberProfileOrigins = mysqlTable("member_profile_origins", {
   id: int("id").autoincrement().primaryKey(),

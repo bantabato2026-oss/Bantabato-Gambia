@@ -44,6 +44,7 @@ const BillingPage = lazy(() => import("@/pages/BillingPage"));
 const SafetyCenterPage = lazy(() => import("@/pages/SafetyCenterPage"));
 const InternationalPage = lazy(() => import("./pages/InternationalPage"));
 const DeviceExperiencePage = lazy(() => import("./pages/DeviceExperiencePage").then(module => ({ default: module.DeviceExperiencePage })));
+const AccountCenterPage = lazy(() => import("./pages/AccountCenterPage"));
 const AdminRecommendationPolicyPage = lazy(() => import("@/pages/AdminRecommendationPolicy"));
 const AdminBillingPage = lazy(() => import("@/pages/AdminBilling"));
 const AdminNotificationsPage = lazy(() => import("@/pages/AdminNotifications"));
@@ -88,6 +89,7 @@ function Router() {
 	    <Route path="/app/compatibility" component={CompatibilityPreferencesPage} />
 		<Route path="/app/international" component={InternationalPage} />
 		<Route path="/app/device" component={DeviceExperiencePage} />
+		<Route path="/app/account" component={AccountCenterPage} />
     <Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
     <Route path="/app/photos" component={ProfileMediaPage} />
     <Route path="/app/discover" component={CuratedDiscoveryPage} />

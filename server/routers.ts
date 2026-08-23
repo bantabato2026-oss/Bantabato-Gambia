@@ -57,6 +57,7 @@ import { dismissNotification, getNotificationCenter, getNotificationPreferences,
 import { addSafetyEvidence, approveSafetyEnforcement, createIntegritySignal, expireSafetyEnforcements, getMemberSafetyCenter, getMemberSafetyReports, getSafetyCaseDetail, getSafetyEvidenceForReview, listSafetyOperations, requestSafetyEnforcement, reviewSafetyAppeal, revokeSafetyEnforcement, saveIntegrityPolicy, submitSafetyAppeal, triageIntegritySignal, updateMemberSafetyReport, withdrawMemberSafetyReport, withdrawSafetyAppeal } from "./integrityService";
 import { acceptStaffInvitation, createOperationalApproval, createOperationalIncident, createStaffSessionControl, createSupportTicket, decideOperationalApproval, getEffectiveStaffAccess, getOperationalMemberSummary, inviteStaff, listAssignableSupportStaff, listCurrentStaffPermissions, listFeatureFlags, listOperationalApprovals, listOperationalAudit, listOperationalIncidents, listOperationsOverview, listStaffDirectory, listSupportTickets, proposeStaffChange, requireOperationalPermission, revokeStaffSession, searchOperationalMembers, updateOperationalIncident, updateSupportTicket } from "./adminOperationsService";
 import { getInternationalSettings, listCountryOperations, listInternationalCountries, saveCountryPolicy, saveInternationalSettings, setCountryLifecycle } from "./internationalService";
+import { cancelMemberDataRightsRequest, getMemberAccountSummary, pauseMemberAccount, reactivateMemberAccount, requestMemberDataRights } from "./accountService";
 import { acceptBetaInvitation, changeBetaEnrollment, createBetaInvitation, getMyBetaEnrollment, listBetaOperations, requireBetaMemberAccess, revokeBetaInvitation, setBetaMode } from "./betaService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -163,6 +164,13 @@ export const appRouter = router({
   beta: router({
     status: protectedProcedure.query(({ ctx }) => getMyBetaEnrollment(ctx.user.id)),
     acceptInvitation: protectedProcedure.input(z.object({ invitationCode: z.string().trim().min(16).max(200) })).mutation(({ ctx, input }) => acceptBetaInvitation(ctx.user.id, ctx.user.email, input.invitationCode)),
+  }),
+  account: router({
+    summary: betaMemberProcedure.query(({ ctx }) => getMemberAccountSummary(ctx.user.id)),
+    pause: betaMemberProcedure.input(z.object({ expectedUpdatedAt: z.date().optional() })).mutation(({ ctx, input }) => pauseMemberAccount(ctx.user.id, input.expectedUpdatedAt)),
+    reactivate: betaMemberProcedure.input(z.object({ expectedUpdatedAt: z.date().optional() })).mutation(({ ctx, input }) => reactivateMemberAccount(ctx.user.id, input.expectedUpdatedAt)),
+    requestDataRights: betaMemberProcedure.input(z.object({ requestType: z.enum(["data_export", "account_deletion"]), expectedUpdatedAt: z.date().optional() })).mutation(({ ctx, input }) => requestMemberDataRights(ctx.user.id, input.requestType, input.expectedUpdatedAt)),
+    cancelDataRightsRequest: betaMemberProcedure.input(z.object({ requestId: z.number().int().positive(), expectedUpdatedAt: z.date().optional() })).mutation(({ ctx, input }) => cancelMemberDataRightsRequest(ctx.user.id, input.requestId, input.expectedUpdatedAt)),
   }),
   profile: router({
     mine: protectedProcedure.query(async ({ ctx }) => {

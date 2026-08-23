@@ -84,7 +84,7 @@ export async function requireFreshMemberAuthentication(userId: number) {
   if (!db) throw new Error("Database unavailable");
   const [user] = await db.select({ lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, userId)).limit(1);
   if (!hasFreshSuccessStoryAuthentication(user?.lastSignedIn)) {
-    throw new Error("For your privacy, sign out and sign back in before submitting a story for public editorial review.");
+    throw new Error("For your privacy, sign out and sign back in before this sensitive account action.");
   }
 }
 
