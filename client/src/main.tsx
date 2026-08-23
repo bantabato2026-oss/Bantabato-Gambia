@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { startLogin } from "./const";
+import { LocalizationProvider } from "./contexts/LocalizationContext";
 import { registerPwaServiceWorker } from "./lib/mobileExperience";
 import "./index.css";
 
@@ -92,7 +93,7 @@ if (typeof window !== "undefined") {
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <LocalizationProvider><App /></LocalizationProvider>
     </QueryClientProvider>
   </trpc.Provider>
 );
