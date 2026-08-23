@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { trpc } from "@/lib/trpc";
-import { BellRing, ClipboardCheck, FileCheck2, Landmark, ShieldAlert, UsersRound } from "lucide-react";
+import { BellRing, ClipboardCheck, FileCheck2, ImageOff, Landmark, ShieldAlert, Sparkles, UsersRound, WalletCards } from "lucide-react";
 import { Link } from "wouter";
 
 const cards = [
@@ -13,6 +13,14 @@ const cards = [
   { key: "approvals", label: "Pending approvals", text: "High-impact requests awaiting a separate decision-maker.", href: "/admin/approvals", permission: "approvals.view", icon: FileCheck2 },
   { key: "incidents", label: "Open incidents", text: "Service and provider issues currently under operational handling.", href: "/admin/incidents", permission: "incidents.view", icon: ShieldAlert },
   { key: "notificationFailures", label: "Unread notification records", text: "Privacy-safe operational record count only; no payload is exposed.", href: "/admin/notifications", permission: "notifications.view", icon: BellRing },
+  { key: "photoReviews", label: "Photo review queue", text: "Pending private profile photos awaiting an authorized review.", href: "/admin/photos", permission: "photos.review", icon: ImageOff },
+  { key: "appeals", label: "Pending safety appeals", text: "Member-owned appeals requiring permitted safety review.", href: "/admin/safety", permission: "safety.cases.view", icon: ShieldAlert },
+  { key: "safetyActions", label: "Safety actions", text: "Pending or active proportionate enforcement controls.", href: "/admin/safety", permission: "safety.cases.view", icon: ShieldAlert },
+  { key: "family", label: "Family Circle attention", text: "Invitation, Wali verification, or restriction metadata only.", href: "/admin/family", permission: "members.view", icon: UsersRound },
+  { key: "editorial", label: "Editorial submissions", text: "Consent-scoped stories awaiting review or independent sign-off.", href: "/admin/success-stories", permission: "success_stories.review", icon: Sparkles },
+  { key: "refunds", label: "Refund review", text: "Provider-bound finance requests; no money moves here.", href: "/admin/billing", permission: "finance.transactions.view", icon: WalletCards },
+  { key: "memberships", label: "Membership attention", text: "Past-due, grace, or suspended lifecycle records only.", href: "/admin/billing", permission: "subscriptions.view", icon: WalletCards },
+  { key: "betaInvitations", label: "Pending beta invitations", text: "Invite-only enrollment records; no tokens are displayed.", href: "/admin/beta", permission: "beta.view", icon: UsersRound },
 ] as const;
 
 export default function AdminPage() { return <AdminAccessGate><AdminOperationsHome /></AdminAccessGate>; }

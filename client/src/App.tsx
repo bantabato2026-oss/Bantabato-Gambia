@@ -53,6 +53,7 @@ const AdminIncidentsPage = lazy(() => import("@/pages/AdminOperationalQueues").t
 const AdminAuditPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminAuditPage })));
 const AdminConfigurationPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminConfigurationPage })));
 const AdminMembersPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminMembersPage })));
+const AdminMemberDetailPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminMemberDetailPage })));
 const AdminStaffPage = lazy(() => import("@/pages/AdminOperationsManagement").then(module => ({ default: module.AdminStaffPage })));
 const AdminCountriesPage = lazy(() => import("@/pages/AdminCountries"));
 const AdminPhotoReviewPage = lazy(() => import("@/pages/AdminContentReview").then(module => ({ default: module.AdminPhotoReviewPage })));
@@ -111,6 +112,7 @@ function Router() {
       <Route path="/admin/billing" component={AdminBillingPage} />
 	      <Route path="/admin/notifications" component={AdminNotificationsPage} />
 	      <Route path="/admin/safety" component={AdminSafetyOperationsPage} />
+	      <Route path="/admin/members/:profileId">{params => <AdminMemberDetailPage profileId={Number(params.profileId)} />}</Route>
 	      <Route path="/admin/members" component={AdminMembersPage} />
 	      <Route path="/admin/support" component={AdminSupportPage} />
 	      <Route path="/admin/approvals" component={AdminApprovalsPage} />

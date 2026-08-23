@@ -44,6 +44,7 @@ async function expectAllScopedAdministrativeAccessDenied(caller: ReturnType<type
   await expect(caller.admin.operationsAccess()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.operationsOverview()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.operationsMembers({ query: "member", page: 0 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(caller.admin.operationsMemberSummary({ profileId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.staffDirectory()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.staffPermissions()).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(caller.admin.inviteStaff({ email: "staff@example.test", staffRole: "customer_support_officer", expiresInHours: 24 })).rejects.toMatchObject({ code: "FORBIDDEN" });

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
-import { adminRoles, auditLogs, memberProfiles, notifications, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, reports, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
-import { createAuditLog, getDb } from "./db";
+import { adminRoles, auditLogs, betaInvitations, familyLinks, memberProfiles, memberSuccessDeclarations, notifications, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, paymentRefunds, profilePhotos, reports, safetyAppeals, safetyEnforcementActions, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, subscriptions, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
+import { createAuditLog, getDb, getMemberEligibility } from "./db";
 import { getActiveAdminScopes } from "./operations";
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, canDecideApproval, isKnownPermission, permissionRequiresFreshReauthentication, requiresIndependentApproval, roleCan, staffSessionIsUsable, type PermissionKey } from "./domain/adminOperationsPolicy";
 
@@ -113,6 +113,14 @@ export async function listOperationsOverview(actorUserId: number) {
     approvals: can("approvals.view") ? await count(operationalApprovals, eq(operationalApprovals.status, "pending")) : undefined,
     incidents: can("incidents.view") ? await count(operationalIncidents, inArray(operationalIncidents.status, ["detected", "investigating", "mitigating", "monitoring"])) : undefined,
     notificationFailures: can("notifications.view") ? await count(notifications, isNull(notifications.readAt)) : undefined,
+    photoReviews: can("photos.review") ? await count(profilePhotos, and(eq(profilePhotos.photoPurpose, "profile"), eq(profilePhotos.reviewStatus, "pending"), isNull(profilePhotos.deletedAt))) : undefined,
+    appeals: can("safety.cases.view") ? await count(safetyAppeals, inArray(safetyAppeals.status, ["submitted", "in_review", "information_requested"])) : undefined,
+    safetyActions: can("safety.cases.view") ? await count(safetyEnforcementActions, inArray(safetyEnforcementActions.status, ["proposed", "active"])) : undefined,
+    family: can("members.view") ? await count(familyLinks, inArray(familyLinks.status, ["invited", "pending_verification", "suspended"])) : undefined,
+    editorial: can("success_stories.review") ? await count(memberSuccessDeclarations, inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])) : undefined,
+    refunds: can("finance.transactions.view") ? await count(paymentRefunds, inArray(paymentRefunds.status, ["requested", "processing"])) : undefined,
+    memberships: can("subscriptions.view") ? await count(subscriptions, inArray(subscriptions.status, ["past_due", "grace_period", "suspended"])) : undefined,
+    betaInvitations: can("beta.view") ? await count(betaInvitations, eq(betaInvitations.status, "pending")) : undefined,
   }};
 }
 
@@ -121,6 +129,33 @@ export async function searchOperationalMembers(actorUserId: number, query: strin
   const db = await getDb(); if (!db) return []; const term = `%${query.trim()}%`; const numeric = Number(query);
   const rows = await db.select({ profileId: memberProfiles.id, displayName: memberProfiles.displayName, profileVisibility: memberProfiles.profileVisibility, searchVisible: memberProfiles.searchVisible, userId: memberProfiles.userId }).from(memberProfiles).where(or(!Number.isNaN(numeric) ? eq(memberProfiles.id, numeric) : like(memberProfiles.displayName, term), like(memberProfiles.displayName, term))).orderBy(asc(memberProfiles.id)).limit(25).offset(Math.max(0, page) * 25);
   await createAuditLog(actorUserId, "operations.member_search", "member_profile", undefined, { queryLength: query.trim().length, resultCount: rows.length }); return rows;
+}
+
+export async function getOperationalMemberSummary(actorUserId: number, profileId: number) {
+  const access = await requireOperationalPermission(actorUserId, "members.view");
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [profile] = await db.select({ id: memberProfiles.id, userId: memberProfiles.userId, displayName: memberProfiles.displayName, country: memberProfiles.country, profileVisibility: memberProfiles.profileVisibility, searchVisible: memberProfiles.searchVisible, profileStatus: memberProfiles.profileStatus, completedAt: memberProfiles.completedAt }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).limit(1);
+  if (!profile) throw new Error("This member profile is unavailable.");
+  const can = (permission: PermissionKey) => access.permissions.includes(permission);
+  const [verification, safetyActions, subscription, audit] = await Promise.all([
+    can("verification.view") ? db.select({ status: verificationRecords.status, updatedAt: verificationRecords.updatedAt }).from(verificationRecords).where(eq(verificationRecords.profileId, profile.id)).orderBy(desc(verificationRecords.createdAt)).limit(1) : Promise.resolve([]),
+    can("safety.cases.view") ? db.select({ actionType: safetyEnforcementActions.actionType, status: safetyEnforcementActions.status, expiresAt: safetyEnforcementActions.expiresAt }).from(safetyEnforcementActions).where(and(eq(safetyEnforcementActions.subjectProfileId, profile.id), inArray(safetyEnforcementActions.status, ["proposed", "active"]))).orderBy(desc(safetyEnforcementActions.updatedAt)).limit(10) : Promise.resolve([]),
+    can("subscriptions.view") ? db.select({ plan: subscriptions.plan, status: subscriptions.status, endsAt: subscriptions.endsAt }).from(subscriptions).where(eq(subscriptions.profileId, profile.id)).orderBy(desc(subscriptions.updatedAt)).limit(1) : Promise.resolve([]),
+    can("audit.view") ? db.select({ id: auditLogs.id, action: auditLogs.action, entityType: auditLogs.entityType, createdAt: auditLogs.createdAt }).from(auditLogs).where(and(eq(auditLogs.entityType, "member_profile"), eq(auditLogs.entityId, String(profile.id)))).orderBy(desc(auditLogs.createdAt)).limit(10) : Promise.resolve([]),
+  ]);
+  const eligibility = await getMemberEligibility(profile.id);
+  await createAuditLog(actorUserId, "operations.member_summary_viewed", "member_profile", String(profile.id), { profileId: profile.id, categories: ["member_visible", "operational", ...(verification.length ? ["restricted_verification"] : []), ...(safetyActions.length ? ["restricted_safety"] : []), ...(subscription.length ? ["restricted_membership"] : []), ...(audit.length ? ["staff_only_audit"] : [])] });
+  return {
+    memberVisible: { profileId: profile.id, displayName: profile.displayName, country: profile.country, profileVisibility: profile.profileVisibility, searchVisible: profile.searchVisible },
+    operational: { profileStatus: profile.profileStatus, completedAt: profile.completedAt, eligibility: { profileComplete: eligibility.profileComplete, discoveryEligible: eligibility.discoveryEligible, approvedPhotoCount: eligibility.approvedPhotoCount, requiredPhotoCount: eligibility.approvedPhotoCount + eligibility.photosRemaining } },
+    restricted: {
+      verification: can("verification.view") ? verification[0] ?? { status: "not_started", updatedAt: null } : undefined,
+      safety: can("safety.cases.view") ? safetyActions.map(action => ({ actionType: action.actionType, status: action.status, expiresAt: action.expiresAt })) : undefined,
+      membership: can("subscriptions.view") ? subscription[0] ?? { plan: "free", status: "inactive", endsAt: null } : undefined,
+    },
+    staffOnly: can("audit.view") ? { recentAudit: audit } : undefined,
+  };
 }
 
 export async function listSupportTickets(actorUserId: number, status?: SupportStatus) { await requireOperationalPermission(actorUserId, "support.view"); const db = await getDb(); if (!db) return []; return db.select().from(supportTickets).where(status ? eq(supportTickets.status, status) : inArray(supportTickets.status, ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated"])).orderBy(desc(supportTickets.updatedAt)).limit(100); }
