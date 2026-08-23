@@ -144,7 +144,6 @@ export async function saveSuccessDeclaration(profileId: number, actorUserId: num
   if (!db) throw new Error("Database unavailable");
   const now = new Date();
   const status = resolveSuccessDeclarationStatus(input.sharingConsent);
-  const current = await getSuccessDeclaration(profileId);
   const publicStoryConsent = input.editorialAction === "submit_for_review";
   if (publicStoryConsent && !maySubmitSuccessStory({ publicStoryConsent, storySummary: input.storySummary })) throw new Error("Add a short story summary and explicit public consent before submitting for review.");
   if (input.publicPhotoId) {
@@ -153,9 +152,14 @@ export async function saveSuccessDeclaration(profileId: number, actorUserId: num
   }
   const editorialStatus = publicStoryConsent ? "pending_review" : "private";
   const values = { outcome: input.outcome, sharingConsent: input.sharingConsent, status, editorialStatus, publicStoryConsent, publicConsentAt: publicStoryConsent ? now : null, storySummary: input.storySummary?.trim() || null, publicDisplayNameAuthorized: Boolean(input.publicDisplayNameAuthorized), publicPhotoId: input.publicPhotoId ?? null, publicPhotoAuthorized: Boolean(input.publicPhotoAuthorized && input.publicPhotoId), publicPhotoAuthorizedAt: input.publicPhotoId && input.publicPhotoAuthorized ? now : null, submittedAt: publicStoryConsent ? now : null, declaredAt: now, consentRecordedAt: input.sharingConsent ? now : null, withdrawnAt: null, reviewedByUserId: null, reviewedAt: null, reviewNote: null, publishedByUserId: null, publishedAt: null } as const;
-  if (current) await db.update(memberSuccessDeclarations).set(values).where(eq(memberSuccessDeclarations.id, current.id));
-  else await db.insert(memberSuccessDeclarations).values({ profileId, ...values });
-  const declaration = await getSuccessDeclaration(profileId);
+  const declaration = await db.transaction(async tx => {
+    await tx.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update");
+    const [current] = await tx.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.profileId, profileId)).limit(1);
+    if (current) await tx.update(memberSuccessDeclarations).set(values).where(eq(memberSuccessDeclarations.id, current.id));
+    else await tx.insert(memberSuccessDeclarations).values({ profileId, ...values });
+    const [saved] = await tx.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.profileId, profileId)).limit(1);
+    return saved ?? null;
+  });
   await db.insert(auditLogs).values({ actorUserId, action: publicStoryConsent ? "member.success_story_submitted" : "member.success_declaration_saved", entityType: "member_success_declaration", entityId: String(declaration?.id ?? profileId), metadata: { outcome: input.outcome, sharingConsent: input.sharingConsent, editorialStatus, publicDisplayNameAuthorized: Boolean(input.publicDisplayNameAuthorized), publicPhotoAuthorized: Boolean(input.publicPhotoAuthorized && input.publicPhotoId) } });
   return declaration;
 }
@@ -163,10 +167,14 @@ export async function saveSuccessDeclaration(profileId: number, actorUserId: num
 export async function withdrawSuccessDeclaration(profileId: number, actorUserId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const current = await getSuccessDeclaration(profileId);
-  if (!current || current.status === "withdrawn") throw new Error("No active success declaration exists");
   const now = new Date();
-  await db.update(memberSuccessDeclarations).set({ sharingConsent: false, status: "withdrawn", editorialStatus: "withdrawn", publicStoryConsent: false, publicConsentAt: null, publicDisplayNameAuthorized: false, publicPhotoId: null, publicPhotoAuthorized: false, publicPhotoAuthorizedAt: null, withdrawnAt: now, consentRecordedAt: null }).where(eq(memberSuccessDeclarations.id, current.id));
+  const current = await db.transaction(async tx => {
+    await tx.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update");
+    const [active] = await tx.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.profileId, profileId)).limit(1);
+    if (!active || active.status === "withdrawn") throw new Error("No active success declaration exists");
+    await tx.update(memberSuccessDeclarations).set({ sharingConsent: false, status: "withdrawn", editorialStatus: "withdrawn", publicStoryConsent: false, publicConsentAt: null, publicDisplayNameAuthorized: false, publicPhotoId: null, publicPhotoAuthorized: false, publicPhotoAuthorizedAt: null, withdrawnAt: now, consentRecordedAt: null }).where(eq(memberSuccessDeclarations.id, active.id));
+    return active;
+  });
   await db.insert(auditLogs).values({ actorUserId, action: "member.success_declaration_withdrawn", entityType: "member_success_declaration", entityId: String(current.id), metadata: { status: "withdrawn", editorialStatus: "withdrawn" } });
   return getSuccessDeclaration(profileId);
 }

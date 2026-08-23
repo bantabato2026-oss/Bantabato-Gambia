@@ -55,7 +55,7 @@ async function participantLink(userId: number, familyLinkId: number) {
   return rows[0];
 }
 
-async function recordEvent(familyLinkId: number, actorUserId: number | null, eventType: "invitation_sent" | "invitation_accepted" | "invitation_declined" | "permission_granted" | "permission_revoked" | "match_shared" | "share_withdrawn" | "acknowledgment_requested" | "acknowledgment_submitted" | "feedback_submitted" | "participant_removed" | "access_restricted" | "report_submitted", details?: Record<string, unknown>) {
+async function recordEvent(familyLinkId: number, actorUserId: number | null, eventType: "invitation_sent" | "invitation_accepted" | "invitation_declined" | "invitation_revoked" | "permission_granted" | "permission_revoked" | "match_shared" | "share_withdrawn" | "acknowledgment_requested" | "acknowledgment_submitted" | "feedback_submitted" | "participant_removed" | "access_restricted" | "report_submitted", details?: Record<string, unknown>) {
   const db = await requireDb();
   await db.insert(familyEvents).values({ familyLinkId, actorUserId, eventType, details: details ?? null });
 }
@@ -105,10 +105,23 @@ export async function reissueFamilyInvitation(memberProfileId: number, actorUser
   const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000);
   const link = await ownedLink(memberProfileId, familyLinkId);
   if (link.status !== "invited") throw new Error("Only a pending Family Circle invitation can be resent.");
-  await db.update(familyLinks).set({ invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, invitedAt: now }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited")));
+  const reissued = await db.update(familyLinks).set({ invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, invitedAt: now }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited")));
+  if (!Number((reissued[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This Family Circle invitation changed before it could be reissued.");
   await recordEvent(familyLinkId, actorUserId, "invitation_sent", { relationship: link.relationship, reissued: true });
   await createAuditLog(actorUserId, "family.invitation_resent", "family_link", String(familyLinkId), { relationship: link.relationship });
   return { familyLinkId, invitationCode: code, expiresAt, reissued: true };
+}
+
+export async function revokeFamilyInvitation(memberProfileId: number, actorUserId: number, familyLinkId: number) {
+  const db = await requireDb();
+  const link = await ownedLink(memberProfileId, familyLinkId);
+  if (link.status !== "invited") throw new Error("Only a pending Family Circle invitation can be revoked.");
+  const revokedAt = new Date();
+  const revoked = await db.update(familyLinks).set({ status: "revoked", invitationCodeHash: null, revokedAt }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited")));
+  if (!Number((revoked[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This Family Circle invitation changed before it could be revoked.");
+  await recordEvent(familyLinkId, actorUserId, "invitation_revoked", { relationship: link.relationship, pendingInvitation: true });
+  await createAuditLog(actorUserId, "family.invitation_revoked", "family_link", String(familyLinkId), { relationship: link.relationship });
+  return { success: true, status: "revoked" as const };
 }
 
 export async function acceptFamilyInvitation(userId: number, email: string | null | undefined, code: string) {
@@ -149,7 +162,7 @@ export async function listMemberFamilyCircle(memberProfileId: number) {
   const permissions = links.length ? await db.select().from(familyPermissions).where(inArray(familyPermissions.familyLinkId, links.map(link => link.id))) : [];
   const shares = links.length ? await db.select().from(familyShares).where(and(inArray(familyShares.familyLinkId, links.map(link => link.id)), eq(familyShares.status, "active"))) : [];
   const events = links.length ? await db.select().from(familyEvents).where(inArray(familyEvents.familyLinkId, links.map(link => link.id))).orderBy(desc(familyEvents.createdAt)).limit(120) : [];
-  const visibleEventTypes = new Set(["invitation_sent", "invitation_accepted", "invitation_declined", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted"]);
+  const visibleEventTypes = new Set(["invitation_sent", "invitation_accepted", "invitation_declined", "invitation_revoked", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted"]);
   const now = new Date();
   return links.map(link => ({
     id: link.id,

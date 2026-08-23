@@ -1,0 +1,1 @@
+ALTER TABLE `family_events` MODIFY COLUMN `eventType` enum('invitation_sent','invitation_accepted','invitation_declined','invitation_revoked','permission_granted','permission_revoked','match_shared','share_withdrawn','acknowledgment_requested','acknowledgment_submitted','feedback_submitted','participant_removed','access_restricted','report_submitted') NOT NULL;

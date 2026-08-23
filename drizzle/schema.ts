@@ -421,7 +421,7 @@ export const familyEvents = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     familyLinkId: int("familyLinkId").notNull().references(() => familyLinks.id, { onDelete: "cascade" }),
     actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
-    eventType: mysqlEnum("eventType", ["invitation_sent", "invitation_accepted", "invitation_declined", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted", "report_submitted"]).notNull(),
+    eventType: mysqlEnum("eventType", ["invitation_sent", "invitation_accepted", "invitation_declined", "invitation_revoked", "permission_granted", "permission_revoked", "match_shared", "share_withdrawn", "acknowledgment_requested", "acknowledgment_submitted", "feedback_submitted", "participant_removed", "access_restricted", "report_submitted"]).notNull(),
     details: json("details"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
