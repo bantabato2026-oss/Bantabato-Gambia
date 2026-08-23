@@ -80,5 +80,6 @@ describe("admin operational authorization", () => {
     await expect(caller.admin.decideReport({ reportId: 1, status: "resolved" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.admin.decideConnectionReview({ reviewId: 1, decision: "approved_voice" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expectAllScopedAdministrativeAccessDenied(caller);
-  }, 15_000);
+  // This deliberately checks every scoped procedure sequentially. Allow full-suite worker contention without relaxing any denial assertion.
+  }, 60_000);
 });

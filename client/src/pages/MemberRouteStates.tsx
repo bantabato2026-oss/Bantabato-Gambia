@@ -25,10 +25,7 @@ export function MemberMatchesRoute() {
 }
 
 export function MemberMessagesRoute() {
-  const conversations = trpc.messaging.conversations.useQuery();
-  if (conversations.isLoading) return <MemberShell eyebrow="Messages" title="Private conversations, earned mutually." description="Conversation access is limited to active mutual matches. Report and block controls stay available throughout."><StateSkeleton label="Loading your private conversations…" /></MemberShell>;
-  if (conversations.isError) return <MemberShell eyebrow="Messages" title="Private conversations, earned mutually." description="Conversation access is limited to active mutual matches. Report and block controls stay available throughout."><StatePanel kind="error" title="Your conversations are unavailable right now." description="No conversation, block, report, or read state has been changed. Please try again." action={<Button onClick={() => conversations.refetch()} className="btn-forest">Try again</Button>} /></MemberShell>;
-  return <MessagesPage />;
+  return <ProfileGate eyebrow="Messages" title="Private conversations, earned mutually." description="Conversation access is limited to active mutual matches. Report and block controls stay available throughout." loadingLabel="Loading your protected message space…"><MessagesPage /></ProfileGate>;
 }
 
 export function MemberNotificationsRoute() {

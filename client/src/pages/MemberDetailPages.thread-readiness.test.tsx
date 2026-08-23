@@ -16,7 +16,7 @@ vi.mock("@/lib/trpc", () => ({
     },
     readiness: { status: { useQuery: () => ({ data: { stage: "ready_for_review", status: "ready_for_review", readyForReview: true, reviewRequired: true, explanation: "Your connection is ready for the next step, subject to shared choice.", criteria: [{ label: "Both members are participating in the conversation", met: true }, { label: "Current safety and account checks are clear", met: true }], yourConsents: [], partnerConsentReceived: [], permissions: [{ capability: "voice", status: "unavailable", providerConfigured: false }, { capability: "video", status: "unavailable", providerConfigured: false }], safetyGuidance: ["Never send money or financial information."], futureProvider: { configured: false, message: "Voice and video calling technology is not connected yet. No call is started or simulated here." } }, isLoading: false, isError: false }) }, grantConsent: { useMutation: () => ({ mutate: mocks.mutate, isPending: false }) }, withdrawConsent: { useMutation: () => ({ mutate: mocks.mutate, isPending: false }) } },
     safety: { report: { useMutation: () => ({ mutate: mocks.mutate, isPending: false }) } },
-    profile: { mine: { useQuery: () => ({ data: { id: 3 } }) } },
+    profile: { mine: { useQuery: () => ({ data: { id: 3, eligibility: { profileComplete: true } } }) } },
   },
 }));
 

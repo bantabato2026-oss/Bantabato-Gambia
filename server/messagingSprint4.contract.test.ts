@@ -36,7 +36,8 @@ describe("Sprint 4 private communication completion contracts", () => {
     expect(thread).toContain('(messages.isError ? "unavailable" : undefined)');
     expect(thread).toContain('conversationStatus === "closed" || conversationStatus === "blocked" || conversationStatus === "unavailable"');
     expect(thread).toContain('conversationStatus === "paused" ? "This conversation is paused. Resume it before sending another message or voice note."');
-    expect(thread).toContain('state: "active" })} disabled={changeState.isPending}');
+    expect(thread).toContain('changeConversationState("active")');
+    expect(thread).toContain('expectedUpdatedAt: conversation?.updatedAt');
     expect(thread).toContain('disabled={!canSendInConversation || send.isPending');
   });
 

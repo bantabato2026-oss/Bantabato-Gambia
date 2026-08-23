@@ -90,6 +90,8 @@ export async function sendText(profileId: number, conversationId: number, body: 
     const original = await db.select().from(messages).where(and(eq(messages.id, retryOfMessageId), eq(messages.senderProfileId, profileId), eq(messages.conversationId, conversationId), eq(messages.deliveryStatus, "failed"))).limit(1);
     if (!original[0]) throw new Error("This message cannot be retried");
   }
+  // Re-check immediately before the write so an already-open screen cannot send after a block, restriction, match closure, or pause transition.
+  await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active"]);
   let result;
   try {
     result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "text", body: clean, retryOfMessageId: retryOfMessageId ?? null, clientRequestId: requestId, requestFingerprint: fingerprint, deliveryStatus: "sent" });
@@ -116,6 +118,8 @@ export async function uploadVoiceNote(profileId: number, conversationId: number,
   const existing = await resolveExistingClientRequest(db, profileId, conversationId, requestId, fingerprint, "voice");
   if (existing) return { id: existing.id, durationSeconds: existing.durationSeconds ?? durationSeconds, duplicate: true };
   const stored = await storagePut(`members/${profileId}/conversations/${conversationId}/voice/${requestId}.${extension}`, buffer, mimeType);
+  // Storage preparation does not grant send authority. Re-check after the potentially slower private upload before creating a message reference.
+  await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active"]);
   let result;
   try {
     result = await db.insert(messages).values({ conversationId, senderProfileId: profileId, messageType: "voice", mediaStorageKey: stored.key, mimeType, durationSeconds, clientRequestId: requestId, requestFingerprint: fingerprint, deliveryStatus: "sent", metadata: { optimizedFor: "low_bandwidth", download: "controlled_access" } });
@@ -145,7 +149,8 @@ export async function deleteOwnVoiceNote(profileId: number, conversationId: numb
   await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active", "paused", "reported", "restricted"]);
   const message = await db.select().from(messages).where(and(eq(messages.id, messageId), eq(messages.conversationId, conversationId), eq(messages.messageType, "voice"), isNull(messages.deletedAt))).limit(1);
   assertOwnVoiceDeletion(message[0], conversationId, profileId);
-  await db.update(messages).set({ deletedAt: new Date(), body: null, mediaStorageKey: null }).where(eq(messages.id, messageId));
+  const result = await db.update(messages).set({ deletedAt: new Date(), body: null, mediaStorageKey: null }).where(and(eq(messages.id, messageId), eq(messages.conversationId, conversationId), eq(messages.senderProfileId, profileId), isNull(messages.deletedAt)));
+  if (affectedRows(result) === 0) throw new Error("This voice note changed before it could be deleted. Refresh the conversation and try again.");
   await createAuditLog(null, "voice_note.deleted", "message", String(messageId), { conversationId, actorProfileId: profileId });
 }
 
@@ -157,11 +162,16 @@ export async function setConversationPreference(profileId: number, conversationI
   return db.select().from(conversationPreferences).where(and(eq(conversationPreferences.conversationId, conversationId), eq(conversationPreferences.profileId, profileId))).limit(1);
 }
 
-export async function setConversationState(profileId: number, conversationId: number, state: "active" | "paused" | "closed") {
+export async function setConversationState(profileId: number, conversationId: number, state: "active" | "paused" | "closed", expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active", "paused", "reported", "restricted"]);
-  await db.update(conversations).set({ status: state, closedAt: state === "closed" ? new Date() : null, lastActivityAt: new Date() }).where(eq(conversations.id, conversationId));
+  const access = await requireConversationAccess(profileId, conversationId, ["mutual_interest", "active", "paused", "reported", "restricted"]);
+  if (state === "active" && access.conversation.status !== "paused") throw new Error("This conversation is no longer paused. Refresh before changing it again.");
+  if (state === "paused" && !["mutual_interest", "active"].includes(access.conversation.status)) throw new Error("This conversation is not available to pause right now.");
+  const conditions = [eq(conversations.id, conversationId), eq(conversations.status, access.conversation.status)];
+  if (expectedUpdatedAt) conditions.push(eq(conversations.updatedAt, expectedUpdatedAt));
+  const result = await db.update(conversations).set({ status: state, closedAt: state === "closed" ? new Date() : null, lastActivityAt: new Date() }).where(and(...conditions));
+  if (affectedRows(result) === 0) throw new Error("This conversation changed before your update. Refresh the conversation and try again.");
   await recordEvent(conversationId, profileId, state === "closed" ? "conversation_closed" : state === "paused" ? "conversation_paused" : "conversation_started");
 }
 
@@ -241,7 +251,8 @@ async function touchConversation(conversationId: number, profileId: number, even
   const db = await getDb();
   if (!db) return;
   const now = new Date();
-  await db.update(conversations).set({ status: "active", lastMessageAt: now, lastActivityAt: now }).where(eq(conversations.id, conversationId));
+  // Never let a delayed send completion reactivate a conversation that was paused, restricted, blocked, or closed in the meantime.
+  await db.update(conversations).set({ status: "active", lastMessageAt: now, lastActivityAt: now }).where(and(eq(conversations.id, conversationId), inArray(conversations.status, ["mutual_interest", "active"])));
   await recordInteraction(conversationId, profileId, kind);
   await recordEvent(conversationId, profileId, event);
 }
@@ -314,4 +325,9 @@ function decodeVoice(dataUrl: string) {
   assertExpectedFileSignature(buffer, mimeType);
   const extension = ({ "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3" } as Record<string, string>)[mimeType];
   return { buffer, mimeType, extension };
+}
+
+function affectedRows(result: unknown) {
+  if (typeof result === "object" && result && "affectedRows" in result && typeof (result as { affectedRows?: unknown }).affectedRows === "number") return (result as { affectedRows: number }).affectedRows;
+  return 1;
 }

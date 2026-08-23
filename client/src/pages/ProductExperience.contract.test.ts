@@ -56,7 +56,7 @@ describe("full product experience interaction contracts", () => {
     expect(memberRouteStates).toContain("Loading your protected command center…");
     expect(memberRouteStates).toContain("Loading your profile overview…");
     expect(memberRouteStates).toContain("Loading your private introductions…");
-    expect(memberRouteStates).toContain("Loading your private conversations…");
+    expect(memberRouteStates).toContain("Loading your protected message space…");
     expect(memberRouteStates).toContain("Loading your notification center and preferences…");
     expect(memberRouteStates).toContain("No profile, privacy, or relationship state has been changed.");
     expect(memberRouteStates).toContain("incoming.refetch(); void matches.refetch();");
