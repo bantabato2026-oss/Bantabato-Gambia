@@ -168,20 +168,24 @@ export async function getReportCase(reportId: number) {
 export async function claimReportCase(actorUserId: number, reportId: number, dependencies: WorkflowDependencies = productionWorkflowDependencies) {
   const db = await dependencies.getDb();
   if (!db) throw new Error("Database unavailable");
-  const record = await db.select({ status: reports.status }).from(reports).where(eq(reports.id, reportId)).limit(1);
-  if (!record[0]) throw new Error("Report case not found");
-  await db.update(reports).set({ status: "in_review", assignedModeratorUserId: actorUserId, reviewedByUserId: actorUserId }).where(eq(reports.id, reportId));
+  const record = await db.select({ status: reports.status, assignedModeratorUserId: reports.assignedModeratorUserId }).from(reports).where(eq(reports.id, reportId)).limit(1);
+  if (!record[0] || !["open", "triage", "in_review", "investigating", "awaiting_information", "action_required", "decision_pending", "escalated", "appealed", "reopened"].includes(record[0].status)) throw new Error("This report case is not available to claim");
+  if (record[0].assignedModeratorUserId && record[0].assignedModeratorUserId !== actorUserId) throw new Error("This report case is already assigned to another reviewer");
+  const outcome = await db.update(reports).set({ status: "in_review", assignedModeratorUserId: actorUserId, reviewedByUserId: actorUserId }).where(and(eq(reports.id, reportId), eq(reports.status, record[0].status), or(isNull(reports.assignedModeratorUserId), eq(reports.assignedModeratorUserId, actorUserId))));
+  if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This report case changed before it could be claimed. Refresh the queue and try again.");
   await dependencies.createAuditLog(actorUserId, "report.claimed", "report", String(reportId), { previousStatus: record[0].status, newStatus: "in_review" });
 }
 
 export async function decideReportCase(input: { actorUserId: number; reportId: number; status: ReportStatus; priority?: "low" | "normal" | "high" | "critical"; memberAction?: ReportAction; internalNote?: string; memberMessage?: string; resolution?: string }, dependencies: WorkflowDependencies = productionWorkflowDependencies) {
   const db = await dependencies.getDb();
   if (!db) throw new Error("Database unavailable");
-  const record = await db.select({ status: reports.status, reportedProfileId: reports.reportedProfileId }).from(reports).where(eq(reports.id, input.reportId)).limit(1);
-  if (!record[0]) throw new Error("Report case not found");
+  const record = await db.select({ status: reports.status, reportedProfileId: reports.reportedProfileId, assignedModeratorUserId: reports.assignedModeratorUserId }).from(reports).where(eq(reports.id, input.reportId)).limit(1);
+  if (!record[0] || ["resolved", "dismissed", "closed"].includes(record[0].status)) throw new Error("This report case is not awaiting an operational decision");
+  if (record[0].assignedModeratorUserId && record[0].assignedModeratorUserId !== input.actorUserId) throw new Error("This report case is assigned to another reviewer");
   const memberAction = input.memberAction ?? "none";
   const memberMessage = input.memberMessage?.trim() || defaultReportMessage(input.status, memberAction);
-  await db.update(reports).set({ status: input.status, priority: input.priority ?? "normal", memberAction, memberMessage, resolution: input.resolution?.trim() || null, assignedModeratorUserId: input.actorUserId, reviewedByUserId: input.actorUserId, resolvedAt: ["resolved", "dismissed"].includes(input.status) ? new Date() : null }).where(eq(reports.id, input.reportId));
+  const outcome = await db.update(reports).set({ status: input.status, priority: input.priority ?? "normal", memberAction, memberMessage, resolution: input.resolution?.trim() || null, assignedModeratorUserId: input.actorUserId, reviewedByUserId: input.actorUserId, resolvedAt: ["resolved", "dismissed"].includes(input.status) ? new Date() : null }).where(and(eq(reports.id, input.reportId), eq(reports.status, record[0].status), or(isNull(reports.assignedModeratorUserId), eq(reports.assignedModeratorUserId, input.actorUserId))));
+  if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This report case changed before the decision was recorded. Refresh the case and try again.");
   if (input.internalNote?.trim()) await addCaseNote(input.actorUserId, "report", input.reportId, input.internalNote);
   if (record[0].reportedProfileId && memberAction !== "none") {
     if (memberAction === "temporary_suspend") await db.update(memberProfiles).set({ profileStatus: "suspended", searchVisible: false }).where(eq(memberProfiles.id, record[0].reportedProfileId));
@@ -224,14 +228,14 @@ async function enrichVerificationRecords<T extends { profileId: number; assigned
 
 async function enrichReports<T extends { reporterProfileId: number | null; reportedProfileId?: number | null; assignedModeratorUserId?: number | null }>(records: T[]) {
   const db = await getDb();
-  if (!db || !records.length) return records.map(record => ({ ...record, reporter: null, reportedMember: null, assignedModerator: null }));
-  const profileIds = Array.from(new Set(records.flatMap(record => [record.reporterProfileId, record.reportedProfileId]).filter((id): id is number => Boolean(id))));
+  if (!db || !records.length) return records.map(record => ({ ...record, reportedMember: null, assignedModerator: null }));
+  const profileIds = Array.from(new Set(records.map(record => record.reportedProfileId).filter((id): id is number => Boolean(id))));
   const profiles = await db.select({ id: memberProfiles.id, displayName: memberProfiles.displayName, profileStatus: memberProfiles.profileStatus, country: memberProfiles.country }).from(memberProfiles).where(inArray(memberProfiles.id, profileIds));
   const staffIds = Array.from(new Set(records.map(record => record.assignedModeratorUserId).filter((id): id is number => Boolean(id))));
   const staff = staffIds.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, staffIds)) : [];
   const profilesById = new Map(profiles.map(profile => [profile.id, profile]));
   const staffById = new Map(staff.map(member => [member.id, member.name || "Operational staff"]));
-  return records.map(record => ({ ...record, reporter: record.reporterProfileId ? profilesById.get(record.reporterProfileId) ?? null : null, reportedMember: record.reportedProfileId ? profilesById.get(record.reportedProfileId) ?? null : null, assignedModerator: record.assignedModeratorUserId ? staffById.get(record.assignedModeratorUserId) ?? null : null }));
+  return records.map(record => ({ ...record, reportedMember: record.reportedProfileId ? profilesById.get(record.reportedProfileId) ?? null : null, assignedModerator: record.assignedModeratorUserId ? staffById.get(record.assignedModeratorUserId) ?? null : null }));
 }
 
 function defaultVerificationMessage(decision: VerificationDecision, reason?: VerificationReason) {

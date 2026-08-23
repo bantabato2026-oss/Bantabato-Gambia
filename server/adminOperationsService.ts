@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
-import { adminRoles, auditLogs, betaInvitations, familyLinks, memberProfiles, memberSuccessDeclarations, notifications, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, paymentReconciliations, paymentRefunds, profilePhotos, reports, safetyAppeals, safetyEnforcementActions, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, subscriptions, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
+import { adminRoles, auditLogs, betaInvitations, familyLinks, memberProfiles, memberSuccessDeclarations, notificationDeliveries, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, paymentReconciliations, paymentRefunds, profilePhotos, reports, safetyAppeals, safetyEnforcementActions, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, subscriptions, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
 import { createAuditLog, getDb, getMemberEligibility } from "./db";
 import { getActiveAdminScopes } from "./operations";
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, canDecideApproval, isKnownPermission, permissionRequiresFreshReauthentication, requiresIndependentApproval, roleCan, staffSessionIsUsable, type PermissionKey } from "./domain/adminOperationsPolicy";
@@ -112,7 +112,7 @@ export async function listOperationsOverview(actorUserId: number) {
     support: can("support.view") ? await count(supportTickets, inArray(supportTickets.status, ["new", "open", "waiting_for_staff", "escalated"])) : undefined,
     approvals: can("approvals.view") ? await count(operationalApprovals, eq(operationalApprovals.status, "pending")) : undefined,
     incidents: can("incidents.view") ? await count(operationalIncidents, inArray(operationalIncidents.status, ["detected", "investigating", "mitigating", "monitoring"])) : undefined,
-    notificationFailures: can("notifications.view") ? await count(notifications, isNull(notifications.readAt)) : undefined,
+    notificationFailures: can("notifications.view") ? await count(notificationDeliveries, inArray(notificationDeliveries.status, ["failed", "retrying", "unavailable", "expired"])) : undefined,
     photoReviews: can("photos.review") ? await count(profilePhotos, and(eq(profilePhotos.photoPurpose, "profile"), eq(profilePhotos.reviewStatus, "pending"), isNull(profilePhotos.deletedAt))) : undefined,
     appeals: can("safety.cases.view") ? await count(safetyAppeals, inArray(safetyAppeals.status, ["submitted", "in_review", "information_requested"])) : undefined,
     safetyActions: can("safety.cases.view") ? await count(safetyEnforcementActions, inArray(safetyEnforcementActions.status, ["proposed", "active"])) : undefined,
@@ -159,9 +159,46 @@ export async function getOperationalMemberSummary(actorUserId: number, profileId
   };
 }
 
-export async function listSupportTickets(actorUserId: number, status?: SupportStatus) { await requireOperationalPermission(actorUserId, "support.view"); const db = await getDb(); if (!db) return []; return db.select().from(supportTickets).where(status ? eq(supportTickets.status, status) : inArray(supportTickets.status, ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated"])).orderBy(desc(supportTickets.updatedAt)).limit(100); }
+export async function listSupportTickets(actorUserId: number, filters: { status?: SupportStatus; category?: typeof supportTickets.$inferSelect.category; assignment?: "assigned" | "unassigned" } = {}) {
+  await requireOperationalPermission(actorUserId, "support.view");
+  const db = await getDb();
+  if (!db) return [];
+  const where = [
+    filters.status ? eq(supportTickets.status, filters.status) : inArray(supportTickets.status, ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated"]),
+    filters.category ? eq(supportTickets.category, filters.category) : undefined,
+    filters.assignment === "assigned" ? isNotNull(supportTickets.assignedStaffProfileId) : undefined,
+    filters.assignment === "unassigned" ? isNull(supportTickets.assignedStaffProfileId) : undefined,
+  ].filter(Boolean) as any[];
+  return db.select({ id: supportTickets.id, memberProfileId: supportTickets.memberProfileId, category: supportTickets.category, subject: supportTickets.subject, status: supportTickets.status, priority: supportTickets.priority, assignedStaffProfileId: supportTickets.assignedStaffProfileId, assignedStaffName: users.name, assignedStaffRole: staffProfiles.staffRole, updatedAt: supportTickets.updatedAt, createdAt: supportTickets.createdAt }).from(supportTickets).leftJoin(staffProfiles, eq(supportTickets.assignedStaffProfileId, staffProfiles.id)).leftJoin(users, eq(staffProfiles.userId, users.id)).where(and(...where)).orderBy(desc(supportTickets.priority), desc(supportTickets.updatedAt)).limit(100);
+}
+export async function listAssignableSupportStaff(actorUserId: number) {
+  await requireOperationalPermission(actorUserId, "support.manage");
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ staffProfileId: staffProfiles.id, name: users.name, staffRole: staffProfiles.staffRole }).from(staffProfiles).innerJoin(users, eq(staffProfiles.userId, users.id)).where(eq(staffProfiles.status, "active")).orderBy(asc(staffProfiles.staffRole), asc(users.name)).limit(100);
+}
 export async function createSupportTicket(actorUserId: number, input: { memberProfileId: number; category: typeof supportTickets.$inferInsert.category; subject: string; description: string; priority: typeof supportTickets.$inferInsert.priority }) { await requireOperationalPermission(actorUserId, "support.manage"); const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(supportTickets).values({ ...input, status: "new" }); const ticketId = asId(result); await db.insert(supportTicketEvents).values({ ticketId, actorUserId, eventType: "created" }); await createAuditLog(actorUserId, "support.ticket_created", "support_ticket", String(ticketId), { category: input.category, priority: input.priority }); return { ticketId }; }
-export async function updateSupportTicket(actorUserId: number, ticketId: number, input: { status?: SupportStatus; assignedStaffProfileId?: number | null; resolution?: string }) { await requireOperationalPermission(actorUserId, "support.manage"); const db = await getDb(); if (!db) throw new Error("Database unavailable"); const values: any = { ...input }; if (input.status === "resolved") values.resolvedAt = new Date(); if (input.status === "closed") values.closedAt = new Date(); await db.update(supportTickets).set(values).where(eq(supportTickets.id, ticketId)); await db.insert(supportTicketEvents).values({ ticketId, actorUserId, eventType: input.status === "resolved" ? "resolved" : input.status === "closed" ? "closed" : input.assignedStaffProfileId !== undefined ? "assigned" : "status_changed" }); await createAuditLog(actorUserId, "support.ticket_updated", "support_ticket", String(ticketId), { status: input.status }); return { success: true }; }
+export async function updateSupportTicket(actorUserId: number, ticketId: number, input: { status?: SupportStatus; assignedStaffProfileId?: number | null; resolution?: string; expectedUpdatedAt: Date }) {
+  await requireOperationalPermission(actorUserId, "support.manage");
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const ticket = (await db.select({ status: supportTickets.status, updatedAt: supportTickets.updatedAt }).from(supportTickets).where(eq(supportTickets.id, ticketId)).limit(1))[0];
+  if (!ticket) throw new Error("This support ticket is unavailable.");
+  if (ticket.status === "closed") throw new Error("This support ticket is closed and cannot be changed here.");
+  if (ticket.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) throw new Error("This support ticket changed before your update. Refresh the queue and try again.");
+  if (input.assignedStaffProfileId) {
+    const assignee = (await db.select({ id: staffProfiles.id }).from(staffProfiles).where(and(eq(staffProfiles.id, input.assignedStaffProfileId), eq(staffProfiles.status, "active"))).limit(1))[0];
+    if (!assignee) throw new Error("Choose an active staff identity for assignment.");
+  }
+  const values: any = { status: input.status, assignedStaffProfileId: input.assignedStaffProfileId, resolution: input.resolution, updatedAt: new Date() };
+  if (input.status === "resolved") values.resolvedAt = new Date();
+  if (input.status === "closed") values.closedAt = new Date();
+  const updated = await db.update(supportTickets).set(values).where(and(eq(supportTickets.id, ticketId), eq(supportTickets.updatedAt, input.expectedUpdatedAt)));
+  if (Number((updated as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This support ticket changed before your update. Refresh the queue and try again.");
+  await db.insert(supportTicketEvents).values({ ticketId, actorUserId, eventType: input.status === "resolved" ? "resolved" : input.status === "closed" ? "closed" : input.assignedStaffProfileId !== undefined ? "assigned" : "status_changed" });
+  await createAuditLog(actorUserId, "support.ticket_updated", "support_ticket", String(ticketId), { status: input.status, assignmentChanged: input.assignedStaffProfileId !== undefined, resolutionProvided: Boolean(input.resolution?.trim()) });
+  return { success: true };
+}
 
 export async function listOperationalIncidents(actorUserId: number) { await requireOperationalPermission(actorUserId, "incidents.view"); const db = await getDb(); if (!db) return []; return db.select().from(operationalIncidents).orderBy(desc(operationalIncidents.createdAt)).limit(100); }
 export async function createOperationalIncident(actorUserId: number, input: { category: typeof operationalIncidents.$inferInsert.category; severity: typeof operationalIncidents.$inferInsert.severity; title: string; summary: string }) { await requireOperationalPermission(actorUserId, "incidents.manage", { requireFresh: input.severity === "critical" }); const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(operationalIncidents).values({ ...input, detectedByUserId: actorUserId }); const incidentId = asId(result); await db.insert(operationalIncidentEvents).values({ incidentId, actorUserId, eventType: "detected" }); await createAuditLog(actorUserId, "incident.created", "operational_incident", String(incidentId), { category: input.category, severity: input.severity }); return { incidentId }; }
@@ -190,5 +227,19 @@ export async function decideOperationalApproval(actorUserId: number, approvalId:
   await createAuditLog(actorUserId, `approval.${decision}`, "operational_approval", String(approvalId), { approvalType: approval.approvalType }); return { success: true };
 }
 
-export async function listOperationalAudit(actorUserId: number, input?: { action?: string; entityType?: string; page?: number }) { await requireOperationalPermission(actorUserId, "audit.view"); const db = await getDb(); if (!db) return []; const filters = [input?.action ? eq(auditLogs.action, input.action) : undefined, input?.entityType ? eq(auditLogs.entityType, input.entityType) : undefined].filter(Boolean) as any[]; return db.select({ id: auditLogs.id, actorUserId: auditLogs.actorUserId, action: auditLogs.action, entityType: auditLogs.entityType, entityId: auditLogs.entityId, createdAt: auditLogs.createdAt }).from(auditLogs).where(filters.length ? and(...filters) : undefined).orderBy(desc(auditLogs.createdAt)).limit(100).offset(Math.max(0, input?.page ?? 0) * 100); }
+export async function listOperationalAudit(actorUserId: number, input?: { action?: string; entityType?: string; entityId?: string; actorId?: number; outcome?: string; from?: Date; to?: Date; page?: number }) {
+  await requireOperationalPermission(actorUserId, "audit.view");
+  const db = await getDb();
+  if (!db) return [];
+  const filters = [
+    input?.action ? like(auditLogs.action, `%${input.action}%`) : undefined,
+    input?.entityType ? eq(auditLogs.entityType, input.entityType) : undefined,
+    input?.entityId ? eq(auditLogs.entityId, input.entityId) : undefined,
+    input?.actorId ? eq(auditLogs.actorUserId, input.actorId) : undefined,
+    input?.outcome ? like(auditLogs.action, `%.${input.outcome}`) : undefined,
+    input?.from ? sql`${auditLogs.createdAt} >= ${input.from}` : undefined,
+    input?.to ? sql`${auditLogs.createdAt} <= ${input.to}` : undefined,
+  ].filter(Boolean) as any[];
+  return db.select({ id: auditLogs.id, actorUserId: auditLogs.actorUserId, action: auditLogs.action, entityType: auditLogs.entityType, entityId: auditLogs.entityId, createdAt: auditLogs.createdAt }).from(auditLogs).where(filters.length ? and(...filters) : undefined).orderBy(desc(auditLogs.createdAt)).limit(100).offset(Math.max(0, input?.page ?? 0) * 100);
+}
 export async function listFeatureFlags(actorUserId: number) { await requireOperationalPermission(actorUserId, "feature_flags.view"); const db = await getDb(); if (!db) return []; return db.select({ id: operationalFeatureFlags.id, flagKey: operationalFeatureFlags.flagKey, environment: operationalFeatureFlags.environment, enabled: operationalFeatureFlags.enabled, status: operationalFeatureFlags.status, updatedAt: operationalFeatureFlags.updatedAt }).from(operationalFeatureFlags).orderBy(asc(operationalFeatureFlags.flagKey)).limit(100); }

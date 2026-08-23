@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { claimReportCase, claimVerificationCase, decideReportCase, decideVerificationCase } from "./operations";
 
-function createWorkflowHarness(selectRows: unknown[][]) {
+function createWorkflowHarness(selectRows: unknown[][], affectedRows = 1) {
   const updates: Record<string, unknown>[] = [];
   const audit = vi.fn(async () => undefined);
   const notify = vi.fn(async () => undefined);
   const db = {
     select: () => ({ from: () => ({ where: () => ({ limit: async () => selectRows.shift() ?? [] }) }) }),
-    update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updates.push(values); } }) }),
+    update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updates.push(values); return { affectedRows }; } }) }),
   };
   return { updates, audit, notify, dependencies: { getDb: async () => db, createAuditLog: audit, createNotification: notify } };
 }
@@ -54,5 +54,25 @@ describe("operational workflow transitions", () => {
     await decideReportCase({ actorUserId: 41, reportId: 501, status: "resolved", memberAction: "warn" }, decisionHarness.dependencies);
     expect(decisionHarness.updates[0]).toMatchObject({ status: "resolved", memberAction: "warn", assignedModeratorUserId: 41, reviewedByUserId: 41 });
     expect(decisionHarness.audit).toHaveBeenCalledWith(41, "report.resolved", "report", "501", expect.objectContaining({ previousStatus: "in_review", newStatus: "resolved", memberAction: "warn" }));
+  });
+
+  it("rejects report claim and decision attempts when another reviewer owns the case or the case is already closed", async () => {
+    const claimedByAnother = createWorkflowHarness([[{ status: "in_review", assignedModeratorUserId: 88 }]]);
+    await expect(claimReportCase(41, 501, claimedByAnother.dependencies)).rejects.toThrow("already assigned to another reviewer");
+    expect(claimedByAnother.updates).toHaveLength(0);
+
+    const decisionByAnother = createWorkflowHarness([[{ status: "action_required", reportedProfileId: 72, assignedModeratorUserId: 88 }]]);
+    await expect(decideReportCase({ actorUserId: 41, reportId: 501, status: "resolved" }, decisionByAnother.dependencies)).rejects.toThrow("assigned to another reviewer");
+    expect(decisionByAnother.updates).toHaveLength(0);
+
+    const terminal = createWorkflowHarness([[{ status: "resolved", reportedProfileId: 72, assignedModeratorUserId: 41 }]]);
+    await expect(decideReportCase({ actorUserId: 41, reportId: 501, status: "resolved" }, terminal.dependencies)).rejects.toThrow("not awaiting an operational decision");
+    expect(terminal.updates).toHaveLength(0);
+  });
+
+  it("rejects a report decision when a concurrent update wins the conditional write", async () => {
+    const stale = createWorkflowHarness([[{ status: "in_review", reportedProfileId: null, assignedModeratorUserId: 41 }]], 0);
+    await expect(decideReportCase({ actorUserId: 41, reportId: 501, status: "resolved" }, stale.dependencies)).rejects.toThrow("changed before the decision was recorded");
+    expect(stale.audit).not.toHaveBeenCalled();
   });
 });

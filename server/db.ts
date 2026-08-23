@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { randomUUID } from "node:crypto";
 import {
@@ -182,7 +182,16 @@ export async function withdrawSuccessDeclaration(profileId: number, actorUserId:
 export async function listSuccessStoryEditorialQueue() {
   const db = await getDb();
   if (!db) return [];
-  return db.select({ id: memberSuccessDeclarations.id, profileId: memberSuccessDeclarations.profileId, outcome: memberSuccessDeclarations.outcome, editorialStatus: memberSuccessDeclarations.editorialStatus, storySummary: memberSuccessDeclarations.storySummary, editorialCopy: memberSuccessDeclarations.editorialCopy, publicDisplayNameAuthorized: memberSuccessDeclarations.publicDisplayNameAuthorized, publicPhotoId: memberSuccessDeclarations.publicPhotoId, publicPhotoAuthorized: memberSuccessDeclarations.publicPhotoAuthorized, submittedAt: memberSuccessDeclarations.submittedAt, displayName: memberProfiles.displayName }).from(memberSuccessDeclarations).innerJoin(memberProfiles, eq(memberSuccessDeclarations.profileId, memberProfiles.id)).where(inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])).orderBy(memberSuccessDeclarations.submittedAt).limit(100);
+  const stories = await db.select({ id: memberSuccessDeclarations.id, profileId: memberSuccessDeclarations.profileId, outcome: memberSuccessDeclarations.outcome, editorialStatus: memberSuccessDeclarations.editorialStatus, storySummary: memberSuccessDeclarations.storySummary, editorialCopy: memberSuccessDeclarations.editorialCopy, publicDisplayNameAuthorized: memberSuccessDeclarations.publicDisplayNameAuthorized, publicPhotoId: memberSuccessDeclarations.publicPhotoId, publicPhotoAuthorized: memberSuccessDeclarations.publicPhotoAuthorized, submittedAt: memberSuccessDeclarations.submittedAt, displayName: memberProfiles.displayName }).from(memberSuccessDeclarations).innerJoin(memberProfiles, eq(memberSuccessDeclarations.profileId, memberProfiles.id)).where(inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])).orderBy(memberSuccessDeclarations.submittedAt).limit(100);
+  if (!stories.length) return [];
+  const approvals = await db.select({ resourceId: operationalApprovals.resourceId, status: operationalApprovals.status, expiresAt: operationalApprovals.expiresAt, createdAt: operationalApprovals.createdAt }).from(operationalApprovals).where(and(eq(operationalApprovals.approvalType, "configuration_change"), eq(operationalApprovals.resourceType, "success_declaration_publication"), inArray(operationalApprovals.resourceId, stories.map(story => String(story.id))))).orderBy(desc(operationalApprovals.createdAt));
+  const now = new Date();
+  const approvalByStory = new Map(approvals.map(approval => [approval.resourceId, approval]));
+  return stories.map(story => {
+    const approval = approvalByStory.get(String(story.id));
+    const publicationApprovalStatus = !approval ? "not_requested" : approval.expiresAt <= now ? "expired" : approval.status;
+    return { ...story, publicationApprovalStatus };
+  });
 }
 
 export async function reviewSuccessStory(actorUserId: number, declarationId: number, decision: "approved" | "rejected", reviewNote?: string, editorialCopy?: string) {
@@ -201,7 +210,7 @@ export async function publishSuccessStory(actorUserId: number, declarationId: nu
   if (!db) throw new Error("Database unavailable");
   const [declaration] = await db.select().from(memberSuccessDeclarations).where(eq(memberSuccessDeclarations.id, declarationId)).limit(1);
   if (!declaration || !declaration.editorialCopy || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: false })) throw new Error("This story is not ready for publication");
-  const [approval] = await db.select({ id: operationalApprovals.id }).from(operationalApprovals).where(and(eq(operationalApprovals.approvalType, "configuration_change"), eq(operationalApprovals.resourceType, "success_declaration_publication"), eq(operationalApprovals.resourceId, String(declarationId)), eq(operationalApprovals.status, "approved"))).limit(1);
+  const [approval] = await db.select({ id: operationalApprovals.id }).from(operationalApprovals).where(and(eq(operationalApprovals.approvalType, "configuration_change"), eq(operationalApprovals.resourceType, "success_declaration_publication"), eq(operationalApprovals.resourceId, String(declarationId)), eq(operationalApprovals.status, "approved"), gt(operationalApprovals.expiresAt, new Date()))).limit(1);
   if (!approval || !mayPublishSuccessStory({ editorialStatus: declaration.editorialStatus, publicStoryConsent: declaration.publicStoryConsent, publicPhotoAuthorized: declaration.publicPhotoAuthorized, publicPhotoId: declaration.publicPhotoId, independentApprovalGranted: true })) throw new Error("Independent publication approval is required before this story can be published");
   await db.update(memberSuccessDeclarations).set({ editorialStatus: "published", publishedByUserId: actorUserId, publishedAt: new Date() }).where(eq(memberSuccessDeclarations.id, declarationId));
   await createAuditLog(actorUserId, "success_story.published", "member_success_declaration", String(declarationId), { approvalId: approval.id });
