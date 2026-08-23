@@ -33,6 +33,17 @@ describe("operational workflow transitions", () => {
     expect(harness.audit).not.toHaveBeenCalled();
   });
 
+  it("keeps a claimed case with its assigned reviewer and strips sensitive operational language from member-facing copy", async () => {
+    const otherReviewer = createWorkflowHarness([[{ status: "under_review", assignedReviewerUserId: 88 }]]);
+    await expect(claimVerificationCase(31, 401, otherReviewer.dependencies)).rejects.toThrow("already assigned to another reviewer");
+    expect(otherReviewer.updates).toHaveLength(0);
+
+    const safeCopy = createWorkflowHarness([[{ status: "under_review", profileId: 72, assignedReviewerUserId: 31 }], [{ userId: 88 }]]);
+    await decideVerificationCase({ actorUserId: 31, verificationId: 401, decision: "escalated", memberMessage: "An internal investigation is in progress." }, safeCopy.dependencies);
+    expect(safeCopy.updates[0]).toMatchObject({ memberMessage: "Your verification requires additional review. We will notify you when there is an update." });
+    expect(safeCopy.notify).toHaveBeenCalledWith(88, "verification", "Verification review update", "Your verification requires additional review. We will notify you when there is an update.", "/app/verification", "verification:401:escalated");
+  });
+
   it("claims and resolves a report case with an auditable controlled action", async () => {
     const claimHarness = createWorkflowHarness([[{ status: "open" }]]);
     await claimReportCase(41, 501, claimHarness.dependencies);

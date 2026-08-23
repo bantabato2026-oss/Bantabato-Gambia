@@ -34,7 +34,6 @@ import {
   saveMemberProfile,
   saveSuccessDeclaration,
   sendTextMessage,
-  submitIdentityVerification,
   withdrawSuccessDeclaration,
   withdrawInterest,
 	  unblockProfile,
@@ -282,7 +281,6 @@ export const appRouter = router({
 	}),
   verification: router({
     summary: protectedProcedure.query(async ({ ctx }) => getVerificationSummary((await requireProfile(ctx.user.id)).id)),
-    submitIdentity: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]) })).mutation(async ({ ctx, input }) => submitIdentityVerification((await requireProfile(ctx.user.id)).id, input.documentType)),
   }),
   safety: router({
 	    report: protectedProcedure.input(z.object({ reportedProfileId: z.number().int().positive().optional(), conversationId: z.number().int().positive().optional(), reason: z.enum(["fake_profile", "impersonation", "scam", "harassment", "inappropriate_content", "financial_solicitation", "suspicious_behavior", "safety_concern", "other"]), details: z.string().max(2000).optional(), clientRequestId: z.string().trim().regex(/^[A-Za-z0-9_-]{16,96}$/).optional() }).refine(value => Boolean(value.reportedProfileId || value.conversationId), { message: "Choose a profile or conversation to report." })).mutation(async ({ ctx, input }) => { const profile = await requireProfile(ctx.user.id); const report = await createReport(profile.id, input); if (!report.duplicate) { await createIntegritySignal({ actorUserId: ctx.user.id, subjectProfileId: input.reportedProfileId ?? null, reportId: report.reportId, source: "member_report", category: input.reason === "financial_solicitation" ? "financial_solicitation" : "report_pattern", severity: ["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason) ? "medium" : "low", evidenceConfidence: "unverified", idempotencyKey: `member-report:${report.reportId}` }); if (["scam", "harassment", "financial_solicitation", "safety_concern"].includes(input.reason)) { if (input.conversationId) await revokeConnectionForConversation(input.conversationId, "open_report", { profileId: profile.id }); if (input.reportedProfileId) { await revokeConnectionForProfilePair(profile.id, input.reportedProfileId, "open_report", { profileId: profile.id }); await withdrawRecommendationsForProfilePair(profile.id, input.reportedProfileId, "report"); } } } return { success: true, reportId: report.reportId, duplicate: report.duplicate }; }),

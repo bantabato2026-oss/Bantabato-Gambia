@@ -31,7 +31,7 @@ describe("Sprint 5 country, verification, and Family Circle trust contracts", ()
   });
 
   it("prevents duplicate open verification submissions while retaining per-submission private storage keys and member-safe feedback", () => {
-    expect(db).toContain('await tx.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update");');
+    expect(db).toContain('const member = (await tx.select({ id: memberProfiles.id, userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update"))[0];');
     expect(db).toContain('inArray(verificationRecords.status, ["submitted", "under_review", "escalated"])');
     expect(db).toContain('identity-${randomUUID()}');
     expect(verificationPage).toContain('Your existing private document is already in review. No duplicate was created.');

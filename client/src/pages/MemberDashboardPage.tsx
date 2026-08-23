@@ -1,4 +1,5 @@
 import { MemberShell } from "@/components/MemberShell";
+import { ProfileReadinessPanel } from "@/components/ProfileReadinessPanel";
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,21 +11,23 @@ function statusLabel(value?: string | null) { return value ? value.replace(/_/g,
 
 export default function MemberDashboardPage() {
   const profile = trpc.profile.mine.useQuery();
-  const verification = trpc.verification.summary.useQuery();
-  const photos = trpc.uploads.profilePhotos.useQuery();
-  const incoming = trpc.interests.incoming.useQuery();
-	  const outgoing = trpc.interests.outgoing.useQuery();
-  const matches = trpc.matches.list.useQuery();
-  const conversations = trpc.messaging.conversations.useQuery();
-  const family = trpc.family.list.useQuery();
-  const notifications = trpc.notifications.list.useQuery();
-  const billing = trpc.billing.summary.useQuery();
-  const safety = trpc.safety.center.useQuery();
-  const declaration = trpc.success.mine.useQuery();
-  const recommendations = trpc.recommendations.list.useQuery({ limit: 3 }, { enabled: profile.data?.eligibility?.discoveryEligible === true });
+  const profilePresent = Boolean(profile.data?.id);
+  const verification = trpc.verification.summary.useQuery(undefined, { enabled: profilePresent });
+  const photos = trpc.uploads.profilePhotos.useQuery(undefined, { enabled: profilePresent });
+  const incoming = trpc.interests.incoming.useQuery(undefined, { enabled: profilePresent });
+	  const outgoing = trpc.interests.outgoing.useQuery(undefined, { enabled: profilePresent });
+  const matches = trpc.matches.list.useQuery(undefined, { enabled: profilePresent });
+  const conversations = trpc.messaging.conversations.useQuery(undefined, { enabled: profilePresent });
+  const family = trpc.family.list.useQuery(undefined, { enabled: profilePresent });
+  const notifications = trpc.notifications.list.useQuery(undefined, { enabled: profilePresent });
+  const billing = trpc.billing.summary.useQuery(undefined, { enabled: profilePresent });
+  const safety = trpc.safety.center.useQuery(undefined, { enabled: profilePresent });
+  const declaration = trpc.success.mine.useQuery(undefined, { enabled: profilePresent });
+  const recommendations = trpc.recommendations.list.useQuery({ limit: 3 }, { enabled: profilePresent && profile.data?.eligibility?.discoveryEligible === true });
 
   if (profile.isLoading) return <MemberShell eyebrow="Your Bantaba" title="A meaningful start." description="Your command center gathers only the private account status and actions that need your attention."><StateSkeleton label="Loading your protected command center…" /></MemberShell>;
   if (profile.isError) return <MemberShell eyebrow="Your Bantaba" title="A meaningful start." description="Your command center gathers only the private account status and actions that need your attention."><StatePanel kind="error" title="Your command center is unavailable right now." description="No profile, safety, billing, relationship, or notification state has been changed. Please try again." action={<Button className="btn-forest" onClick={() => profile.refetch()}>Try again</Button>} /></MemberShell>;
+  if (!profilePresent) return <MemberShell eyebrow="Your Bantaba" title="A meaningful start." description="Your private command center will be available after you start your member profile."><StatePanel kind="empty" title="Start your profile to open your Command Center." description="No verification, photo, connection, message, Family Circle, billing, safety, or notification query was requested before a member profile existed." action={<Link href="/app/onboarding" className="btn-forest inline-flex items-center gap-2">Start profile<ChevronRight size={16} /></Link>} /></MemberShell>;
 
   const member = profile.data;
   const eligibility = member?.eligibility;
@@ -49,6 +52,8 @@ export default function MemberDashboardPage() {
 
   return <MemberShell eyebrow="Your Bantaba" title="Your private command center." description="A factual overview of your account, connections, and actions that need your attention. It never ranks you, scores your activity, or changes any state automatically.">
     <section className="welcome-panel"><div className="flex flex-wrap items-start justify-between gap-5"><div><p className="text-sm font-semibold text-gold">Your next meaningful step</p><h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-cream">{eligibility?.profileComplete ? "Your foundation is ready to guide your next choice." : eligibility?.title || "Your profile is the first honest introduction."}</h2><p className="mt-4 max-w-3xl text-sm leading-6 text-cream/75">{eligibility?.profileComplete ? "Review thoughtful introductions, your privacy, and the status of your current connections at your own pace." : eligibility?.detail || "Build your private foundation before discovery begins."}</p></div><Badge className="border border-gold/30 bg-cream/10 text-cream">{member?.profileStatus?.replace(/_/g, " ") || "draft"}</Badge></div><div className="mt-7 flex flex-wrap gap-3"><Link href={eligibility?.profileComplete ? "/app/discover" : eligibility?.photosRemaining ? "/app/photos" : "/app/onboarding"} className="btn-gold inline-flex items-center gap-2">{eligibility?.profileComplete ? "Explore members" : eligibility?.nextAction || "Complete profile"}<ChevronRight size={16} /></Link><Link href="/app/profile/preview" className="inline-flex items-center gap-2 rounded-xl border border-cream/30 px-4 py-2.5 text-sm font-semibold text-cream hover:bg-cream/10">Preview your profile</Link></div></section>
+
+    <ProfileReadinessPanel className="mt-7" eligibility={eligibility} verificationStatus={latestVerification?.status} hasPreferences={Boolean(member?.completeness?.hasPreferences)} />
 
     <section className="mt-7"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow text-gold-dark">Important actions</p><h2 className="mt-2 font-display text-3xl text-ink">What needs your attention</h2></div><Link href="/app/notifications" className="inline-flex items-center gap-2 text-sm font-semibold text-forest hover:underline"><BellRing size={16} />{unreadNotifications ? `${unreadNotifications} unread update${unreadNotifications === 1 ? "" : "s"}` : "Notification center"}</Link></div>{importantActions.length ? <div className="mt-5 grid gap-4 lg:grid-cols-2">{importantActions.map(action => <article key={action.title} className="surface-card border-gold/20"><div className="flex gap-3"><CircleAlert className="mt-1 shrink-0 text-gold-dark" size={20} /><div><h3 className="font-semibold text-ink">{action.title}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{action.detail}</p><Link href={action.href} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-forest hover:underline">{action.label}<ChevronRight size={15} /></Link></div></div></article>)}</div> : <div className="mt-5 rounded-2xl border border-forest/10 bg-white p-5"><CheckCircle2 className="text-forest" size={22} /><p className="mt-3 font-semibold text-ink">No immediate account action is showing.</p><p className="mt-1 text-sm leading-6 text-muted-foreground">New private notifications will appear when a permitted event needs your attention. Discovery, safety, and relationship boundaries remain active in the background without an engagement score.</p></div>}</section>
 

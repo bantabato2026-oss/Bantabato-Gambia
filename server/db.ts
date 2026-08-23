@@ -110,10 +110,11 @@ export async function getMemberEligibility(profileId: number) {
   if (!profile) throw new Error("Your profile is unavailable");
   const [photos, verifications] = await Promise.all([
     db.select({ reviewStatus: profilePhotos.reviewStatus }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))),
-    db.select({ status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"))).limit(10),
+    db.select({ status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"))).orderBy(desc(verificationRecords.createdAt)).limit(1),
   ]);
   const approvedPhotoCount = photos.filter(photo => photo.reviewStatus === "approved").length;
-  const verificationStatus = verifications.some(record => record.status === "approved") ? "approved" : verifications.some(record => ["submitted", "under_review", "escalated"].includes(record.status)) ? "pending_review" : verifications.some(record => record.status === "requires_resubmission") ? "retry_required" : verifications.some(record => record.status === "rejected") ? "rejected" : "not_started";
+  const latestVerificationStatus = verifications[0]?.status;
+  const verificationStatus = latestVerificationStatus === "approved" ? "approved" : ["submitted", "under_review", "escalated"].includes(latestVerificationStatus ?? "") ? "pending_review" : ["requires_resubmission", "expired", "restricted"].includes(latestVerificationStatus ?? "") ? "retry_required" : latestVerificationStatus === "rejected" ? "rejected" : "not_started";
   return deriveMemberEligibility({ profileStatus: profile.profileStatus, searchVisible: profile.searchVisible, deletedAt: profile.deletedAt, coreProfileComplete: coreProfileIsComplete(profile), approvedPhotoCount, verificationStatus });
 }
 
@@ -644,12 +645,6 @@ export async function listFamilyLinks(profileId: number) {
   return db.select().from(familyLinks).where(eq(familyLinks.memberProfileId, profileId)).orderBy(desc(familyLinks.createdAt));
 }
 
-export async function submitIdentityVerification(profileId: number, documentType: "national_id" | "passport") {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(verificationRecords).values({ profileId, verificationType: "identity_document", documentType, status: "submitted", submittedAt: new Date() });
-}
-
 function decodeUpload(dataUrl: string, allowedMimeTypes: string[], maxBytes: number) {
   const matches = /^data:([^;]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
   if (!matches) throw new Error("The upload format is invalid");
@@ -730,14 +725,20 @@ export async function uploadIdentityDocument(profileId: number, documentType: "n
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "application/pdf"], 10 * 1024 * 1024);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  return db.transaction(async tx => {
-    await tx.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update");
+  const result = await db.transaction(async tx => {
+    const member = (await tx.select({ id: memberProfiles.id, userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update"))[0];
+    if (!member) throw new Error("Your profile is unavailable");
     const open = await tx.select({ id: verificationRecords.id, status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"), inArray(verificationRecords.status, ["submitted", "under_review", "escalated"]))).limit(1);
-    if (open[0]) return { submitted: true, duplicate: true, status: open[0].status };
+    if (open[0]) return { submitted: true, duplicate: true, status: open[0].status, verificationId: open[0].id, userId: member.userId };
     const stored = await storagePut(`members/${profileId}/verification/identity-${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
-    await tx.insert(verificationRecords).values({ profileId, verificationType: "identity_document", documentType, documentStorageKey: stored.key, status: "submitted", submittedAt: new Date() });
-    return { submitted: true, duplicate: false, status: "submitted" as const };
+    const inserted = await tx.insert(verificationRecords).values({ profileId, verificationType: "identity_document", documentType, documentStorageKey: stored.key, status: "submitted", submittedAt: new Date() }).$returningId();
+    return { submitted: true, duplicate: false, status: "submitted" as const, verificationId: Number(inserted[0]?.id ?? 0), userId: member.userId };
   });
+  if (!result.duplicate) {
+    await createNotification(result.userId, "verification", "Verification submitted", "Your private identity document is ready for manual review.", "/app/verification", `verification:${result.verificationId}:submitted`);
+    await createAuditLog(result.userId, "verification.submitted", "verification_record", String(result.verificationId), { profileId, documentType, mimeType });
+  }
+  return { submitted: result.submitted, duplicate: result.duplicate, status: result.status, verificationId: result.verificationId };
 }
 
 export async function getVerificationSummary(profileId: number) {

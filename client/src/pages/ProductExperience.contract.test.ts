@@ -89,7 +89,8 @@ describe("full product experience interaction contracts", () => {
 
   it("gives members a privacy-aware profile preview without presenting a public link, private media, contact data, or an eligibility bypass", () => {
     expect(profilePreview).toContain("trpc.profile.mine.useQuery()");
-    expect(profilePreview).toContain("trpc.profile.fieldVisibilities.useQuery()");
+    expect(profilePreview).toContain("trpc.profile.fieldVisibilities.useQuery(undefined, { enabled: profilePresent })");
+    expect(profilePreview).toContain("Start your profile before using Profile Preview.");
     expect(profilePreview).toContain("Actual discovery and profile viewing still depend on your current eligibility");
     expect(profilePreview).toContain("Contact details, verification documents, messages, and Family Circle information are never previewed here.");
     expect(profilePreview).toContain('audiences.get(key) !== "private"');

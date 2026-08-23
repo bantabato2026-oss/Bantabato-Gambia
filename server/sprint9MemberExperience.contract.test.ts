@@ -38,7 +38,8 @@ describe("Sprint 9 member Command Center and daily experience contracts", () => 
 
   it("makes the command center route only factual profile, verification, photo, interest, connection, notification, family, billing, safety, and member-milestone actions", () => {
     expect(dashboard).toContain("Your private command center.");
-    expect(dashboard).toContain("trpc.interests.outgoing.useQuery()");
+    expect(dashboard).toContain("trpc.interests.outgoing.useQuery(undefined, { enabled: profilePresent })");
+    expect(dashboard).toContain("const profilePresent = Boolean(profile.data?.id)");
     expect(dashboard).toContain("Review connections");
     expect(dashboard).toContain("unread private message");
     expect(dashboard).toContain("Family Circle invitation or verification item");

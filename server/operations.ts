@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { adminRoles, caseNotes, memberProfiles, reports, users, verificationRecords } from "../drizzle/schema";
 import { createAuditLog, createNotification, getDb, getVerificationDocumentForReview } from "./db";
 import { canDecideVerification, hasOperationalScope } from "./domain/operationsPolicy";
@@ -114,19 +114,22 @@ export async function claimVerificationCase(actorUserId: number, verificationId:
   const db = await dependencies.getDb();
   if (!db) throw new Error("Database unavailable");
   const record = await db.select({ status: verificationRecords.status, assignedReviewerUserId: verificationRecords.assignedReviewerUserId }).from(verificationRecords).where(eq(verificationRecords.id, verificationId)).limit(1);
-  if (!record[0]) throw new Error("Verification case not found");
-  await db.update(verificationRecords).set({ status: "under_review", assignedReviewerUserId: actorUserId }).where(eq(verificationRecords.id, verificationId));
+  if (!record[0] || !canDecideVerification(record[0].status)) throw new Error("This verification case is not available to claim");
+  if (record[0].assignedReviewerUserId && record[0].assignedReviewerUserId !== actorUserId) throw new Error("This verification case is already assigned to another reviewer");
+  const outcome = await db.update(verificationRecords).set({ status: "under_review", assignedReviewerUserId: actorUserId }).where(and(eq(verificationRecords.id, verificationId), eq(verificationRecords.status, record[0].status), or(isNull(verificationRecords.assignedReviewerUserId), eq(verificationRecords.assignedReviewerUserId, actorUserId))));
+  if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This verification case changed before it could be claimed. Refresh the queue and try again.");
   await dependencies.createAuditLog(actorUserId, "verification.claimed", "verification_record", String(verificationId), { previousStatus: record[0].status, newStatus: "under_review" });
 }
 
 export async function decideVerificationCase(input: { actorUserId: number; verificationId: number; decision: VerificationDecision; reason?: VerificationReason; internalNote?: string; memberMessage?: string; priority?: "standard" | "attention" | "high" }, dependencies: WorkflowDependencies = productionWorkflowDependencies) {
   const db = await dependencies.getDb();
   if (!db) throw new Error("Database unavailable");
-  const record = await db.select({ status: verificationRecords.status, profileId: verificationRecords.profileId }).from(verificationRecords).where(eq(verificationRecords.id, input.verificationId)).limit(1);
+  const record = await db.select({ status: verificationRecords.status, profileId: verificationRecords.profileId, assignedReviewerUserId: verificationRecords.assignedReviewerUserId }).from(verificationRecords).where(eq(verificationRecords.id, input.verificationId)).limit(1);
   if (!record[0] || !canDecideVerification(record[0].status)) throw new Error("This verification case is not awaiting an operational decision");
-  const memberMessage = input.memberMessage?.trim() || defaultVerificationMessage(input.decision, input.reason);
+  if (record[0].assignedReviewerUserId && record[0].assignedReviewerUserId !== input.actorUserId) throw new Error("This verification case is assigned to another reviewer");
+  const memberMessage = memberSafeVerificationMessage(input.memberMessage, input.decision, input.reason);
   const closed = input.decision !== "escalated";
-  await db.update(verificationRecords).set({
+  const outcome = await db.update(verificationRecords).set({
     status: input.decision,
     reviewReason: input.reason ?? null,
     memberMessage,
@@ -136,11 +139,12 @@ export async function decideVerificationCase(input: { actorUserId: number; verif
     reviewedAt: new Date(),
     escalatedAt: input.decision === "escalated" ? new Date() : null,
     closedAt: closed ? new Date() : null,
-  }).where(eq(verificationRecords.id, input.verificationId));
+  }).where(and(eq(verificationRecords.id, input.verificationId), eq(verificationRecords.status, record[0].status), or(isNull(verificationRecords.assignedReviewerUserId), eq(verificationRecords.assignedReviewerUserId, input.actorUserId))));
+  if (Number((outcome as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This verification case changed before the decision was recorded. Refresh the case and try again.");
   if (["suspected_duplicate", "suspected_fraud", "requires_additional_review"].includes(input.reason ?? "") && ["escalated", "requires_resubmission", "rejected"].includes(input.decision)) await createIntegritySignal({ actorUserId: input.actorUserId, subjectProfileId: record[0].profileId, source: "verification", category: input.reason === "suspected_duplicate" ? "multiple_account_indicator" : "verification_anomaly", severity: input.reason === "suspected_fraud" ? "high" : "medium", evidenceConfidence: "limited", idempotencyKey: `verification-anomaly:${input.verificationId}:${input.decision}:${input.reason}` });
   if (input.internalNote?.trim()) await addCaseNote(input.actorUserId, "verification", input.verificationId, input.internalNote);
   const profile = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, record[0].profileId)).limit(1);
-  if (profile[0]) await dependencies.createNotification(profile[0].userId, "verification", verificationTitle(input.decision), memberMessage, "/app/verification", `verification:${input.verificationId}:${input.decision}:${Date.now()}`);
+  if (profile[0]) await dependencies.createNotification(profile[0].userId, "verification", verificationTitle(input.decision), memberMessage, "/app/verification", `verification:${input.verificationId}:${input.decision}`);
   await dependencies.createAuditLog(input.actorUserId, `verification.${input.decision}`, "verification_record", String(input.verificationId), { previousStatus: record[0].status, newStatus: input.decision, reason: input.reason ?? null, priority: input.priority ?? "standard" });
 }
 
@@ -235,6 +239,16 @@ function defaultVerificationMessage(decision: VerificationDecision, reason?: Ver
   if (decision === "requires_resubmission") return `Action is required before verification can continue${reason === "document_unclear" ? ": please submit a clearer image of your valid document." : ". Please review your document and submit an updated version."}`;
   if (decision === "rejected") return "We could not approve this verification submission. You may submit a valid supported document for a new review.";
   return "Your verification requires additional review. We will notify you when there is an update.";
+}
+
+function memberSafeVerificationMessage(message: string | undefined, decision: VerificationDecision, reason?: VerificationReason) {
+  const fallback = defaultVerificationMessage(decision, reason);
+  if (["suspected_duplicate", "suspected_fraud", "requires_additional_review"].includes(reason ?? "")) return fallback;
+  const candidate = message?.trim();
+  if (!candidate) return fallback;
+  if (candidate.length > 500) throw new Error("Keep the member-facing verification explanation to 500 characters or fewer.");
+  if (/\b(fraud|risk signal|moderation|investigation|enforcement)\b/i.test(candidate)) return fallback;
+  return candidate;
 }
 
 function verificationTitle(decision: VerificationDecision) {
