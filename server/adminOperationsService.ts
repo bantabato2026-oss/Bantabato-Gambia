@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
-import { adminRoles, auditLogs, betaInvitations, familyLinks, memberProfiles, memberSuccessDeclarations, notifications, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, paymentRefunds, profilePhotos, reports, safetyAppeals, safetyEnforcementActions, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, subscriptions, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
+import { adminRoles, auditLogs, betaInvitations, familyLinks, memberProfiles, memberSuccessDeclarations, notifications, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, paymentReconciliations, paymentRefunds, profilePhotos, reports, safetyAppeals, safetyEnforcementActions, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, subscriptions, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
 import { createAuditLog, getDb, getMemberEligibility } from "./db";
 import { getActiveAdminScopes } from "./operations";
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, canDecideApproval, isKnownPermission, permissionRequiresFreshReauthentication, requiresIndependentApproval, roleCan, staffSessionIsUsable, type PermissionKey } from "./domain/adminOperationsPolicy";
@@ -119,6 +119,7 @@ export async function listOperationsOverview(actorUserId: number) {
     family: can("members.view") ? await count(familyLinks, inArray(familyLinks.status, ["invited", "pending_verification", "suspended"])) : undefined,
     editorial: can("success_stories.review") ? await count(memberSuccessDeclarations, inArray(memberSuccessDeclarations.editorialStatus, ["pending_review", "approved"])) : undefined,
     refunds: can("finance.transactions.view") ? await count(paymentRefunds, inArray(paymentRefunds.status, ["requested", "processing"])) : undefined,
+    reconciliations: can("finance.transactions.view") ? await count(paymentReconciliations, inArray(paymentReconciliations.status, ["open", "needs_review"])) : undefined,
     memberships: can("subscriptions.view") ? await count(subscriptions, inArray(subscriptions.status, ["past_due", "grace_period", "suspended"])) : undefined,
     betaInvitations: can("beta.view") ? await count(betaInvitations, eq(betaInvitations.status, "pending")) : undefined,
   }};

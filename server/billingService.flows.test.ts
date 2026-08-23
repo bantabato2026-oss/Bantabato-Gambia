@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getDb: vi.fn(), createAuditLog: vi.fn(), createNotification: vi.fn() }));
 vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog, createNotification: mocks.createNotification }));
 
-import { cancelSubscriptionRenewal, handleBillingAccountClosure, initiatePayment, processProviderWebhook, requestMemberRefund, requestRefund, reviewRefundRequest, saveBillingPlanConfiguration, saveMemberBillingSettings, savePaymentProviderAvailability } from "./billingService";
+import { cancelSubscriptionRenewal, getMemberReceipt, handleBillingAccountClosure, initiatePayment, processProviderWebhook, requestMemberRefund, requestRefund, reviewRefundRequest, saveBillingPlanConfiguration, saveMemberBillingSettings, savePaymentProviderAvailability } from "./billingService";
 import { registerPaymentProvider } from "./paymentProvider";
 
 function fakeDb(rows: unknown[][]) {
@@ -57,7 +57,7 @@ describe("Phase 8 billing service flows", () => {
     const subscription = { id: 7, profileId: 3, status: "active", currentPeriodEndsAt: new Date("2026-09-01"), cancelAtPeriodEnd: false };
     const fake = fakeDb([[subscription]]);
     mocks.getDb.mockResolvedValue(fake.db);
-    await expect(cancelSubscriptionRenewal(3, 9, 7)).resolves.toEqual({ cancelAtPeriodEnd: true, currentPeriodEndsAt: subscription.currentPeriodEndsAt });
+    await expect(cancelSubscriptionRenewal(3, 9, 7)).resolves.toEqual({ cancelAtPeriodEnd: true, currentPeriodEndsAt: subscription.currentPeriodEndsAt, alreadyCancelled: false });
     expect(fake.updates.some(entry => entry.values.cancelAtPeriodEnd === true && entry.values.autoRenew === false && entry.values.cancelledAt instanceof Date)).toBe(true);
     expect(fake.updates.flatMap(entry => Object.keys(entry.values))).not.toContain("profileStatus");
   });
@@ -127,11 +127,38 @@ describe("Phase 8 billing service flows", () => {
 	    expect(mocks.createAuditLog).toHaveBeenCalledWith(99, "billing.plan_version_created", "membership_plan_version", "2", expect.objectContaining({ planCode: "premium", versionCode: "premium-monthly-v1" }));
 	  });
 
-	  it("records provider availability environment metadata without accepting or persisting live credentials", async () => {
+  it("records provider availability environment metadata without accepting or persisting live credentials", async () => {
 	    const fake = fakeDb([]);
 	    mocks.getDb.mockResolvedValue(fake.db);
 	    await expect(savePaymentProviderAvailability(99, { provider: "Paystack", enabled: false, environment: "not_configured", supportedCurrencies: ["gmd", "usd"], supportedMethods: ["provider_hosted"], configurationNote: "No credentials stored" })).resolves.toEqual({ provider: "paystack", enabled: false, environment: "not_configured", supportedCurrencies: ["GMD", "USD"] });
 	    expect(fake.inserts.some(entry => entry.values.provider === "paystack" && entry.values.enabled === false && Array.isArray(entry.values.supportedCurrencies))).toBe(true);
 	    expect(fake.inserts.flatMap(entry => Object.keys(entry.values))).not.toEqual(expect.arrayContaining(["apiKey", "secret", "webhookSecret", "password"]));
 	  });
+
+  it("returns a member-owned internal payment record only for the owning profile and never fabricates an invoice or provider receipt", async () => {
+    const transaction = { id: 8, profileId: 3, membershipPriceId: 3, status: "successful", internalReference: "bnt_private", amountMinor: 15000, taxMinor: 0, feeMinor: 0, discountMinor: 0, currency: "GMD", createdAt: new Date("2026-08-01"), completedAt: new Date("2026-08-01") };
+    const fake = fakeDb([[transaction], [price], [version], [plan]]);
+    mocks.getDb.mockResolvedValue(fake.db);
+    await expect(getMemberReceipt(3, 8)).resolves.toMatchObject({ available: true, reference: "bnt_private", planName: "Bantabato Premium", planVersion: "premium-monthly-v1" });
+    expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("returns the current pending checkout state for a duplicate request key without creating a second financial record", async () => {
+    const pending = { id: 8, profileId: 3, provider: "paystack", status: "pending", internalReference: "bnt_pending", amountMinor: 15000, currency: "GMD", createdAt: new Date(), completedAt: null };
+    const fake = fakeDb([[pending], [{ provider: "paystack", enabled: true, environment: "live" }]]);
+    mocks.getDb.mockResolvedValue(fake.db);
+    const result = await initiatePayment(3, 9, { membershipPriceId: 3, provider: "paystack", idempotencyKey: "idempotency-key-duplicate", acknowledgedTerms: true });
+    expect(result.duplicate).toBe(true);
+    expect(result.transaction?.status).toBe("pending");
+    expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("treats an already-scheduled period-end cancellation as idempotent and avoids repeated lifecycle side effects", async () => {
+    const subscription = { id: 7, profileId: 3, status: "active", currentPeriodEndsAt: new Date("2026-09-01"), cancelAtPeriodEnd: true };
+    const fake = fakeDb([[subscription]]);
+    mocks.getDb.mockResolvedValue(fake.db);
+    await expect(cancelSubscriptionRenewal(3, 9, 7)).resolves.toEqual({ alreadyCancelled: true, currentPeriodEndsAt: subscription.currentPeriodEndsAt });
+    expect(fake.updates).toHaveLength(0);
+    expect(mocks.createNotification).not.toHaveBeenCalled();
+  });
 });

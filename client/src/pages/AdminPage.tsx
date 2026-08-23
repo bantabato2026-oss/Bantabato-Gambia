@@ -19,6 +19,7 @@ const cards = [
   { key: "family", label: "Family Circle attention", text: "Invitation, Wali verification, or restriction metadata only.", href: "/admin/family", permission: "members.view", icon: UsersRound },
   { key: "editorial", label: "Editorial submissions", text: "Consent-scoped stories awaiting review or independent sign-off.", href: "/admin/success-stories", permission: "success_stories.review", icon: Sparkles },
   { key: "refunds", label: "Refund review", text: "Provider-bound finance requests; no money moves here.", href: "/admin/billing", permission: "finance.transactions.view", icon: WalletCards },
+  { key: "reconciliations", label: "Reconciliation review", text: "Internal consistency findings for authorized finance follow-up.", href: "/admin/billing", permission: "finance.transactions.view", icon: WalletCards },
   { key: "memberships", label: "Membership attention", text: "Past-due, grace, or suspended lifecycle records only.", href: "/admin/billing", permission: "subscriptions.view", icon: WalletCards },
   { key: "betaInvitations", label: "Pending beta invitations", text: "Invite-only enrollment records; no tokens are displayed.", href: "/admin/beta", permission: "beta.view", icon: UsersRound },
 ] as const;
