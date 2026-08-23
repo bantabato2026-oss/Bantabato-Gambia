@@ -271,15 +271,19 @@ export type ProfileUpdate = Partial<{
   familyVisibility: "private" | "matches" | "visible";
 }>;
 
-export async function saveMemberProfile(userId: number, input: ProfileUpdate) {
+export async function saveMemberProfile(userId: number, input: ProfileUpdate, expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const normalizedInput = normalizeTextRecord(input);
   const current = await getProfileByUserId(userId);
   if (!current) {
+    if (expectedUpdatedAt) throw new Error("Your profile changed before this save. Refresh it and review your current details before trying again.");
     await db.insert(memberProfiles).values({ userId, ...normalizedInput });
   } else {
-    await db.update(memberProfiles).set(normalizedInput).where(eq(memberProfiles.id, current.id));
+    if (expectedUpdatedAt && current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("Your profile changed before this save. Refresh it and review your current details before trying again.");
+    const values = { ...normalizedInput, updatedAt: new Date() };
+    const updated = await db.update(memberProfiles).set(values).where(expectedUpdatedAt ? and(eq(memberProfiles.id, current.id), eq(memberProfiles.updatedAt, expectedUpdatedAt)) : eq(memberProfiles.id, current.id));
+    if (expectedUpdatedAt && Number((updated as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("Your profile changed before this save. Refresh it and review your current details before trying again.");
   }
   const saved = await getProfileByUserId(userId);
   if (saved) await synchronizeProfileEligibility(saved.id);

@@ -26,6 +26,7 @@ const FamilyParticipantPage = lazy(() => import("@/pages/FamilyCirclePages").the
 const MemberHomePage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberHomeRoute })));
 const ConnectionsPage = lazy(() => import("@/pages/ConnectionsPage"));
 const OnboardingPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.OnboardingPage })));
+const OnboardingWelcomePage = lazy(() => import("@/pages/OnboardingWelcomePage"));
 const ProfilePage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberProfileRoute })));
 const FamilyPage = lazy(() => import("@/pages/MemberPages").then(module => ({ default: module.FamilyPage })));
 const MatchesPage = lazy(() => import("@/pages/MemberRouteStates").then(module => ({ default: module.MemberMatchesRoute })));
@@ -78,8 +79,9 @@ function Router() {
     <Route path="/login">{() => <SignInPage />}</Route>
     <Route path="/register">{() => <SignInPage registration />}</Route>
     <Route path="/beta" component={BetaAccessPage} />
-    <Route path="/app" component={MemberHomePage} />
-    <Route path="/app/onboarding" component={OnboardingPage} />
+	    <Route path="/app" component={MemberHomePage} />
+	    <Route path="/app/welcome" component={OnboardingWelcomePage} />
+	    <Route path="/app/onboarding" component={OnboardingPage} />
     <Route path="/app/profile" component={ProfilePage} />
     <Route path="/app/profile/details" component={ProfileDetailsPage} />
 		<Route path="/app/profile/preview" component={ProfilePreviewPage} />

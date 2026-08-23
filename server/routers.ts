@@ -118,6 +118,7 @@ const profileInput = z.object({
   photoVisibility: z.enum(["public", "mutual_match", "hidden"]).optional(),
   searchVisible: z.boolean().optional(),
   familyVisibility: z.enum(["private", "matches", "visible"]).optional(),
+  expectedUpdatedAt: z.date().optional(),
 });
 
 const preferenceInput = z.object({
@@ -173,7 +174,8 @@ export const appRouter = router({
     }),
 	    save: protectedProcedure.input(profileInput).mutation(async ({ ctx, input }) => {
 	      await requireBetaMemberAccess(ctx.user.id);
-	      const profile = await saveMemberProfile(ctx.user.id, { ...input, birthDate: input.birthDate ? new Date(input.birthDate) : undefined });
+	      const { expectedUpdatedAt, ...profileInput } = input;
+	      const profile = await saveMemberProfile(ctx.user.id, { ...profileInput, birthDate: profileInput.birthDate ? new Date(profileInput.birthDate) : undefined }, expectedUpdatedAt);
 	      if (profile) {
 	        await revokeHardIncompatibleConnectionsForProfile(profile.id);
 	        await withdrawRecommendationsForProfile(profile.id, profile.profileVisibility === "hidden" || !profile.searchVisible || profile.profileStatus !== "active" ? "profile_hidden" : "profile_changed");

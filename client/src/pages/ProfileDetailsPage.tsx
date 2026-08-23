@@ -6,9 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useNetworkState } from "@/hooks/useDeviceExperience";
+import { clearSafeDraft, draftKey, loadSafeDraft, saveSafeDraft } from "@/lib/mobileExperience";
 import { trpc } from "@/lib/trpc";
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 const list = (value: string) => value.split(",").map(item => item.trim()).filter(Boolean);
@@ -18,25 +21,35 @@ export default function ProfileDetailsPage() {
   const profile = trpc.profile.mine.useQuery();
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
-  const save = trpc.profile.save.useMutation({ onSuccess: () => { void utils.profile.mine.invalidate(); setLocation("/app/profile"); } });
+  const network = useNetworkState();
+  const profileDetailsDraftKey = draftKey("profile", "details");
   const [form, setForm] = useState({ maritalStatus: "", hasChildren: false, desireChildren: "", familyInvolvementPreference: "", relocationWillingness: "", polygynyOpenness: "", region: "", nationality: "", languages: "", personality: "", interests: "", hobbies: "", marriageIntent: "", marriageExpectations: "", reasonSeekingMarriage: "", educationField: "", educationInstitution: "", employmentStatus: "", industry: "", smokingPreference: "", alcoholPreference: "", values: "", importantPrinciples: "", lifestyle: "" });
+  const [draftReady, setDraftReady] = useState(false);
+  const save = trpc.profile.save.useMutation({ onSuccess: () => { clearSafeDraft(profileDetailsDraftKey); void utils.profile.mine.invalidate(); toast.success("Your profile details were saved."); setLocation("/app/profile"); }, onError: () => { toast.error("Your profile details were not saved. Your local draft remains available; refresh current details and try again."); } });
 
   useEffect(() => {
     const current = profile.data;
     if (!current) return;
-    setForm({ maritalStatus: current.maritalStatus || "", hasChildren: current.hasChildren, desireChildren: current.desireChildren || "", familyInvolvementPreference: current.familyInvolvementPreference || "", relocationWillingness: current.relocationWillingness || "", polygynyOpenness: current.polygynyOpenness || "", region: current.region || "", nationality: current.nationality || "", languages: textList(current.languages), personality: current.personality || "", interests: textList(current.interests), hobbies: textList(current.hobbies), marriageIntent: current.marriageIntent || "", marriageExpectations: current.marriageExpectations || "", reasonSeekingMarriage: current.reasonSeekingMarriage || "", educationField: current.educationField || "", educationInstitution: current.educationInstitution || "", employmentStatus: current.employmentStatus || "", industry: current.industry || "", smokingPreference: current.smokingPreference || "", alcoholPreference: current.alcoholPreference || "", values: current.values || "", importantPrinciples: current.importantPrinciples || "", lifestyle: current.lifestyle || "" });
+    const serverForm = { maritalStatus: current.maritalStatus || "", hasChildren: current.hasChildren, desireChildren: current.desireChildren || "", familyInvolvementPreference: current.familyInvolvementPreference || "", relocationWillingness: current.relocationWillingness || "", polygynyOpenness: current.polygynyOpenness || "", region: current.region || "", nationality: current.nationality || "", languages: textList(current.languages), personality: current.personality || "", interests: textList(current.interests), hobbies: textList(current.hobbies), marriageIntent: current.marriageIntent || "", marriageExpectations: current.marriageExpectations || "", reasonSeekingMarriage: current.reasonSeekingMarriage || "", educationField: current.educationField || "", educationInstitution: current.educationInstitution || "", employmentStatus: current.employmentStatus || "", industry: current.industry || "", smokingPreference: current.smokingPreference || "", alcoholPreference: current.alcoholPreference || "", values: current.values || "", importantPrinciples: current.importantPrinciples || "", lifestyle: current.lifestyle || "" };
+    const draft = loadSafeDraft<typeof serverForm>(profileDetailsDraftKey);
+    setForm(draft ? { ...serverForm, ...draft } : serverForm);
+    setDraftReady(true);
   }, [profile.data]);
+  useEffect(() => { if (draftReady) saveSafeDraft(profileDetailsDraftKey, form); }, [draftReady, form]);
 
   const update = (key: Exclude<keyof typeof form, "hasChildren">, value: string) => setForm(current => ({ ...current, [key]: value }));
-  const submit = () => save.mutate({
+  const submit = () => {
+    if (network === "offline") { toast.error("You appear to be offline. Your profile-detail draft stays on this device until you reconnect."); return; }
+    save.mutate({
     maritalStatus: form.maritalStatus ? form.maritalStatus as "never_married" | "married" | "divorced" | "widowed" : undefined,
     hasChildren: form.hasChildren,
     desireChildren: form.desireChildren ? form.desireChildren as "yes" | "no" | "open" | "private" : undefined,
     familyInvolvementPreference: form.familyInvolvementPreference ? form.familyInvolvementPreference as "active" | "limited" | "optional" | "private" : undefined,
     relocationWillingness: form.relocationWillingness ? form.relocationWillingness as "open" | "within_gambia" | "not_open" | "discuss" : undefined,
     polygynyOpenness: form.polygynyOpenness ? form.polygynyOpenness as "open" | "not_open" | "discuss" | "not_applicable" : undefined,
-    region: form.region || undefined, nationality: form.nationality || undefined, languages: list(form.languages), personality: form.personality || undefined, interests: list(form.interests), hobbies: list(form.hobbies), marriageIntent: form.marriageIntent || undefined, marriageExpectations: form.marriageExpectations || undefined, reasonSeekingMarriage: form.maritalStatus === "married" ? form.reasonSeekingMarriage || undefined : undefined, educationField: form.educationField || undefined, educationInstitution: form.educationInstitution || undefined, employmentStatus: form.employmentStatus ? form.employmentStatus as "employed" | "self_employed" | "student" | "seeking_work" | "retired" | "prefer_not_to_say" : undefined, industry: form.industry || undefined, smokingPreference: form.smokingPreference ? form.smokingPreference as "no" | "occasionally" | "yes" | "private" : undefined, alcoholPreference: form.alcoholPreference ? form.alcoholPreference as "no" | "occasionally" | "yes" | "private" : undefined, values: form.values || undefined, importantPrinciples: form.importantPrinciples || undefined, lifestyle: form.lifestyle || undefined,
-  });
+    region: form.region || undefined, nationality: form.nationality || undefined, languages: list(form.languages), personality: form.personality || undefined, interests: list(form.interests), hobbies: list(form.hobbies), marriageIntent: form.marriageIntent || undefined, marriageExpectations: form.marriageExpectations || undefined, reasonSeekingMarriage: form.maritalStatus === "married" ? form.reasonSeekingMarriage || undefined : undefined, educationField: form.educationField || undefined, educationInstitution: form.educationInstitution || undefined, employmentStatus: form.employmentStatus ? form.employmentStatus as "employed" | "self_employed" | "student" | "seeking_work" | "retired" | "prefer_not_to_say" : undefined, industry: form.industry || undefined, smokingPreference: form.smokingPreference ? form.smokingPreference as "no" | "occasionally" | "yes" | "private" : undefined, alcoholPreference: form.alcoholPreference ? form.alcoholPreference as "no" | "occasionally" | "yes" | "private" : undefined, values: form.values || undefined, importantPrinciples: form.importantPrinciples || undefined, lifestyle: form.lifestyle || undefined, expectedUpdatedAt: profile.data?.updatedAt,
+    });
+  };
 
   if (profile.isLoading) return <MemberShell eyebrow="Profile depth" title="Share what matters, at your pace." description="These optional details support thoughtful compatibility. Use field privacy in Compatibility to choose who may see individual sections."><StateSkeleton label="Loading your private profile details…" /></MemberShell>;
   if (profile.isError) return <MemberShell eyebrow="Profile depth" title="Share what matters, at your pace." description="These optional details support thoughtful compatibility. Use field privacy in Compatibility to choose who may see individual sections."><StatePanel kind="error" title="Your profile details are unavailable right now." description="No profile information has been changed. Please try again." action={<Button onClick={() => profile.refetch()} className="btn-forest">Try again</Button>} /></MemberShell>;
