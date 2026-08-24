@@ -15,6 +15,7 @@ import {
 import { createAuditLog, createNotification, getDb } from "./db";
 import { createIntegritySignal } from "./integrityService";
 import { normalizeOptionalUserText } from "./inputSecurity";
+import { safeLocationDisplay } from "./domain/internationalPolicy";
 
 export const FAMILY_PERMISSIONS = ["profile_basics", "profile_photo", "marriage_intentions", "compatibility_summary", "family_context", "potential_match", "acknowledgment_status"] as const;
 export type FamilyPermission = (typeof FAMILY_PERMISSIONS)[number];
@@ -105,7 +106,9 @@ export async function reissueFamilyInvitation(memberProfileId: number, actorUser
   const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000);
   const link = await ownedLink(memberProfileId, familyLinkId);
   if (link.status !== "invited") throw new Error("Only a pending Family Circle invitation can be resent.");
-  const reissued = await db.update(familyLinks).set({ invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, invitedAt: now }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited")));
+  if (!link.invitationCodeHash) throw new Error("This Family Circle invitation is unavailable.");
+  const expectedInvitationCodeHash = link.invitationCodeHash;
+  const reissued = await db.update(familyLinks).set({ invitationCodeHash: invitationHash(code), invitationExpiresAt: expiresAt, invitedAt: now }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited"), eq(familyLinks.invitationCodeHash, expectedInvitationCodeHash)));
   if (!Number((reissued[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This Family Circle invitation changed before it could be reissued.");
   await recordEvent(familyLinkId, actorUserId, "invitation_sent", { relationship: link.relationship, reissued: true });
   await createAuditLog(actorUserId, "family.invitation_resent", "family_link", String(familyLinkId), { relationship: link.relationship });
@@ -116,8 +119,10 @@ export async function revokeFamilyInvitation(memberProfileId: number, actorUserI
   const db = await requireDb();
   const link = await ownedLink(memberProfileId, familyLinkId);
   if (link.status !== "invited") throw new Error("Only a pending Family Circle invitation can be revoked.");
+  if (!link.invitationCodeHash) throw new Error("This Family Circle invitation is unavailable.");
+  const expectedInvitationCodeHash = link.invitationCodeHash;
   const revokedAt = new Date();
-  const revoked = await db.update(familyLinks).set({ status: "revoked", invitationCodeHash: null, revokedAt }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited")));
+  const revoked = await db.update(familyLinks).set({ status: "revoked", invitationCodeHash: null, revokedAt }).where(and(eq(familyLinks.id, familyLinkId), eq(familyLinks.status, "invited"), eq(familyLinks.invitationCodeHash, expectedInvitationCodeHash)));
   if (!Number((revoked[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This Family Circle invitation changed before it could be revoked.");
   await recordEvent(familyLinkId, actorUserId, "invitation_revoked", { relationship: link.relationship, pendingInvitation: true });
   await createAuditLog(actorUserId, "family.invitation_revoked", "family_link", String(familyLinkId), { relationship: link.relationship });
@@ -224,7 +229,8 @@ export async function withdrawFamilyShare(memberProfileId: number, actorUserId: 
   const rows = await db.select({ share: familyShares, link: familyLinks }).from(familyShares).innerJoin(familyLinks, eq(familyShares.familyLinkId, familyLinks.id)).where(and(eq(familyShares.id, familyShareId), eq(familyLinks.memberProfileId, memberProfileId))).limit(1);
   const row = rows[0];
   if (!row) throw new Error("Shared potential match not found");
-  await db.update(familyShares).set({ status: "withdrawn", withdrawnAt: new Date() }).where(eq(familyShares.id, familyShareId));
+  const withdrawn = await db.update(familyShares).set({ status: "withdrawn", withdrawnAt: new Date() }).where(and(eq(familyShares.id, familyShareId), eq(familyShares.status, "active")));
+  if (!Number((withdrawn[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("This shared potential match is no longer available.");
   await db.update(familyAcknowledgments).set({ status: "withdrawn", withdrawnAt: new Date() }).where(and(eq(familyAcknowledgments.familyShareId, familyShareId), eq(familyAcknowledgments.status, "requested")));
   await recordEvent(row.link.id, actorUserId, "share_withdrawn", { familyShareId });
   await createAuditLog(actorUserId, "family.share_withdrawn", "family_share", String(familyShareId));
@@ -252,7 +258,7 @@ export async function withdrawFamilySharesForProfilePair(firstProfileId: number,
 
 export async function requestFamilyAcknowledgment(memberProfileId: number, actorUserId: number, familyShareId: number) {
   const db = await requireDb();
-  const rows = await db.select({ share: familyShares, link: familyLinks }).from(familyShares).innerJoin(familyLinks, eq(familyShares.familyLinkId, familyLinks.id)).where(and(eq(familyShares.id, familyShareId), eq(familyShares.status, "active"), eq(familyLinks.memberProfileId, memberProfileId))).limit(1);
+  const rows = await db.select({ share: familyShares, link: familyLinks }).from(familyShares).innerJoin(familyLinks, eq(familyShares.familyLinkId, familyLinks.id)).where(and(eq(familyShares.id, familyShareId), eq(familyShares.status, "active"), eq(familyLinks.memberProfileId, memberProfileId), inArray(familyLinks.status, activeParticipantStatuses))).limit(1);
   const row = rows[0];
   if (!row) throw new Error("Shared potential match not found");
   await requireGrantedPermission(row.link.id, "acknowledgment_status");
@@ -273,10 +279,11 @@ export async function requestFamilyAcknowledgment(memberProfileId: number, actor
 
 export async function respondToFamilyAcknowledgment(userId: number, acknowledgmentId: number, response: "acknowledged" | "declined") {
   const db = await requireDb();
-  const rows = await db.select({ acknowledgment: familyAcknowledgments, share: familyShares, link: familyLinks }).from(familyAcknowledgments).innerJoin(familyShares, eq(familyAcknowledgments.familyShareId, familyShares.id)).innerJoin(familyLinks, eq(familyShares.familyLinkId, familyLinks.id)).where(and(eq(familyAcknowledgments.id, acknowledgmentId), eq(familyAcknowledgments.status, "requested"), eq(familyLinks.familyParticipantUserId, userId), inArray(familyLinks.status, activeParticipantStatuses))).limit(1);
+  const rows = await db.select({ acknowledgment: familyAcknowledgments, share: familyShares, link: familyLinks }).from(familyAcknowledgments).innerJoin(familyShares, eq(familyAcknowledgments.familyShareId, familyShares.id)).innerJoin(familyLinks, eq(familyShares.familyLinkId, familyLinks.id)).where(and(eq(familyAcknowledgments.id, acknowledgmentId), eq(familyAcknowledgments.status, "requested"), eq(familyShares.status, "active"), eq(familyLinks.familyParticipantUserId, userId), inArray(familyLinks.status, activeParticipantStatuses))).limit(1);
   const row = rows[0];
   if (!row) throw new Error("Acknowledgment request is unavailable");
-  await db.update(familyAcknowledgments).set({ status: response, respondedAt: new Date() }).where(eq(familyAcknowledgments.id, acknowledgmentId));
+  const responded = await db.update(familyAcknowledgments).set({ status: response, respondedAt: new Date() }).where(and(eq(familyAcknowledgments.id, acknowledgmentId), eq(familyAcknowledgments.status, "requested")));
+  if (!Number((responded[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)) throw new Error("Acknowledgment request is unavailable");
   await recordEvent(row.link.id, userId, "acknowledgment_submitted", { acknowledgmentId, response });
   const owner = await memberUserId(row.link.memberProfileId);
   if (owner) await createNotification(owner, "family", "Family acknowledgment received", `${row.link.contactName} responded to a Family Circle acknowledgment request. Your matrimonial decision remains your own.`, "/app/family", `family-ack-response:${acknowledgmentId}`);
@@ -348,8 +355,9 @@ export async function getFamilyParticipantDashboard(userId: number) {
         waliVerificationStatus: link.waliVerificationStatus,
 	    member: {
 	      displayName: granted.has("profile_basics") ? ownerProfile?.displayName ?? null : null,
-	      city: granted.has("profile_basics") ? ownerProfile?.city ?? null : null,
-	      country: granted.has("profile_basics") ? ownerProfile?.country ?? null : null,
+	      city: null,
+	      country: null,
+	      locationDisplay: granted.has("profile_basics") && ownerProfile ? safeLocationDisplay({ visibility: ownerProfile.locationVisibility, detail: ownerProfile.locationDetailLevel, countryName: ownerProfile.country, region: ownerProfile.region, city: ownerProfile.city, relationship: "family" }) : null,
 	      introduction: granted.has("profile_basics") ? ownerProfile?.about ?? null : null,
 	      marriageTimeline: granted.has("marriage_intentions") ? ownerProfile?.marriageTimeline ?? null : null,
 	      marriageIntent: granted.has("marriage_intentions") ? ownerProfile?.marriageIntent ?? null : null,
@@ -364,12 +372,12 @@ export async function getFamilyParticipantDashboard(userId: number) {
       return {
         id: share.id,
         familyLinkId: link.id,
-        profile: {
-          displayName: profile.displayName,
-          city: granted.has("potential_match") ? profile.city : null,
-          country: granted.has("potential_match") ? profile.country : null,
-          religion: granted.has("potential_match") ? profile.religion : null,
-          marriageTimeline: granted.has("marriage_intentions") ? profile.marriageTimeline : null,
+	    profile: {
+	      displayName: profile.displayName,
+	      city: null,
+	      country: null,
+	      locationDisplay: granted.has("potential_match") ? safeLocationDisplay({ visibility: profile.locationVisibility, detail: profile.locationDetailLevel, countryName: profile.country, region: profile.region, city: profile.city, relationship: "family" }) : null,
+	      marriageTimeline: granted.has("marriage_intentions") ? profile.marriageTimeline : null,
         },
       };
     }),
