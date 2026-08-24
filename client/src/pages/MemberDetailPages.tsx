@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
+import { ActivationRecoveryLink } from "@/components/ActivationRecoveryLink";
 import { useNetworkState } from "@/hooks/useDeviceExperience";
 import { clearSafeDraft, draftKey, loadSafeDraft, saveSafeDraft } from "@/lib/mobileExperience";
 import { trpc } from "@/lib/trpc";
@@ -117,7 +118,7 @@ export function MessageThreadPage({ conversationId }: { conversationId: number }
   const profileReady = profile.data?.eligibility?.profileComplete === true;
   if (profile.isLoading) return <MemberShell eyebrow="Private conversation" title="Private conversations, earned mutually." description="Preparing your protected communication space."><StateSkeleton label="Checking your protected conversation access…" /></MemberShell>;
   if (profile.isError) return <MemberShell eyebrow="Private conversation" title="Private conversations, earned mutually." description="Preparing your protected communication space."><StatePanel kind="error" title="Your conversation access is unavailable right now." description="No message, voice note, read state, or connection state has been requested or changed. Please try again." action={<Button className="btn-forest" onClick={() => profile.refetch()}>Try again</Button>} /></MemberShell>;
-  if (!profileReady) { const eligibility = profile.data?.eligibility; return <MemberShell eyebrow="Private conversation" title="Private conversations, earned mutually." description="A completed profile is required before private communication can be opened."><StatePanel kind="empty" title={eligibility?.title || "Complete your profile before opening a conversation."} description={eligibility?.detail || "Finish your private profile foundation before messages, voice notes, and readiness states become available."} action={<Link href={eligibility?.photosRemaining ? "/app/photos" : "/app/onboarding"} className="btn-forest inline-flex items-center gap-2">{eligibility?.nextAction || "Complete profile"} <ChevronRight size={16} /></Link>} /></MemberShell>; }
+	  if (!profileReady) { const eligibility = profile.data?.eligibility; return <MemberShell eyebrow="Private conversation" title="Private conversations, earned mutually." description="A completed profile is required before private communication can be opened."><StatePanel kind="empty" title={eligibility?.title || "Complete your profile before opening a conversation."} description={eligibility?.detail || "Finish your private profile foundation before messages, voice notes, and readiness states become available."} action={<ActivationRecoveryLink eligibility={eligibility} className="btn-forest px-4 py-2.5 text-cream" />} /></MemberShell>; }
   return <MessageThreadContent conversationId={conversationId} />;
 }
 

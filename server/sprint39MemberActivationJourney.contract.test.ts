@@ -37,14 +37,14 @@ describe("Sprint 39 — member activation, onboarding & first-value journey", ()
     expect(home).toContain('eligibility?.journeyState === "PAUSED" ? "/app/profile"');
     expect(home).toContain("Journey state:");
     expect(dashboard).toContain("const discoveryReady = eligibility?.discoveryEligible === true");
-    expect(dashboard).toContain("const activationRoute = discoveryReady");
+    expect(dashboard).toContain("const activationAction = getActivationJourneyAction(eligibility)");
     expect(readiness).toContain("const journeyState = eligibility?.journeyState || eligibility?.onboardingState");
     expect(readiness).toContain("Current journey state:");
   });
 
   it("keeps unavailable discovery factual, privacy-safe, and directed to the permitted recovery action", () => {
     const discovery = read("client/src/pages/CuratedDiscoveryPage.tsx");
-    expect(discovery).toContain('eligibility?.journeyState === "PAUSED" ? "/app/profile"');
+    expect(discovery).toContain("ActivationRecoveryLink");
     expect(discovery).toContain("Current journey state:");
     expect(discovery).toContain("Hidden, suspended, deleted, blocked, and hard-incompatible profiles are excluded");
     expect(discovery).toContain("Exact location is never searched or shown");

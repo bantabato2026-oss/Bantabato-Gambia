@@ -17,7 +17,7 @@ describe("authoritative eligibility guidance", () => {
     const recommendations = readFileSync(join(root, "client/src/pages/RecommendationsPage.tsx"), "utf8");
     expect(discovery).toContain("(!eligibility || !eligibility.discoveryEligible)");
     expect(recommendations).toContain("(!eligibility || !eligibility.discoveryEligible)");
-    expect(discovery).toContain("Complete your profile foundation.");
-    expect(recommendations).toContain("Complete your profile foundation.");
+    expect(discovery).toContain("ActivationRecoveryLink");
+    expect(recommendations).toContain("ActivationRecoveryLink");
   });
 });

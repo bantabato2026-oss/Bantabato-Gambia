@@ -23,7 +23,7 @@ describe("Sprint 40 — discovery quality, search & member preferences", () => {
     expect(deriveMemberEligibility({ ...base, profileStatus: "suspended" }).journeyState).toBe("SUSPENDED");
     const discovery = read("client/src/pages/CuratedDiscoveryPage.tsx");
     expect(discovery).toContain("profile.data?.eligibility?.discoveryEligible === true");
-    expect(discovery).toContain('eligibility?.journeyState === "PAUSED" ? "/app/profile"');
+    expect(discovery).toContain("ActivationRecoveryLink");
   });
 
   it("preserves independently eligible, reciprocal, block-safe, privacy-safe discovery and approved display-name search", () => {
@@ -73,7 +73,7 @@ describe("Sprint 40 — discovery quality, search & member preferences", () => {
     expect(service).not.toContain("city: candidate.city, country: candidate.country");
     expect(page).toContain("Policy version:");
     expect(page).toContain("item.locationDisplay");
-    expect(page).toContain('eligibility?.journeyState === "PAUSED" ? "/app/profile"');
+    expect(page).toContain("ActivationRecoveryLink");
   });
 
   it("preserves recommendation withdrawal, mutual-interest-only connections, private notifications, Family Circle isolation, safety propagation, and Premium-neutral boundaries", () => {

@@ -1,0 +1,9 @@
+# Sprint 42 Validation Evidence
+
+**Scope.** Sprint 42 aligns new-member activation recovery with the existing server-derived journey state. A shared client-side action now selects the next protected surface only from that state and the explicit `discoveryEligible` flag: onboarding for new/profile-incomplete members, photos for photo-incomplete members, verification for pending review, profile controls for paused members, account status for suspended members, and discovery only when explicitly eligible. The welcome page, Command Center, readiness panel, discovery, recommendations, connections, and protected message entry use this consistent recovery approach.
+
+**Automated validation.** Focused activation coverage passed: 7 tests across 2 files. The full release gate passed: `pnpm check`, `pnpm test`, `pnpm build`, and `pnpm audit --prod --audit-level=high`; 475 tests across 97 files passed, the production build completed, and the production dependency audit found no known vulnerabilities.
+
+**Read-only responsive review.** Desktop and 375px mobile routes were captured without sign-in, save, upload, file selection, privacy change, or other mutation: `/register`, `/app/welcome`, `/app/onboarding`, `/app/photos`, `/app/verification`, `/app/profile/preview`, `/app/discover`, and `/app/recommendations`. The profileless preview account showed factual prerequisite/recovery states rather than fabricated member, photo, verification, discovery, or recommendation data. The mobile onboarding and unavailable discovery/recommendation states remained legible and surfaced the `NEW` journey state with a private-profile recovery action.
+
+**Boundaries retained.** No provider, real account, real profile/media/document, verification outcome, interest, connection, message, payment, external delivery, ranking, bypass, or launch state was created or claimed.

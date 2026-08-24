@@ -24,7 +24,8 @@ describe("Sprint 23 onboarding, profile completion, and member identity contract
     expect(welcome).toContain("manual review");
     expect(welcome).toContain("never private messages, voice notes, identity documents, safety records, account controls, or call consent");
     expect(welcome).toContain("Exact locations are not part of discovery.");
-    expect(welcome).toContain("/app/onboarding");
+    expect(welcome).toContain("getActivationJourneyAction(profile.data?.eligibility)");
+    expect(welcome).toContain("Current journey state:");
     expect(welcome).not.toContain("playAudio");
     expect(welcome).not.toContain("external provider");
   });

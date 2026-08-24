@@ -3,6 +3,7 @@ import { ProfileReadinessPanel } from "@/components/ProfileReadinessPanel";
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getActivationJourneyAction } from "@/lib/activationJourney";
 import { trpc } from "@/lib/trpc";
 import { BellRing, Camera, CheckCircle2, ChevronRight, CircleAlert, Compass, CreditCard, FileCheck2, HeartHandshake, Lightbulb, LockKeyhole, MessageCircle, ShieldCheck, UsersRound } from "lucide-react";
 import { Link } from "wouter";
@@ -32,7 +33,8 @@ export default function MemberDashboardPage() {
 	  const member = profile.data;
 	  const eligibility = member?.eligibility;
 	  const discoveryReady = eligibility?.discoveryEligible === true;
-	  const activationRoute = discoveryReady ? "/app/discover" : eligibility?.journeyState === "PAUSED" ? "/app/profile" : eligibility?.photosRemaining ? "/app/photos" : "/app/onboarding";
+	  const activationAction = getActivationJourneyAction(eligibility);
+	  const activationRoute = activationAction.href;
   const latestVerification = verification.data?.find(record => record.verificationType === "identity_document");
   const approvedPhotos = eligibility?.approvedPhotoCount ?? 0;
   const pendingPhotos = member?.completeness?.pendingPhotoCount ?? 0;
@@ -43,7 +45,7 @@ export default function MemberDashboardPage() {
   const pendingRefund = (billing.data?.refunds ?? []).filter(refund => ["requested", "processing"].includes(refund.status)).length;
   const recommendationCount = recommendations.data?.items.length ?? 0;
   const importantActions = [
-    !eligibility?.profileComplete ? { title: eligibility?.title || "Complete your profile foundation", detail: eligibility?.detail || "Finish your profile before discovery can begin.", href: eligibility?.photosRemaining ? "/app/photos" : "/app/onboarding", label: eligibility?.nextAction || "Continue profile" } : null,
+	    !discoveryReady ? { title: eligibility?.title || "Complete your profile foundation", detail: eligibility?.detail || "Finish your profile before discovery can begin.", href: activationAction.href, label: activationAction.label } : null,
     !member?.completeness?.hasPreferences ? { title: "Review your marriage preferences", detail: "State what is required, preferred, neutral, or unimportant before you rely on considered introductions.", href: "/app/compatibility", label: "Review preferences" } : null,
     latestVerification?.status !== "approved" ? { title: "Review your verification status", detail: latestVerification ? `Current private status: ${statusLabel(latestVerification.status)}.` : "Identity review has not started.", href: "/app/verification", label: "Open verification" } : null,
     incoming.data?.length ? { title: `${incoming.data.length} introduction${incoming.data.length === 1 ? "" : "s"} awaiting your choice`, detail: "An introduction stays one-sided until you respond. No conversation opens automatically.", href: "/app/matches", label: "Review introductions" } : null,
@@ -54,7 +56,7 @@ export default function MemberDashboardPage() {
   ].filter(Boolean) as Array<{ title: string; detail: string; href: string; label: string }>;
 
 	  return <MemberShell eyebrow="Your Bantaba" title="Your private command center." description="A factual overview of your account, connections, and actions that need your attention. It never ranks you, scores your activity, or changes any state automatically.">
-	    <section className="welcome-panel"><div className="flex flex-wrap items-start justify-between gap-5"><div><p className="text-sm font-semibold text-gold">Your next meaningful step</p><h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-cream">{discoveryReady ? "Your foundation is ready to guide your next choice." : eligibility?.title || "Your profile is the first honest introduction."}</h2><p className="mt-4 max-w-3xl text-sm leading-6 text-cream/75">{discoveryReady ? "Review thoughtful introductions, your privacy, and the status of your current connections at your own pace." : eligibility?.detail || "Build your private foundation before discovery begins."}</p></div><Badge className="border border-gold/30 bg-cream/10 text-cream">{member?.profileStatus?.replace(/_/g, " ") || "draft"}</Badge></div><p role="status" className="mt-4 text-xs font-semibold uppercase tracking-[.12em] text-gold">Journey state: {(eligibility?.journeyState || "new").replace(/_/g, " ")}</p><div className="mt-5 flex flex-wrap gap-3"><Link href={activationRoute} className="btn-gold inline-flex items-center gap-2">{discoveryReady ? "Explore members" : eligibility?.nextAction || "Complete profile"}<ChevronRight size={16} /></Link><Link href="/app/profile/preview" className="inline-flex items-center gap-2 rounded-xl border border-cream/30 px-4 py-2.5 text-sm font-semibold text-cream hover:bg-cream/10">Preview your profile</Link></div></section>
+		    <section className="welcome-panel"><div className="flex flex-wrap items-start justify-between gap-5"><div><p className="text-sm font-semibold text-gold">Your next meaningful step</p><h2 className="mt-3 max-w-3xl font-display text-4xl leading-tight text-cream">{discoveryReady ? "Your foundation is ready to guide your next choice." : eligibility?.title || "Your profile is the first honest introduction."}</h2><p className="mt-4 max-w-3xl text-sm leading-6 text-cream/75">{discoveryReady ? "Review thoughtful introductions, your privacy, and the status of your current connections at your own pace." : eligibility?.detail || "Build your private foundation before discovery begins."}</p></div><Badge className="border border-gold/30 bg-cream/10 text-cream">{member?.profileStatus?.replace(/_/g, " ") || "draft"}</Badge></div><p role="status" className="mt-4 text-xs font-semibold uppercase tracking-[.12em] text-gold">Journey state: {(eligibility?.journeyState || "new").replace(/_/g, " ")}</p><div className="mt-5 flex flex-wrap gap-3"><Link href={activationRoute} className="btn-gold inline-flex items-center gap-2">{activationAction.label}<ChevronRight size={16} /></Link><Link href="/app/profile/preview" className="inline-flex items-center gap-2 rounded-xl border border-cream/30 px-4 py-2.5 text-sm font-semibold text-cream hover:bg-cream/10">Preview your profile</Link></div></section>
 
     <ProfileReadinessPanel className="mt-7" eligibility={eligibility} verificationStatus={latestVerification?.status} hasPreferences={Boolean(member?.completeness?.hasPreferences)} />
 
