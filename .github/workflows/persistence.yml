@@ -28,6 +28,7 @@ jobs:
       BANTABATO_TEST_DATABASE_URL: mysql://root:testpassword@127.0.0.1:3306/bantabato_test
       BANTABATO_PERSISTENCE_CI: "1"
       BANTABATO_PERSISTENCE_RESULT_FILE: artifacts/persistence-results.json
+      BANTABATO_COMPARISON_RESULT_FILE: artifacts/comparison-results.json
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -48,10 +49,10 @@ jobs:
         run: pnpm exec drizzle-kit migrate
       - name: Run persistence authority suite
         run: env -u DATABASE_URL pnpm test:persistence
-      - name: Upload persistence result artifact
+      - name: Upload persistence result artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bantabato-persistence-results
-          path: artifacts/persistence-results.json
+          path: artifacts/*.json
           if-no-files-found: error

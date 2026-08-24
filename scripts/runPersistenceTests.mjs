@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { assertSafeTestDatabaseEnvironment } from "../server/testSupport/testDatabaseAdapter.ts";
 
 const outputFile = process.env.BANTABATO_PERSISTENCE_RESULT_FILE ?? "artifacts/persistence-results.json";
+const diagnosticsFile = process.env.BANTABATO_FAILURE_DIAGNOSTICS_FILE ?? "artifacts/persistence-failures.json";
 const requested = process.env.BANTABATO_PERSISTENCE_CI === "1" || process.env.BANTABATO_PERSISTENCE_CI === "true";
 
 function safeDatastoreIdentifier() {
@@ -11,6 +12,8 @@ function safeDatastoreIdentifier() {
 
 async function writeFailure(reason) {
   await mkdir(outputFile.substring(0, outputFile.lastIndexOf("/")) || ".", { recursive: true });
+  await mkdir(diagnosticsFile.substring(0, diagnosticsFile.lastIndexOf("/")) || ".", { recursive: true });
+  await writeFile(diagnosticsFile, JSON.stringify({ suite: "bantabato-persistence-failures", status: "not_executed", failures: [{ code: "PERSISTENCE_GUARD", reason }] }, null, 2) + "\n");
   await writeFile(outputFile, JSON.stringify({
     suite: "bantabato-persistence",
     status: "not_executed",
@@ -59,6 +62,7 @@ child.on("exit", async code => {
       scenarios,
       failureReason: code === 0 ? null : "Persistence test process failed; inspect CI logs without exposing datastore credentials.",
     }, null, 2) + "\n");
+    await writeFile(diagnosticsFile, JSON.stringify({ suite: "bantabato-persistence-failures", status: code === 0 ? "none" : "failed", failures: code === 0 ? [] : [{ code: "PERSISTENCE_TEST_PROCESS", reason: "Inspect CI logs without exposing datastore credentials." }] }, null, 2) + "\n");
   } catch (error) {
     await writeFailure(error instanceof Error ? error.message : "Persistence result normalization failed");
   }

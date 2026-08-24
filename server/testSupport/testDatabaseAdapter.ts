@@ -1,7 +1,7 @@
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { eq } from "drizzle-orm";
-import { memberProfiles, profilePhotos, users, verificationRecords } from "../../drizzle/schema";
+import { conversations, matches, memberProfiles, profilePhotos, users, verificationRecords } from "../../drizzle/schema";
 import { withDatabaseOverride } from "../db";
 
 export type TestDatabaseEnvironment = Record<string, string | undefined>;
@@ -131,6 +131,19 @@ export async function seedFictionalMembers(handle: TestDatabaseHandle): Promise<
     seeded.push({ id, userId: user.id, profileId: profile.id });
   }
   return seeded;
+}
+
+export type SeededConversation = { matchId: number; conversationId: number; memberOneProfileId: number; memberTwoProfileId: number };
+
+/** Relationship precondition only; messaging authorization remains in messagingService. */
+export async function seedAuthorizedConversation(handle: TestDatabaseHandle, members: SeededMember[]): Promise<SeededConversation> {
+  const one = members.find(member => member.id === "A");
+  const two = members.find(member => member.id === "B");
+  if (!one || !two) throw new Error("Synthetic A–B fixtures are required");
+  const matchResult = await handle.db.insert(matches).values({ memberOneProfileId: one.profileId, memberTwoProfileId: two.profileId, status: "active", matchedAt: new Date("2026-08-24T12:00:00.000Z"), createdAt: new Date("2026-08-24T12:00:00.000Z"), updatedAt: new Date("2026-08-24T12:00:00.000Z") });
+  const matchId = Number(matchResult[0].insertId);
+  const conversationResult = await handle.db.insert(conversations).values({ matchId, status: "active", mutualInterestAt: new Date("2026-08-24T12:00:00.000Z"), lastActivityAt: new Date("2026-08-24T12:00:00.000Z"), createdAt: new Date("2026-08-24T12:00:00.000Z"), updatedAt: new Date("2026-08-24T12:00:00.000Z") });
+  return { matchId, conversationId: Number(conversationResult[0].insertId), memberOneProfileId: one.profileId, memberTwoProfileId: two.profileId };
 }
 
 export async function withSeededFictionalMembers<T>(handle: TestDatabaseHandle, work: (members: SeededMember[]) => Promise<T>): Promise<T> {

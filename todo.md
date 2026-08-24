@@ -428,3 +428,16 @@
 - [x] Follow-up Sprint 46: connect the isolated persistence adapter to injectable actual server-authority seams and test actors, without duplicating business rules.
 - [x] Follow-up Sprint 46: add machine-readable persistence lifecycle scenarios for A–J, deterministic cleanup, and clear unavailable-datastore failure behavior.
 - [x] Follow-up Sprint 46: run full validation and save a checkpoint.
+
+- [ ] Sprint 48: extend isolated fixtures and test actors for messaging, safety, Family Circle, support, connections, readiness, and notifications without real-member or provider access.
+- [ ] Sprint 48: add injected authority-level persistence scenarios for protected operations, privacy projections, state propagation, and Premium neutrality.
+- [ ] Sprint 48: add normalized in-memory versus database comparison artifacts with truthful PASS, FAIL, or SKIPPED status.
+- [ ] Sprint 48: add meaningful concurrency, stale-version, rollback, cross-session, and cleanup coverage and run available validation.
+- [ ] Sprint 48: save a checkpoint and report whether disposable CI execution actually occurred.
+
+- [x] Sprint 48 delivered subset: route actual messaging and member-support authorities through the isolated database client with deterministic A–B/A–J fixtures.
+- [x] Sprint 48 delivered subset: add non-sensitive in-memory versus database state normalization and comparison artifact generation.
+- [x] Sprint 48 delivered subset: add persistence failure-diagnostics artifact generation and validate fail-closed requested execution locally.
+- [x] Sprint 48 delivered subset: run full local validation; 500 tests passed and 1 persistence test intentionally skipped without an isolated datastore.
+- [ ] Sprint 48 remaining: extend persistence scenarios to safety, Family Circle, connections, readiness, notifications, concurrency, stale versions, rollback, privacy, and Premium neutrality.
+- [ ] Sprint 48 remaining: execute the disposable MySQL CI workflow and verify generated PASS comparison artifacts in CI.

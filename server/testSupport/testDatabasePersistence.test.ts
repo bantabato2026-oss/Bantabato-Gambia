@@ -1,8 +1,12 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { inArray } from "drizzle-orm";
 import { memberProfiles, users } from "../../drizzle/schema";
 import { getMemberEligibility, getProfileByUserId, getUserByOpenId } from "../db";
-import { closeIsolatedTestDatabase, openIsolatedTestDatabase, withSeededFictionalMembers } from "./testDatabaseAdapter";
+import { listMessages, sendText } from "../messagingService";
+import { createMemberSupportTicket, listMemberSupportTickets, reopenMemberSupportTicket, withdrawMemberSupportTicket } from "../adminOperationsService";
+import { compareMemberStates, normalizeDatabaseMemberState, normalizeInMemoryMemberState } from "./persistenceStateNormalizer";
+import { closeIsolatedTestDatabase, openIsolatedTestDatabase, seedAuthorizedConversation, withSeededFictionalMembers } from "./testDatabaseAdapter";
 
 const configuredForIsolatedDatabase = Boolean(
   process.env.BANTABATO_TEST_MODE &&
@@ -34,6 +38,32 @@ describe("Sprint 46 persistence-backed fictional lifecycle", () => {
         expect(persistedDEligibility.discoveryEligible).toBe(false);
         expect(persistedGEligibility.discoveryEligible).toBe(false);
         expect(persistedIEligibility.discoveryEligible).toBe(false);
+        const conversation = await seedAuthorizedConversation(handle, members);
+        const firstMessage = await sendText(members[0]!.profileId, conversation.conversationId, "A private test message", undefined, "test-message-A-1");
+        const duplicateMessage = await sendText(members[0]!.profileId, conversation.conversationId, "A private test message", undefined, "test-message-A-1");
+        const recipientMessages = await listMessages(members[1]!.profileId, conversation.conversationId);
+        expect(firstMessage.duplicate).toBe(false);
+        expect(duplicateMessage).toMatchObject({ id: firstMessage.id, duplicate: true });
+        expect(recipientMessages.items.some(message => message.id === firstMessage.id && message.body === "A private test message")).toBe(true);
+        const supportInput = { category: "technical_issue" as const, subject: "Synthetic support request", description: "A deterministic isolated support request.", idempotencyKey: "support-A-1" };
+        const supportCreated = await createMemberSupportTicket(members[0]!.userId, supportInput);
+        const supportDuplicate = await createMemberSupportTicket(members[0]!.userId, supportInput);
+        expect(supportCreated.duplicate).toBe(false);
+        expect(supportDuplicate).toMatchObject({ duplicate: true, ticket: { id: supportCreated.ticket.id } });
+        const supportWithdrawn = await withdrawMemberSupportTicket(members[0]!.userId, supportCreated.ticket.id, supportCreated.ticket.updatedAt);
+        const supportReopened = await reopenMemberSupportTicket(members[0]!.userId, supportCreated.ticket.id, supportWithdrawn.ticket!.updatedAt);
+        expect(supportWithdrawn.ticket?.status).toBe("withdrawn");
+        expect(supportReopened.ticket?.status).toBe("open");
+        expect((await listMemberSupportTickets(members[0]!.userId)).find(ticket => ticket.id === supportCreated.ticket.id)?.status).toBe("open");
+        const inMemoryState = normalizeInMemoryMemberState("A");
+        const databaseState = await normalizeDatabaseMemberState(members[0]!);
+        const comparison = compareMemberStates("A", inMemoryState, inMemoryState, databaseState);
+        expect(comparison.comparison).toBe("match");
+        const comparisonFile = process.env.BANTABATO_COMPARISON_RESULT_FILE;
+        if (comparisonFile) {
+          await mkdir(comparisonFile.substring(0, comparisonFile.lastIndexOf("/")) || ".", { recursive: true });
+          await writeFile(comparisonFile, JSON.stringify({ suite: "bantabato-persistence-comparison", status: comparison.comparison === "match" ? "PASS" : "FAIL", scenarios: [comparison], environment: "isolated-test-datastore" }, null, 2) + "\n");
+        }
       });
 
       const remaining = await handle.db.select({ id: users.id }).from(users).where(inArray(users.openId, ["bantabato-test-A", "bantabato-test-B", "bantabato-test-C", "bantabato-test-D", "bantabato-test-E", "bantabato-test-F", "bantabato-test-G", "bantabato-test-H", "bantabato-test-I", "bantabato-test-J"]));
