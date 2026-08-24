@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { MySql2Database } from "drizzle-orm/mysql2";
+import { getDb, withDatabaseOverride } from "../db";
 import { assertSafeTestDatabaseEnvironment } from "./testDatabaseAdapter";
 
 describe("Sprint 46 isolated database-backed test adapter guard", () => {
@@ -17,6 +19,11 @@ describe("Sprint 46 isolated database-backed test adapter guard", () => {
     expect(assertSafeTestDatabaseEnvironment(base)).toMatchObject({ databaseName: "bantabato_test", marker: "1" });
     expect(() => assertSafeTestDatabaseEnvironment({ ...base, BANTABATO_TEST_DATABASE_NAME: "other_test" })).toThrow("cannot confirm test database identity");
     expect(() => assertSafeTestDatabaseEnvironment({ ...base, BANTABATO_TEST_DATABASE_URL: "mysql://user:pass@localhost/bantabato", BANTABATO_TEST_DATABASE_NAME: "bantabato" })).toThrow("explicitly marked test");
+  });
+
+  it("routes existing getDb authorities to the injected client only inside the async override scope", async () => {
+    const fake = { testClient: true } as unknown as MySql2Database<Record<string, unknown>>;
+    await expect(withDatabaseOverride(fake, async () => getDb())).resolves.toBe(fake);
   });
 
   it("rejects malformed or missing test database identity before any connection can be opened", () => {

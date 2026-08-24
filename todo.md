@@ -423,3 +423,8 @@
 - [x] Sprint 46: add deterministic transactional seeding and rollback cleanup for fictional members A–J.
 - [x] Sprint 46: add persistence-backed lifecycle regression scenarios and validate that production configuration is rejected.
 - [x] Sprint 46: run full validation and save the checkpoint.
+
+- [x] Follow-up Sprint 46: add explicit CI datastore configuration and fail-closed requested-run controls without provisioning or touching production infrastructure.
+- [x] Follow-up Sprint 46: connect the isolated persistence adapter to injectable actual server-authority seams and test actors, without duplicating business rules.
+- [x] Follow-up Sprint 46: add machine-readable persistence lifecycle scenarios for A–J, deterministic cleanup, and clear unavailable-datastore failure behavior.
+- [x] Follow-up Sprint 46: run full validation and save a checkpoint.

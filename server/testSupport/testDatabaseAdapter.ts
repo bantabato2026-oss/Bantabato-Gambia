@@ -1,7 +1,8 @@
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { eq } from "drizzle-orm";
-import { memberProfiles, users } from "../../drizzle/schema";
+import { memberProfiles, profilePhotos, users, verificationRecords } from "../../drizzle/schema";
+import { withDatabaseOverride } from "../db";
 
 export type TestDatabaseEnvironment = Record<string, string | undefined>;
 
@@ -52,7 +53,7 @@ export async function openIsolatedTestDatabase(env: TestDatabaseEnvironment = pr
 export async function withIsolatedRollback<T>(handle: TestDatabaseHandle, work: (db: TestDatabaseHandle["db"]) => Promise<T>): Promise<T> {
   await handle.connection.beginTransaction();
   try {
-    return await work(handle.db);
+    return await withDatabaseOverride(handle.db, () => work(handle.db));
   } finally {
     await handle.connection.rollback();
   }
@@ -97,11 +98,36 @@ export async function seedFictionalMembers(handle: TestDatabaseHandle): Promise<
       profileVisibility: "members_only",
       photoVisibility: "mutual_match",
       marriageIntent: "seeking_marriage",
+      maritalStatus: "never_married",
       createdAt: new Date("2026-08-24T12:00:00.000Z"),
       updatedAt: new Date("2026-08-24T12:00:00.000Z"),
     });
     const profile = (await handle.db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, user.id)).limit(1))[0];
     if (!profile) throw new Error(`Failed to seed synthetic profile ${id}`);
+    if (state.photoCount > 0) {
+      await handle.db.insert(profilePhotos).values(Array.from({ length: state.photoCount }, (_, index) => ({
+        profileId: profile.id,
+        storageKey: `bantabato-test/${id}/photo-${index + 1}.jpg`,
+        mimeType: "image/jpeg",
+        photoPurpose: "profile" as const,
+        isPrimary: index === 0,
+        displayOrder: index,
+        reviewStatus: "approved" as const,
+        createdAt: new Date("2026-08-24T12:00:00.000Z"),
+        updatedAt: new Date("2026-08-24T12:00:00.000Z"),
+      })));
+    }
+    if (state.verification !== "not_started") {
+      await handle.db.insert(verificationRecords).values({
+        profileId: profile.id,
+        verificationType: "identity_document",
+        status: state.verification === "approved" ? "approved" : "under_review",
+        priority: "standard",
+        reviewedAt: state.verification === "approved" ? new Date("2026-08-24T12:00:00.000Z") : null,
+        createdAt: new Date("2026-08-24T12:00:00.000Z"),
+        updatedAt: new Date("2026-08-24T12:00:00.000Z"),
+      });
+    }
     seeded.push({ id, userId: user.id, profileId: profile.id });
   }
   return seeded;

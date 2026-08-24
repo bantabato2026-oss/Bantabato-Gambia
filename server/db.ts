@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import {
   auditLogs,
@@ -42,9 +43,18 @@ import { ENV } from "./_core/env";
 import { SESSION_MAX_AGE_MS } from "../shared/const";
 import { memberSessionIsUsable } from "./domain/memberSessionPolicy";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+type AppDatabase = MySql2Database<Record<string, unknown>>;
+const databaseOverride = new AsyncLocalStorage<AppDatabase>();
+let _db: AppDatabase | null = null;
+
+/** Test-only server seam: production callers still use the configured application database. */
+export async function withDatabaseOverride<T>(db: AppDatabase, work: () => Promise<T>): Promise<T> {
+  return databaseOverride.run(db, work);
+}
 
 export async function getDb() {
+  const override = databaseOverride.getStore();
+  if (override) return override;
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
