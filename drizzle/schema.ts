@@ -221,6 +221,22 @@ export const memberAccountEvents = mysqlTable("member_account_events", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [index("member_account_events_user_idx").on(table.userId, table.createdAt)]);
 
+/** Observed member sessions are derived from real authenticated request hashes; raw cookies, IPs, device details, and locations are never stored. */
+export const memberSecuritySessions = mysqlTable("member_security_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionReferenceHash: varchar("sessionReferenceHash", { length: 128 }).notNull(),
+  status: mysqlEnum("status", ["active", "revoked", "expired"]).default("active").notNull(),
+  issuedAt: timestamp("issuedAt").defaultNow().notNull(),
+  lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  revokedAt: timestamp("revokedAt"),
+  revokedByUserId: int("revokedByUserId").references(() => users.id, { onDelete: "set null" }),
+  reauthenticatedAt: timestamp("reauthenticatedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("mss_reference_unique").on(table.sessionReferenceHash), index("mss_user_status_idx").on(table.userId, table.status, table.lastSeenAt)]);
+
 /** Origins may be multiple but remain private unless existing field-level visibility grants an audience. */
 export const memberProfileOrigins = mysqlTable("member_profile_origins", {
   id: int("id").autoincrement().primaryKey(),

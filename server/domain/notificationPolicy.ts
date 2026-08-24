@@ -38,6 +38,12 @@ const safeCopies: Record<string, { title: string; body: string }> = {
   subscription_update: { title: "Membership update", body: "Your membership has an update. Sign in to review your private billing record." },
   refund_update: { title: "Membership update", body: "There is a membership update to review securely in Bantabato." },
   account_security_event: { title: "Important account notification", body: "Please sign in to Bantabato to review an important account update." },
+  security_session_revoked: { title: "Session security update", body: "A session change was made. Sign in to Bantabato to review your current secure sessions." },
+  security_other_sessions_revoked: { title: "Session security update", body: "Other secure sessions were changed. Sign in to Bantabato to review your current sessions." },
+  account_paused: { title: "Account availability updated", body: "Your discovery availability changed. Sign in to review your current account settings." },
+  account_reactivated: { title: "Account availability updated", body: "Your account availability changed. Sign in to review your current settings and eligibility." },
+  account_deletion_requested: { title: "Deletion review request received", body: "Your account deletion review request was received. Sign in to review its current status." },
+  data_export_requested: { title: "Data review request received", body: "Your data review request was received. Sign in to review its current status." },
   international_profile_update: { title: "International profile update", body: "Your location or international profile settings have changed. Sign in to review them securely." },
   product_update: { title: "Bantabato update", body: "There is an optional product update available in Bantabato." },
 };

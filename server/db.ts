@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { randomUUID } from "node:crypto";
 import {
@@ -11,6 +11,7 @@ import {
   matches,
   memberPreferences,
   memberProfiles,
+  memberSecuritySessions,
   memberSuccessDeclarations,
   messages,
   notifications,
@@ -34,6 +35,8 @@ import { hasFreshSuccessStoryAuthentication, mayPublishSuccessStory, maySubmitSu
 import { approvedPhotoProgress, assertProfilePhotoCapacity } from "./domain/profilePhotoPolicy";
 import { deriveMemberEligibility, desiredProfileStatusForEligibility } from "./domain/memberEligibilityPolicy";
 import { ENV } from "./_core/env";
+import { SESSION_MAX_AGE_MS } from "../shared/const";
+import { memberSessionIsUsable } from "./domain/memberSessionPolicy";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -79,9 +82,38 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
-export async function requireFreshMemberAuthentication(userId: number) {
+export async function observeMemberSecuritySession(userId: number, sessionReferenceHash: string | undefined, expiresAt?: Date) {
+  if (!sessionReferenceHash) return null;
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const now = new Date();
+  const safeExpiresAt = expiresAt && expiresAt > now ? expiresAt : new Date(now.getTime() + SESSION_MAX_AGE_MS);
+  await db.insert(memberSecuritySessions).values({ userId, sessionReferenceHash, expiresAt: safeExpiresAt, lastSeenAt: now, reauthenticatedAt: now }).onDuplicateKeyUpdate({ set: { lastSeenAt: now } });
+  const [session] = await db.select().from(memberSecuritySessions).where(and(eq(memberSecuritySessions.userId, userId), eq(memberSecuritySessions.sessionReferenceHash, sessionReferenceHash))).limit(1);
+  if (!session) throw new Error("This session is unavailable. Please sign in again.");
+  if (!memberSessionIsUsable(session.status, session.expiresAt, now)) {
+    if (session.status === "revoked") throw new Error("This session is no longer active. Please sign in again.");
+    if (session.status === "active") await db.update(memberSecuritySessions).set({ status: "expired", updatedAt: now }).where(eq(memberSecuritySessions.id, session.id));
+    throw new Error("This session has expired. Please sign in again.");
+  }
+  return session;
+}
+
+export async function markExpiredMemberSecuritySessions(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const now = new Date();
+  await db.update(memberSecuritySessions).set({ status: "expired", updatedAt: now }).where(and(eq(memberSecuritySessions.userId, userId), eq(memberSecuritySessions.status, "active"), lt(memberSecuritySessions.expiresAt, now)));
+}
+
+export async function requireFreshMemberAuthentication(userId: number, sessionReferenceHash?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  if (sessionReferenceHash) {
+    const [session] = await db.select({ status: memberSecuritySessions.status, expiresAt: memberSecuritySessions.expiresAt, reauthenticatedAt: memberSecuritySessions.reauthenticatedAt }).from(memberSecuritySessions).where(and(eq(memberSecuritySessions.userId, userId), eq(memberSecuritySessions.sessionReferenceHash, sessionReferenceHash))).limit(1);
+    if (!session || session.status !== "active" || session.expiresAt <= new Date() || !hasFreshSuccessStoryAuthentication(session.reauthenticatedAt)) throw new Error("For your privacy, sign out and sign back in before this sensitive account action.");
+    return;
+  }
   const [user] = await db.select({ lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, userId)).limit(1);
   if (!hasFreshSuccessStoryAuthentication(user?.lastSignedIn)) {
     throw new Error("For your privacy, sign out and sign back in before this sensitive account action.");

@@ -31,6 +31,12 @@ describe("Phase 9 notification policy", () => {
     expect(`${submitted.body} ${pending.body} ${changes.body} ${completed.body} ${additional.body}`).not.toMatch(/document number|passport number|reviewer|fraud|storage|internal/i);
   });
 
+  it("uses privacy-safe lifecycle and session-security copy without session identifiers, devices, locations, or retention claims", () => {
+    const copies = ["security_session_revoked", "security_other_sessions_revoked", "account_paused", "account_reactivated", "account_deletion_requested", "data_export_requested"].map(privacySafeCopy);
+    expect(copies.map(copy => copy.title)).toEqual(expect.arrayContaining(["Session security update", "Account availability updated", "Deletion review request received", "Data review request received"]));
+    expect(copies.map(copy => `${copy.title} ${copy.body}`).join(" ")).not.toMatch(/token|cookie|ip|device|browser|location|retention|days|document|staff/i);
+  });
+
   it("does not let preference controls suppress essential in-app transactional events", () => {
     const disabled = { inAppEnabled: false, emailEnabled: false, smsEnabled: false, pushEnabled: false, marketingOptIn: false };
     expect(canUseChannel({ ...base, category: "security", priority: "critical" }, "in_app", disabled)).toBe(true);

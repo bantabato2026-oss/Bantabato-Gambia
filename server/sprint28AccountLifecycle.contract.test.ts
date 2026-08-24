@@ -35,15 +35,15 @@ describe("Sprint 28 account lifecycle, privacy controls, and data rights", () =>
     expect(account).toContain('profileStatus: "paused", searchVisible: false');
     expect(account).toContain('withdrawRecommendationsForProfile');
     expect(account).toContain('revokeConnectionsForProfile');
-    expect(page).toContain("it does not claim that your records are deleted");
-    expect(page).toContain("This is a request, not proof that account records were deleted");
+    expect(page).toContain("does not claim your records are deleted");
+    expect(page).toContain("A deletion review request is not the same as completed deletion");
   });
 
-  it("uses current-session facts and a fresh sign-in boundary without fabricating a session ledger or recovery channel", () => {
-    expect(account).toContain("otherSessionsAvailable: false");
-    expect(page).toContain("A recent-session list and signing out other sessions are not available");
-    expect(account).toContain("requireFreshMemberAuthentication(userId)");
-    expect(page).toContain("Bantabato does not reveal whether an account exists through recovery messages");
+  it("uses observed current-session facts and a fresh sign-in boundary without fabricating recovery channels or device details", () => {
+    expect(account).toContain("memberSecuritySessions");
+    expect(page).toContain("Observed sessions, not guesses.");
+    expect(account).toContain("requireFreshMemberAuthentication(userId, sessionReferenceHash)");
+    expect(page).toContain("If your sign-in is no longer recent, Bantabato asks you to sign out and sign in again");
     expect(page).not.toContain("recovery email sent");
   });
 
@@ -52,13 +52,13 @@ describe("Sprint 28 account lifecycle, privacy controls, and data rights", () =>
     expect(page).toContain("What it does:");
     expect(page).toContain("What others can see:");
     expect(page).toContain("What changes now:");
-    expect(page).toContain("Privacy never overrides safety, eligibility, blocks, or another member’s consent.");
-    expect(page).toContain("Premium any control over your choice");
+    expect(page).toContain("Privacy never overrides safety, eligibility, blocks, consent, restrictions, verification, or another member’s control.");
+    expect(page).toContain("give Premium control over your choice");
   });
 
   it("excludes documents, credentials, staff records, other members, safety detail, media URLs, and internal policy data from member data requests", () => {
-    expect(page).toContain("private documents, staff records, credentials, other members’ private information, enforcement details, and internal policy data are excluded");
-    expect(page).toContain("No file is described as ready unless a real file exists");
+    expect(page).toContain("other members’ private information, staff notes, private safety decisions, identity documents, credentials");
+    expect(page).toContain("Bantabato does not pretend a downloadable file exists");
     expect(account).not.toContain("storageGetSignedUrl");
     expect(account).not.toContain("documentStorageKey");
   });
@@ -67,7 +67,7 @@ describe("Sprint 28 account lifecycle, privacy controls, and data rights", () =>
     expect(page).toContain('role="region"');
     expect(page).toContain('type="checkbox"');
     expect(page).toContain("I understand what will happen and want to continue.");
-    expect(page).toContain("changes are not queued");
-    expect(page).toContain("Reconnect before saving a change");
+    expect(page).toContain("actions are not queued");
+    expect(page).toContain("Reconnect before you try again");
   });
 });

@@ -200,7 +200,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; expiresAt: Date } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -211,12 +211,13 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, exp } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
         !isNonEmptyString(appId) ||
-        !isNonEmptyString(name)
+        !isNonEmptyString(name) ||
+        typeof exp !== "number"
       ) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
@@ -226,6 +227,7 @@ class SDKServer {
         openId,
         appId,
         name,
+        expiresAt: new Date(exp * 1000),
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -318,9 +320,16 @@ class SDKServer {
       lastSignedIn: signedInAt,
     });
 
+    const sessionReferenceHash = createHash("sha256").update(sessionToken ?? "").digest("hex");
+    try {
+      await db.observeMemberSecuritySession(user.id, sessionReferenceHash, session.expiresAt);
+    } catch {
+      throw ForbiddenError("Session unavailable. Please sign in again.");
+    }
+
     return {
       ...user,
-      sessionReferenceHash: createHash("sha256").update(sessionToken ?? "").digest("hex"),
+      sessionReferenceHash,
     };
   }
 }
