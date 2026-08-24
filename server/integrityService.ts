@@ -92,17 +92,18 @@ export async function requestSafetyEnforcement(input: { actorUserId: number; rep
   return { enforcementActionId: actionId, status, duplicate: false };
 }
 
-export async function approveSafetyEnforcement(actorUserId: number, enforcementActionId: number) {
+export async function approveSafetyEnforcement(actorUserId: number, enforcementActionId: number, expectedUpdatedAt?: Date) {
   const db = await requireDb();
   const action = (await db.select().from(safetyEnforcementActions).where(eq(safetyEnforcementActions.id, enforcementActionId)).limit(1))[0];
   if (!action || action.status !== "proposed" || !action.requiresSecondApproval) throw new Error("This safety action is not awaiting second approval.");
+  if (expectedUpdatedAt && action.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This safety action changed in another staff session. Refresh the case before approving it.");
   if (action.requestedByUserId === actorUserId) throw new Error("A separate reviewer must approve this high-impact safety action.");
 	  if (action.expiresAt && action.expiresAt.getTime() <= Date.now()) {
 	    await db.update(safetyEnforcementActions).set({ status: "expired", revokedAt: new Date(), revokedByUserId: actorUserId }).where(and(eq(safetyEnforcementActions.id, enforcementActionId), eq(safetyEnforcementActions.status, "proposed")));
 	    await createAuditLog(actorUserId, "safety.enforcement_expired_before_approval", "safety_enforcement_action", String(enforcementActionId), { separateApprover: true });
 	    throw new Error("This proposed safety action expired before separate approval and cannot be activated.");
 	  }
-  const approvalResult = await db.update(safetyEnforcementActions).set({ status: "active", approvedByUserId: actorUserId, effectiveAt: new Date() }).where(and(eq(safetyEnforcementActions.id, enforcementActionId), eq(safetyEnforcementActions.status, "proposed")));
+  const approvalResult = await db.update(safetyEnforcementActions).set({ status: "active", approvedByUserId: actorUserId, effectiveAt: new Date() }).where(and(eq(safetyEnforcementActions.id, enforcementActionId), eq(safetyEnforcementActions.status, "proposed"), eq(safetyEnforcementActions.updatedAt, action.updatedAt)));
   const approvalSummary = Array.isArray(approvalResult) ? approvalResult[0] : approvalResult;
   if (typeof (approvalSummary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (approvalSummary as { affectedRows: number }).affectedRows === 0) {
     throw new Error("This safety action was already decided or is no longer awaiting approval.");
@@ -154,11 +155,13 @@ export async function expireSafetyEnforcements(actorUserId?: number | null, limi
   return { expired: expiring.length };
 }
 
-export async function revokeSafetyEnforcement(actorUserId: number, enforcementActionId: number, reason: string) {
+export async function revokeSafetyEnforcement(actorUserId: number, enforcementActionId: number, reason: string, expectedUpdatedAt?: Date) {
   const db = await requireDb();
   const action = (await db.select().from(safetyEnforcementActions).where(and(eq(safetyEnforcementActions.id, enforcementActionId), inArray(safetyEnforcementActions.status, ["active", "proposed"]))).limit(1))[0];
   if (!action) throw new Error("This safety action is not active or awaiting approval.");
-  await db.update(safetyEnforcementActions).set({ status: "revoked", revokedAt: new Date(), revokedByUserId: actorUserId }).where(eq(safetyEnforcementActions.id, action.id));
+  if (expectedUpdatedAt && action.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This safety action changed in another staff session. Refresh the case before revoking it.");
+  const revoked = await db.update(safetyEnforcementActions).set({ status: "revoked", revokedAt: new Date(), revokedByUserId: actorUserId }).where(and(eq(safetyEnforcementActions.id, action.id), inArray(safetyEnforcementActions.status, ["active", "proposed"]), eq(safetyEnforcementActions.updatedAt, action.updatedAt)));
+  requireMutationApplied(revoked, "This safety action changed in another staff session. Refresh the case before revoking it.");
 	await restoreSafetyActionConversationEffects(action.id);
 	await notifySafetyActionState({ actionId: action.id, actionType: action.actionType, subjectProfileId: action.subjectProfileId, actorUserId, state: "revoked" });
   await createAuditLog(actorUserId, "safety.enforcement_revoked", "safety_enforcement_action", String(action.id), { reason: reason.trim().slice(0, 500) });
@@ -237,12 +240,14 @@ export async function withdrawMemberSafetyReport(userId: number, reportId: numbe
 	return { withdrawn: true };
 }
 
-export async function reviewSafetyAppeal(input: { actorUserId: number; appealId: number; status: Exclude<AppealStatus, "submitted" | "withdrawn">; decisionSummary: string }) {
+export async function reviewSafetyAppeal(input: { actorUserId: number; appealId: number; status: Exclude<AppealStatus, "submitted" | "withdrawn">; decisionSummary: string; expectedUpdatedAt?: Date }) {
   const db = await requireDb();
-  const appeal = (await db.select({ id: safetyAppeals.id, reportId: safetyAppeals.reportId, enforcementActionId: safetyAppeals.enforcementActionId, status: safetyAppeals.status, appellantUserId: safetyAppeals.appellantUserId, requestedByUserId: safetyEnforcementActions.requestedByUserId, approvedByUserId: safetyEnforcementActions.approvedByUserId }).from(safetyAppeals).innerJoin(safetyEnforcementActions, eq(safetyAppeals.enforcementActionId, safetyEnforcementActions.id)).where(eq(safetyAppeals.id, input.appealId)).limit(1))[0];
+  const appeal = (await db.select({ id: safetyAppeals.id, reportId: safetyAppeals.reportId, enforcementActionId: safetyAppeals.enforcementActionId, status: safetyAppeals.status, updatedAt: safetyAppeals.updatedAt, appellantUserId: safetyAppeals.appellantUserId, requestedByUserId: safetyEnforcementActions.requestedByUserId, approvedByUserId: safetyEnforcementActions.approvedByUserId }).from(safetyAppeals).innerJoin(safetyEnforcementActions, eq(safetyAppeals.enforcementActionId, safetyEnforcementActions.id)).where(eq(safetyAppeals.id, input.appealId)).limit(1))[0];
   if (!appeal || !["submitted", "in_review", "information_requested"].includes(appeal.status)) throw new Error("This appeal is not awaiting review.");
+  if (input.expectedUpdatedAt && appeal.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) throw new Error("This appeal changed in another staff session. Refresh the case before reviewing it.");
   if ([appeal.requestedByUserId, appeal.approvedByUserId].includes(input.actorUserId)) throw new Error("The appeal must be reviewed by staff other than the original decision maker.");
-  await db.update(safetyAppeals).set({ status: input.status, reviewerUserId: input.actorUserId, decisionSummary: input.decisionSummary.trim(), decidedAt: ["upheld", "modified", "overturned"].includes(input.status) ? new Date() : null }).where(eq(safetyAppeals.id, appeal.id));
+  const reviewed = await db.update(safetyAppeals).set({ status: input.status, reviewerUserId: input.actorUserId, decisionSummary: input.decisionSummary.trim(), decidedAt: ["upheld", "modified", "overturned"].includes(input.status) ? new Date() : null }).where(and(eq(safetyAppeals.id, appeal.id), eq(safetyAppeals.updatedAt, appeal.updatedAt), inArray(safetyAppeals.status, ["submitted", "in_review", "information_requested"])));
+  requireMutationApplied(reviewed, "This appeal changed in another staff session. Refresh the case before reviewing it.");
   if (input.status === "overturned") await revokeSafetyEnforcement(input.actorUserId, appeal.enforcementActionId, "Appeal overturned the enforcement action.");
   if (["upheld", "modified", "overturned"].includes(input.status)) {
     const recipient = (await db.select({ userId: memberProfiles.userId }).from(memberProfiles).innerJoin(safetyEnforcementActions, eq(memberProfiles.id, safetyEnforcementActions.subjectProfileId)).where(eq(safetyEnforcementActions.id, appeal.enforcementActionId)).limit(1))[0];
@@ -258,11 +263,17 @@ export async function listSafetyOperations() {
   return db.select().from(reports).where(inArray(reports.status, ["open", "triage", "in_review", "investigating", "awaiting_information", "action_required", "decision_pending", "escalated", "appealed", "reopened"])).orderBy(desc(reports.priority), desc(reports.createdAt)).limit(100);
 }
 
-export async function getSafetyCaseDetail(reportId: number) {
+export async function getSafetyCaseDetail(actorUserId: number, reportId: number) {
   const db = await requireDb();
-  const report = (await db.select().from(reports).where(eq(reports.id, reportId)).limit(1))[0];
+  const report = (await db.select({ id: reports.id, reportedProfileId: reports.reportedProfileId, reason: reports.reason, status: reports.status, priority: reports.priority, caseSource: reports.caseSource, memberSafeSummary: reports.memberSafeSummary, updatedAt: reports.updatedAt }).from(reports).where(eq(reports.id, reportId)).limit(1))[0];
   if (!report) throw new Error("Trust & Safety case was not found.");
-  const [signals, evidence, actions, appeals] = await Promise.all([db.select().from(integritySignals).where(eq(integritySignals.reportId, reportId)).orderBy(desc(integritySignals.createdAt)), db.select().from(safetyEvidence).where(eq(safetyEvidence.reportId, reportId)).orderBy(desc(safetyEvidence.createdAt)), db.select().from(safetyEnforcementActions).where(eq(safetyEnforcementActions.reportId, reportId)).orderBy(desc(safetyEnforcementActions.createdAt)), db.select().from(safetyAppeals).where(eq(safetyAppeals.reportId, reportId)).orderBy(desc(safetyAppeals.submittedAt))]);
+  const [signals, evidence, actions, appeals] = await Promise.all([
+    db.select({ id: integritySignals.id, source: integritySignals.source, category: integritySignals.category, severity: integritySignals.severity, evidenceConfidence: integritySignals.evidenceConfidence, status: integritySignals.status, reviewedAt: integritySignals.reviewedAt }).from(integritySignals).where(eq(integritySignals.reportId, reportId)).orderBy(desc(integritySignals.createdAt)),
+    db.select({ id: safetyEvidence.id, evidenceType: safetyEvidence.evidenceType, sourceRecordType: safetyEvidence.sourceRecordType, sourceRecordId: safetyEvidence.sourceRecordId, evidenceConfidence: safetyEvidence.evidenceConfidence, integrityState: safetyEvidence.integrityState, capturedAt: safetyEvidence.capturedAt }).from(safetyEvidence).where(eq(safetyEvidence.reportId, reportId)).orderBy(desc(safetyEvidence.createdAt)),
+    db.select({ id: safetyEnforcementActions.id, actionType: safetyEnforcementActions.actionType, status: safetyEnforcementActions.status, scope: safetyEnforcementActions.scope, requiresSecondApproval: safetyEnforcementActions.requiresSecondApproval, expiresAt: safetyEnforcementActions.expiresAt, updatedAt: safetyEnforcementActions.updatedAt }).from(safetyEnforcementActions).where(eq(safetyEnforcementActions.reportId, reportId)).orderBy(desc(safetyEnforcementActions.createdAt)),
+    db.select({ id: safetyAppeals.id, status: safetyAppeals.status, submittedAt: safetyAppeals.submittedAt, decidedAt: safetyAppeals.decidedAt, updatedAt: safetyAppeals.updatedAt }).from(safetyAppeals).where(eq(safetyAppeals.reportId, reportId)).orderBy(desc(safetyAppeals.submittedAt)),
+  ]);
+  await createAuditLog(actorUserId, "staff.safety_case_opened", "report", String(reportId), { signalCount: signals.length, evidenceCount: evidence.length, enforcementCount: actions.length, appealCount: appeals.length });
   return { ...report, signals, evidence, actions, appeals };
 }
 
