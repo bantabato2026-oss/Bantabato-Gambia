@@ -713,12 +713,13 @@ function safeExtension(mimeType: string) {
   return ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" } as Record<string, string>)[mimeType] ?? "bin";
 }
 
-export async function uploadProfilePhoto(profileId: number, dataUrl: string) {
+export async function uploadProfilePhoto(profileId: number, dataUrl: string, expectedPhotoCount?: number) {
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "image/webp"], 8 * 1024 * 1024);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.transaction(async tx => {
     const existing = await tx.select({ id: profilePhotos.id }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).for("update");
+    if (expectedPhotoCount !== undefined && existing.length !== expectedPhotoCount) throw new Error("Your photo list changed before this upload. Refresh the page and review your current private photo status before trying again.");
     assertProfilePhotoCapacity(existing.length);
     const stored = await storagePut(`members/${profileId}/profile-photos/${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
     await tx.insert(profilePhotos).values({ profileId, storageKey: stored.key, mimeType, photoPurpose: "profile", isPrimary: existing.length === 0, displayOrder: existing.length, reviewStatus: "pending" });
@@ -728,12 +729,14 @@ export async function uploadProfilePhoto(profileId: number, dataUrl: string) {
 }
 
 /** Removes a member-owned profile photo from normal access and frees a private upload slot; it never alters review history or invents approval. */
-export async function removeOwnProfilePhoto(profileId: number, photoId: number) {
+export async function removeOwnProfilePhoto(profileId: number, photoId: number, expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const [photo] = await db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus }).from(profilePhotos).where(and(eq(profilePhotos.id, photoId), eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).limit(1);
+  const [photo] = await db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus, updatedAt: profilePhotos.updatedAt }).from(profilePhotos).where(and(eq(profilePhotos.id, photoId), eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).limit(1);
   if (!photo) throw new Error("This profile photo is unavailable.");
-  await db.update(profilePhotos).set({ deletedAt: new Date() }).where(eq(profilePhotos.id, photo.id));
+  if (expectedUpdatedAt && photo.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This photo changed before removal. Refresh the page and review its current private status before trying again.");
+  const updated = await db.update(profilePhotos).set({ deletedAt: new Date() }).where(expectedUpdatedAt ? and(eq(profilePhotos.id, photo.id), eq(profilePhotos.updatedAt, expectedUpdatedAt), isNull(profilePhotos.deletedAt)) : and(eq(profilePhotos.id, photo.id), isNull(profilePhotos.deletedAt)));
+  if (expectedUpdatedAt && Number((updated as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This photo changed before removal. Refresh the page and review its current private status before trying again.");
   const eligibility = await synchronizeProfileEligibility(profileId);
   await createAuditLog(null, "profile_photo.withdrawn", "profile_photo", String(photo.id), { profileId, previousReviewStatus: photo.reviewStatus, approvedPhotoCount: eligibility.approvedPhotoCount });
   return { photoId: photo.id, eligibility };
@@ -742,7 +745,7 @@ export async function removeOwnProfilePhoto(profileId: number, photoId: number) 
 export async function listOwnProfilePhotos(profileId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus, reviewNote: profilePhotos.reviewNote, reviewedAt: profilePhotos.reviewedAt, isPrimary: profilePhotos.isPrimary, displayOrder: profilePhotos.displayOrder, createdAt: profilePhotos.createdAt }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).orderBy(profilePhotos.displayOrder, profilePhotos.createdAt);
+  return db.select({ id: profilePhotos.id, reviewStatus: profilePhotos.reviewStatus, reviewNote: profilePhotos.reviewNote, reviewedAt: profilePhotos.reviewedAt, isPrimary: profilePhotos.isPrimary, displayOrder: profilePhotos.displayOrder, createdAt: profilePhotos.createdAt, updatedAt: profilePhotos.updatedAt }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profileId), eq(profilePhotos.photoPurpose, "profile"), isNull(profilePhotos.deletedAt))).orderBy(profilePhotos.displayOrder, profilePhotos.createdAt);
 }
 
 export async function listProfilePhotoReviewQueue() {
@@ -774,13 +777,15 @@ export async function reviewProfilePhoto(actorUserId: number, photoId: number, d
   return { decision, eligibility };
 }
 
-export async function uploadIdentityDocument(profileId: number, documentType: "national_id" | "passport", dataUrl: string) {
+export async function uploadIdentityDocument(profileId: number, documentType: "national_id" | "passport", dataUrl: string, expectedLatestVerificationId?: number | null) {
   const { buffer, mimeType } = decodeUpload(dataUrl, ["image/jpeg", "image/png", "application/pdf"], 10 * 1024 * 1024);
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const result = await db.transaction(async tx => {
     const member = (await tx.select({ id: memberProfiles.id, userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, profileId)).for("update"))[0];
     if (!member) throw new Error("Your profile is unavailable");
+    const latest = (await tx.select({ id: verificationRecords.id, status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"))).orderBy(desc(verificationRecords.createdAt), desc(verificationRecords.id)).limit(1))[0];
+    if (expectedLatestVerificationId !== undefined && (latest?.id ?? null) !== expectedLatestVerificationId) throw new Error("Your verification status changed before this submission. Refresh the page and review your current private status before trying again.");
     const open = await tx.select({ id: verificationRecords.id, status: verificationRecords.status }).from(verificationRecords).where(and(eq(verificationRecords.profileId, profileId), eq(verificationRecords.verificationType, "identity_document"), inArray(verificationRecords.status, ["submitted", "under_review", "escalated"]))).limit(1);
     if (open[0]) return { submitted: true, duplicate: true, status: open[0].status, verificationId: open[0].id, userId: member.userId };
     const stored = await storagePut(`members/${profileId}/verification/identity-${randomUUID()}.${safeExtension(mimeType)}`, buffer, mimeType);
@@ -797,7 +802,7 @@ export async function uploadIdentityDocument(profileId: number, documentType: "n
 export async function getVerificationSummary(profileId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({ id: verificationRecords.id, verificationType: verificationRecords.verificationType, status: verificationRecords.status, documentType: verificationRecords.documentType, memberMessage: verificationRecords.memberMessage, submittedAt: verificationRecords.submittedAt, reviewedAt: verificationRecords.reviewedAt, createdAt: verificationRecords.createdAt }).from(verificationRecords).where(eq(verificationRecords.profileId, profileId)).orderBy(desc(verificationRecords.createdAt));
+  return db.select({ id: verificationRecords.id, verificationType: verificationRecords.verificationType, status: verificationRecords.status, documentType: verificationRecords.documentType, memberMessage: verificationRecords.memberMessage, submittedAt: verificationRecords.submittedAt, reviewedAt: verificationRecords.reviewedAt, createdAt: verificationRecords.createdAt, updatedAt: verificationRecords.updatedAt }).from(verificationRecords).where(eq(verificationRecords.profileId, profileId)).orderBy(desc(verificationRecords.createdAt));
 }
 
 export async function getNotificationsForUser(userId: number) {

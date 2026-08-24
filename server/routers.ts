@@ -207,9 +207,9 @@ export const appRouter = router({
 	  }),
 	  uploads: router({
     profilePhotos: protectedProcedure.query(async ({ ctx }) => listOwnProfilePhotos((await requireProfile(ctx.user.id)).id)),
-    uploadProfilePhoto: protectedProcedure.input(z.object({ dataUrl: z.string().max(12_000_000) })).mutation(async ({ ctx, input }) => uploadProfilePhoto((await requireProfile(ctx.user.id)).id, input.dataUrl)),
-	    removeProfilePhoto: protectedProcedure.input(z.object({ photoId: z.number().int().positive() })).mutation(async ({ ctx, input }) => removeOwnProfilePhoto((await requireProfile(ctx.user.id)).id, input.photoId)),
-    uploadIdentityDocument: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]), dataUrl: z.string().max(15_000_000) })).mutation(async ({ ctx, input }) => uploadIdentityDocument((await requireProfile(ctx.user.id)).id, input.documentType, input.dataUrl)),
+    uploadProfilePhoto: protectedProcedure.input(z.object({ dataUrl: z.string().max(12_000_000), expectedPhotoCount: z.number().int().min(0).max(5).optional() })).mutation(async ({ ctx, input }) => uploadProfilePhoto((await requireProfile(ctx.user.id)).id, input.dataUrl, input.expectedPhotoCount)),
+    removeProfilePhoto: protectedProcedure.input(z.object({ photoId: z.number().int().positive(), expectedUpdatedAt: z.date().optional() })).mutation(async ({ ctx, input }) => removeOwnProfilePhoto((await requireProfile(ctx.user.id)).id, input.photoId, input.expectedUpdatedAt)),
+    uploadIdentityDocument: protectedProcedure.input(z.object({ documentType: z.enum(["national_id", "passport"]), dataUrl: z.string().max(15_000_000), expectedLatestVerificationId: z.number().int().positive().nullable().optional() })).mutation(async ({ ctx, input }) => uploadIdentityDocument((await requireProfile(ctx.user.id)).id, input.documentType, input.dataUrl, input.expectedLatestVerificationId)),
   }),
   discovery: router({
 	    list: protectedProcedure.input(z.object({ minAge: z.number().int().min(18).max(60).optional(), maxAge: z.number().int().min(18).max(60).optional(), religion: z.enum(["muslim", "christian"]).optional(), residenceType: z.enum(["gambia", "diaspora"]).optional(), country: z.string().max(100).optional(), residenceCountryId: z.number().int().positive().optional(), city: z.string().max(100).optional(), tribe: z.string().max(100).optional(), educationLevel: z.string().max(100).optional() }).optional()).query(async ({ ctx, input }) => {

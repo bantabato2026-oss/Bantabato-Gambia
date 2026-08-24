@@ -45,7 +45,7 @@ describe("Sprint 8 public website and onboarding contracts", () => {
     expect(media).toContain("Pending review");
     expect(media).toContain("Action required");
     expect(media).toContain("Remove & replace");
-    expect(media).toContain("Remove a pending, rejected, or no-longer-wanted photo");
+    expect(media).toContain("Remove a pending, rejected, or unwanted photo");
     expect(router).toContain("removeProfilePhoto: protectedProcedure");
     expect(db).toContain("export async function removeOwnProfilePhoto");
     expect(db).toContain("eq(profilePhotos.profileId, profileId)");

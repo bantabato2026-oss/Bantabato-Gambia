@@ -67,7 +67,7 @@ describe("Sprint 23 onboarding, profile completion, and member identity contract
     const payments = read("server/domain/paymentPolicy.ts");
     const safety = read("client/src/pages/SafetyCenterPage.tsx");
     expect(photos).toContain("5 approved photos");
-    expect(photos).toContain("The selected file stays only on this page until you reconnect.");
+    expect(photos).toContain("The selected file stays only on this page until you reconnect");
     expect(photos).not.toContain("mediaStorageKey");
     expect(verification).toContain("not shown in discovery, messages, Family Circle, profile preview, stories, notifications");
     expect(preview).toContain("This privacy-aware preview");

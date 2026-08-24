@@ -48,8 +48,10 @@ describe("full product experience interaction contracts", () => {
     expect(compatibility).toContain("Loading your compatibility and field privacy choices…");
     expect(compatibility).toContain("stored.refetch(); void fields.refetch();");
     expect(profileMedia).toContain("Loading your private photo readiness…");
-    expect(profileMedia).toContain("The selected file stays only on this page until you reconnect.");
-    for (const source of [profileDetails, compatibility, profileMedia]) expect(source).not.toContain("error.message");
+    expect(profileMedia).toContain("The selected file stays only on this page until you reconnect");
+    for (const source of [profileDetails, compatibility]) expect(source).not.toContain("error.message");
+    expect(profileMedia).toContain("Your private photo list changed before this upload");
+    expect(profileMedia).not.toContain("toast.error(error.message)");
   });
 
   it("gives the core protected member journey consistent loading, error, retry, and privacy-safe recovery before rendering established route content", () => {

@@ -24,7 +24,7 @@ type Props = {
 };
 
 function verificationCopy(status?: string | null) {
-  if (status === "approved") return { label: "Verified", detail: "An identity document has been approved after manual review.", tone: "complete" as const };
+  if (status === "approved") return { label: "Identity review completed", detail: "An identity document has been approved after manual review. This does not guarantee safety, compatibility, character, or another member’s choices.", tone: "complete" as const };
   if (["submitted", "under_review", "escalated"].includes(status ?? "")) return { label: "Under review", detail: "A private document is in manual review. This is not a badge or a guarantee.", tone: "pending" as const };
   if (["rejected", "requires_resubmission", "expired", "restricted"].includes(status ?? "")) return { label: "Action required", detail: "A current supported document may be needed. Private review details are not shown.", tone: "action" as const };
   return { label: "Not started", detail: "Identity verification is optional until you choose to submit a supported document for manual review.", tone: "action" as const };

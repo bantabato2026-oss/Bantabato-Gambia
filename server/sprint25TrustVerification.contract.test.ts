@@ -79,7 +79,7 @@ describe("Sprint 25 trust, verification, and credibility contracts", () => {
     expect(preview).toContain("Five approved photos, Identity verification, and Marriage preferences are shown as current status only");
     expect(discovery).toContain("This is not a safety guarantee, compatibility assessment, or ranking signal.");
     expect(discovery).toContain("Identity reviewed");
-    expect(photos).toContain("recalculates your current readiness immediately");
+    expect(photos).toContain("recalculates readiness immediately");
     expect(eligibility).toContain("synchronizeProfileEligibility(profileId)");
     expect(eligibility).toContain("getMemberEligibility(targetProfileId)");
     expect(payments).toContain('"verification"');
