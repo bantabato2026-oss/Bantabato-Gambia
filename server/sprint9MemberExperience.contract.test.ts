@@ -26,8 +26,8 @@ describe("Sprint 9 member Command Center and daily experience contracts", () => 
     expect(connections).toContain("Incoming introductions");
     expect(connections).toContain("Outgoing introductions");
     expect(connections).toContain("Mutual connections");
-    expect(connections).toContain("respond.mutate({ interestId: request.id, response: \"accepted\" })");
-    expect(connections).toContain("withdraw.mutate({ interestId: request.id })");
+    expect(connections).toContain("respond.mutate({ interestId: request.id, response: \"accepted\", expectedUpdatedAt: request.updatedAt })");
+    expect(connections).toContain("withdraw.mutate({ interestId: request.id, expectedUpdatedAt: request.updatedAt })");
     expect(connections).toContain("Readiness:");
     expect(connections).toContain("No interest, match, readiness, or message state has changed.");
     expect(connections).toContain("Your mutual connection is ready for private conversation.");

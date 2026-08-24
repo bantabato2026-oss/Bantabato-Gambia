@@ -2,7 +2,8 @@ import { MemberShell } from "@/components/MemberShell";
 import { StatePanel, StateSkeleton } from "@/components/StatePanel";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { MatchesPage, MessagesPage, NotificationsPage, ProfilePage } from "./MemberPages";
+import { MessagesPage, NotificationsPage, ProfilePage } from "./MemberPages";
+import ConnectionsPage from "./ConnectionsPage";
 import MemberDashboardPage from "./MemberDashboardPage";
 
 function ProfileGate({ eyebrow, title, description, loadingLabel, children }: { eyebrow: string; title: string; description: string; loadingLabel: string; children: React.ReactNode }) {
@@ -16,13 +17,7 @@ export function MemberHomeRoute() { return <ProfileGate eyebrow="Your Bantaba" t
 
 export function MemberProfileRoute() { return <ProfileGate eyebrow="My profile" title="Your introduction, in your control." description="Review the information members may see and the privacy choices that protect your pace." loadingLabel="Loading your profile overview…"><ProfilePage /></ProfileGate>; }
 
-export function MemberMatchesRoute() {
-  const incoming = trpc.interests.incoming.useQuery();
-  const matches = trpc.matches.list.useQuery();
-  if (incoming.isLoading || matches.isLoading) return <MemberShell eyebrow="Introductions" title="Mutual interest opens the door." description="A one-sided request never opens a conversation. Both people choose when an introduction becomes a match."><StateSkeleton label="Loading your private introductions…" /></MemberShell>;
-  if (incoming.isError || matches.isError) return <MemberShell eyebrow="Introductions" title="Mutual interest opens the door." description="A one-sided request never opens a conversation. Both people choose when an introduction becomes a match."><StatePanel kind="error" title="Your introductions are unavailable right now." description="No interest or match state has been changed. Please try again." action={<Button onClick={() => { void incoming.refetch(); void matches.refetch(); }} className="btn-forest">Try again</Button>} /></MemberShell>;
-  return <MatchesPage />;
-}
+export function MemberMatchesRoute() { return <ConnectionsPage />; }
 
 export function MemberMessagesRoute() {
   return <ProfileGate eyebrow="Messages" title="Private conversations, earned mutually." description="Conversation access is limited to active mutual matches. Report and block controls stay available throughout." loadingLabel="Loading your protected message space…"><MessagesPage /></ProfileGate>;

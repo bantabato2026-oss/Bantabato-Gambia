@@ -9,6 +9,7 @@ import { normalizeOptionalUserText, normalizeUserText } from "./inputSecurity";
 import { safePromptForDimension, validateVoiceNoteMeta } from "./domain/messagingPolicy";
 import { createIntegritySignal } from "./integrityService";
 import { revokeConnectionForConversation } from "./readinessService";
+import { withdrawRecommendationsForProfilePair } from "./recommendationService";
 import { ENV } from "./_core/env";
 
 const MAX_TEXT_LENGTH = 2_000;
@@ -172,6 +173,11 @@ export async function setConversationState(profileId: number, conversationId: nu
   if (expectedUpdatedAt) conditions.push(eq(conversations.updatedAt, expectedUpdatedAt));
   const result = await db.update(conversations).set({ status: state, closedAt: state === "closed" ? new Date() : null, lastActivityAt: new Date() }).where(and(...conditions));
   if (affectedRows(result) === 0) throw new Error("This conversation changed before your update. Refresh the conversation and try again.");
+  if (state === "closed") {
+    await db.update(matches).set({ status: "closed", closedAt: new Date() }).where(and(eq(matches.id, access.match.id), eq(matches.status, "active")));
+    await revokeConnectionForConversation(conversationId, "member_withdrew_consent", { profileId });
+    await withdrawRecommendationsForProfilePair(profileId, access.otherProfileId, "connection_closed");
+  }
   await recordEvent(conversationId, profileId, state === "closed" ? "conversation_closed" : state === "paused" ? "conversation_paused" : "conversation_started");
 }
 

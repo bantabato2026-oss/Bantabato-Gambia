@@ -18,9 +18,9 @@ describe("interest and connection lifecycle contracts", () => {
   });
 
   it("allows only the sender to withdraw a pending interest and serializes a recipient response", () => {
-    expect(db).toContain('export async function withdrawInterest(profileId: number, interestId: number)');
-    expect(db).toContain('eq(interestRequests.senderProfileId, profileId), eq(interestRequests.status, "pending")');
-    expect(db).toContain('eq(interestRequests.id, interestId), eq(interestRequests.status, "pending")');
+    expect(db).toContain('export async function withdrawInterest(profileId: number, interestId: number, expectedUpdatedAt?: Date)');
+    expect(db).toContain('eq(interestRequests.senderProfileId, profileId)');
+    expect(db).toContain('eq(interestRequests.id, interestId), eq(interestRequests.senderProfileId, profileId), eq(interestRequests.status, "pending")');
     expect(db).toContain('Interest request is no longer available');
   });
 
@@ -28,7 +28,7 @@ describe("interest and connection lifecycle contracts", () => {
     expect(db).toContain('export async function getInterestConnectionState(profileId: number, targetProfileId: number)');
     for (const state of ["not_connected", "interest_sent", "interest_received", "interest_declined", "mutual_connection", "communication_available"]) expect(db).toContain(`"${state}"`);
     expect(routers).toContain('const visible = await getProfileForMember(profile.id, input.profileId); if (!visible) return { state: "unavailable" as const, interestId: null, conversationId: null }');
-    expect(routers).toContain('withdraw: protectedProcedure.input(z.object({ interestId: z.number().int().positive() }))');
+    expect(routers).toContain('withdraw: protectedProcedure.input(z.object({ interestId: z.number().int().positive(), expectedUpdatedAt: z.coerce.date().optional() }))');
     expect(profileDetail).toContain('trpc.interests.connectionState.useQuery({ profileId }');
     expect(profileDetail).toContain("Introduction request sent.");
     expect(profileDetail).toContain("Your private conversation is available.");
@@ -37,7 +37,7 @@ describe("interest and connection lifecycle contracts", () => {
 
   it("records recommendation interest only after a non-duplicate introduction is established", () => {
     expect(recommendations).toContain("export async function recordRecommendationInterest(profileId: number, actorUserId: number, recommendationId: number, recordEvent = true)");
-    expect(routers).toContain("const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId, false); const interest = await createInterest(profile.id, recommendation.candidateProfileId, input.message); if (!interest.duplicate) await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId);");
+    expect(routers).toContain("const recommendation = await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId, false); const interest = await createInterest(profile.id, recommendation.candidateProfileId, input.message); await withdrawRecommendationsForProfilePair(profile.id, recommendation.candidateProfileId, \"interest_started\"); if (!interest.duplicate) await recordRecommendationInterest(profile.id, ctx.user.id, input.recommendationId);");
     expect(recommendationPage).toContain("result.duplicate ? \"Your existing introduction request is still awaiting a response.\"");
   });
 });

@@ -9,6 +9,8 @@ import {
   familyLinks,
   interestRequests,
   matches,
+  memberInternationalPreferences,
+  memberPreferredCountries,
   memberPreferences,
   memberProfiles,
   memberSecuritySessions,
@@ -25,6 +27,8 @@ import {
   verificationRecords,
 } from "../drizzle/schema";
 import { canonicalProfilePair } from "./domain/permissions";
+import { evaluatePair, type CompatibilityPreferences, type CompatibilityProfile } from "./domain/compatibility";
+import { permitsInternationalDiscovery, type InternationalDiscoveryState } from "./domain/internationalDiscovery";
 import { safeLocationDisplay } from "./domain/internationalPolicy";
 import { emitLegacyNotification } from "./notificationService";
 import { storageGetSignedUrl, storagePut } from "./storage";
@@ -530,22 +534,7 @@ export async function createInterest(senderProfileId: number, recipientProfileId
   if (senderProfileId === recipientProfileId) throw new Error("You cannot express interest in your own profile");
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const [senderEligibility, recipientEligibility] = await Promise.all([getMemberEligibility(senderProfileId), getMemberEligibility(recipientProfileId)]);
-  if (!senderEligibility.discoveryEligible) throw new Error(`${senderEligibility.title} ${senderEligibility.detail}`);
-  if (!recipientEligibility.discoveryEligible) throw new Error("This introduction is unavailable");
-  const blocked = await db
-    .select({ id: blocks.id })
-    .from(blocks)
-    .where(
-      or(
-        and(eq(blocks.blockerProfileId, senderProfileId), eq(blocks.blockedProfileId, recipientProfileId)),
-        and(eq(blocks.blockerProfileId, recipientProfileId), eq(blocks.blockedProfileId, senderProfileId)),
-      ),
-    )
-    .limit(1);
-  if (blocked[0]) throw new Error("This interaction is unavailable");
-  const recipientProfile = await db.select({ id: memberProfiles.id }).from(memberProfiles).where(and(eq(memberProfiles.id, recipientProfileId), eq(memberProfiles.profileStatus, "active"), eq(memberProfiles.searchVisible, true), ne(memberProfiles.profileVisibility, "hidden"), isNull(memberProfiles.deletedAt))).limit(1);
-  if (!recipientProfile[0]) throw new Error("This introduction is unavailable");
+  if (!(await isInterestPairCurrentlyEligible(senderProfileId, recipientProfileId))) throw new Error("This introduction is unavailable");
   const existing = (await db.select().from(interestRequests).where(and(eq(interestRequests.senderProfileId, senderProfileId), eq(interestRequests.recipientProfileId, recipientProfileId))).limit(1))[0];
   if (existing?.status === "pending") return { interestId: existing.id, state: "pending" as const, duplicate: true };
   if (existing?.status === "accepted") return { interestId: existing.id, state: "accepted" as const, duplicate: true };
@@ -572,45 +561,96 @@ export async function createInterest(senderProfileId: number, recipientProfileId
   return { interestId: interestId ?? 0, state: "pending" as const, duplicate: false };
 }
 
-export async function respondToInterest(recipientProfileId: number, interestId: number, response: "accepted" | "declined") {
+export async function respondToInterest(recipientProfileId: number, interestId: number, response: "accepted" | "declined", expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const request = await db
     .select()
     .from(interestRequests)
-    .where(and(eq(interestRequests.id, interestId), eq(interestRequests.recipientProfileId, recipientProfileId), eq(interestRequests.status, "pending")))
+    .where(and(eq(interestRequests.id, interestId), eq(interestRequests.recipientProfileId, recipientProfileId)))
     .limit(1);
   if (!request[0]) throw new Error("Interest request is no longer available");
-  const update = await db.update(interestRequests).set({ status: response, respondedAt: new Date() }).where(and(eq(interestRequests.id, interestId), eq(interestRequests.status, "pending")));
+  if (expectedUpdatedAt && request[0].updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This introduction changed before your response. Refresh and review the current state.");
+  if (request[0].status === response) {
+    if (response === "declined") return { matched: false, duplicate: true, otherProfileId: request[0].senderProfileId };
+    const pair = canonicalProfilePair(request[0].senderProfileId, recipientProfileId);
+    const existingMatch = (await db.select({ id: matches.id }).from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId), eq(matches.status, "active"))).limit(1))[0];
+    if (existingMatch) return { matched: true, matchId: existingMatch.id, duplicate: true, otherProfileId: request[0].senderProfileId };
+  }
+  if (request[0].status !== "pending") throw new Error("Interest request is no longer available");
+  if (!(await isInterestPairCurrentlyEligible(request[0].senderProfileId, recipientProfileId))) throw new Error("This introduction is unavailable");
+  const updateConditions = [eq(interestRequests.id, interestId), eq(interestRequests.recipientProfileId, recipientProfileId), eq(interestRequests.status, "pending")];
+  if (expectedUpdatedAt) updateConditions.push(eq(interestRequests.updatedAt, expectedUpdatedAt));
+  const update = await db.update(interestRequests).set({ status: response, respondedAt: new Date() }).where(and(...updateConditions));
   const summary = Array.isArray(update) ? update[0] : update;
-  if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error("Interest request is no longer available");
-  if (response === "declined") return { matched: false };
+  if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) {
+    const current = (await db.select().from(interestRequests).where(and(eq(interestRequests.id, interestId), eq(interestRequests.recipientProfileId, recipientProfileId))).limit(1))[0];
+    if (current?.status === response) {
+      if (response === "declined") return { matched: false, duplicate: true, otherProfileId: current.senderProfileId };
+      const pair = canonicalProfilePair(current.senderProfileId, recipientProfileId);
+      const existingMatch = (await db.select({ id: matches.id }).from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId), eq(matches.status, "active"))).limit(1))[0];
+      if (existingMatch) return { matched: true, matchId: existingMatch.id, duplicate: true, otherProfileId: current.senderProfileId };
+    }
+    throw new Error("Interest request is no longer available");
+  }
+  if (response === "declined") return { matched: false, duplicate: false, otherProfileId: request[0].senderProfileId };
 
   const pair = canonicalProfilePair(request[0].senderProfileId, recipientProfileId);
-  const result = await db.insert(matches).values(pair).onDuplicateKeyUpdate({ set: { status: "active", closedAt: null } });
-  const matchId = Number(result[0].insertId) || (await db.select({ id: matches.id }).from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId))).limit(1))[0]?.id;
+  const existingMatch = (await db.select().from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId))).limit(1))[0];
+  if (existingMatch && existingMatch.status !== "active") throw new Error("This introduction is no longer available");
+  let matchId: number | undefined = existingMatch?.id;
+  if (!matchId) {
+    try {
+      const result = await db.insert(matches).values(pair);
+      matchId = Number(result[0].insertId) || undefined;
+    } catch (error) {
+      const concurrent = (await db.select().from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId), eq(matches.status, "active"))).limit(1))[0];
+      if (!concurrent) throw error;
+      matchId = concurrent.id;
+    }
+  }
   if (!matchId) throw new Error("Unable to establish a match");
-  const conversationResult = await db.insert(conversations).values({ matchId, status: "active", mutualInterestAt: new Date(), lastActivityAt: new Date() }).onDuplicateKeyUpdate({ set: { status: "active", mutualInterestAt: new Date(), lastActivityAt: new Date() } });
-  const conversationId = Number(conversationResult[0].insertId) || (await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.matchId, matchId)).limit(1))[0]?.id;
+  const establishedMatchId = matchId as number;
+  const existingConversation = (await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.matchId, establishedMatchId)).limit(1))[0];
+  let conversationId: number | undefined = existingConversation?.id;
+  if (!conversationId) {
+    try {
+      const conversationResult = await db.insert(conversations).values({ matchId: establishedMatchId, status: "active", mutualInterestAt: new Date(), lastActivityAt: new Date() });
+      conversationId = Number(conversationResult[0].insertId) || undefined;
+    } catch (error) {
+      const concurrent = (await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.matchId, establishedMatchId)).limit(1))[0];
+      if (!concurrent) throw error;
+      conversationId = concurrent.id;
+    }
+  }
   if (conversationId) await db.insert(conversationEvents).values({ conversationId, actorProfileId: recipientProfileId, eventType: "mutual_interest" });
   const sender = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, request[0].senderProfileId)).limit(1);
   if (sender[0]) await createNotification(sender[0].userId, "match", "Your introduction was accepted", "You can now begin a private conversation together.", "/app/messages", `match:${matchId}:sender`);
   const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, recipientProfileId)).limit(1);
   if (recipient[0]) await createNotification(recipient[0].userId, "match", "You have a new mutual match", "You can now begin a private conversation together.", "/app/messages", `match:${matchId}:recipient`);
-  return { matched: true, matchId };
+  return { matched: true, matchId: establishedMatchId, duplicate: false, otherProfileId: request[0].senderProfileId };
 }
 
-export async function withdrawInterest(profileId: number, interestId: number) {
+export async function withdrawInterest(profileId: number, interestId: number, expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const request = (await db.select().from(interestRequests).where(and(eq(interestRequests.id, interestId), eq(interestRequests.senderProfileId, profileId), eq(interestRequests.status, "pending"))).limit(1))[0];
+  const request = (await db.select().from(interestRequests).where(and(eq(interestRequests.id, interestId), eq(interestRequests.senderProfileId, profileId))).limit(1))[0];
   if (!request) throw new Error("This introduction request is no longer available");
-  const update = await db.update(interestRequests).set({ status: "withdrawn", respondedAt: new Date() }).where(and(eq(interestRequests.id, interestId), eq(interestRequests.senderProfileId, profileId), eq(interestRequests.status, "pending")));
+  if (expectedUpdatedAt && request.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This introduction changed before it could be withdrawn. Refresh and review the current state.");
+  if (request.status === "withdrawn") return { withdrawn: true, duplicate: true };
+  if (request.status !== "pending") throw new Error("This introduction request is no longer available");
+  const updateConditions = [eq(interestRequests.id, interestId), eq(interestRequests.senderProfileId, profileId), eq(interestRequests.status, "pending")];
+  if (expectedUpdatedAt) updateConditions.push(eq(interestRequests.updatedAt, expectedUpdatedAt));
+  const update = await db.update(interestRequests).set({ status: "withdrawn", respondedAt: new Date() }).where(and(...updateConditions));
   const summary = Array.isArray(update) ? update[0] : update;
-  if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error("This introduction request is no longer available");
+  if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) {
+    const current = (await db.select().from(interestRequests).where(and(eq(interestRequests.id, interestId), eq(interestRequests.senderProfileId, profileId))).limit(1))[0];
+    if (current?.status === "withdrawn") return { withdrawn: true, duplicate: true };
+    throw new Error("This introduction request is no longer available");
+  }
   const recipient = (await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, request.recipientProfileId)).limit(1))[0];
   if (recipient) await createNotification(recipient.userId, "interest", "An introduction request was withdrawn", "The sender withdrew their pending introduction request.", "/app/matches", `interest-withdrawn:${interestId}`);
-  return { withdrawn: true };
+  return { withdrawn: true, duplicate: false };
 }
 
 export async function getInterestConnectionState(profileId: number, targetProfileId: number) {
@@ -622,11 +662,11 @@ export async function getInterestConnectionState(profileId: number, targetProfil
     const conversation = (await db.select({ id: conversations.id, status: conversations.status }).from(conversations).where(eq(conversations.matchId, match.id)).limit(1))[0];
     return { state: conversation?.status === "active" ? "communication_available" as const : "mutual_connection" as const, interestId: null, conversationId: conversation?.id ?? null };
   }
-  const outgoing = (await db.select({ id: interestRequests.id, status: interestRequests.status }).from(interestRequests).where(and(eq(interestRequests.senderProfileId, profileId), eq(interestRequests.recipientProfileId, targetProfileId))).limit(1))[0];
-  if (outgoing?.status === "pending") return { state: "interest_sent" as const, interestId: outgoing.id, conversationId: null };
+  const outgoing = (await db.select({ id: interestRequests.id, status: interestRequests.status, updatedAt: interestRequests.updatedAt }).from(interestRequests).where(and(eq(interestRequests.senderProfileId, profileId), eq(interestRequests.recipientProfileId, targetProfileId))).limit(1))[0];
+  if (outgoing?.status === "pending" && await isInterestPairCurrentlyEligible(profileId, targetProfileId)) return { state: "interest_sent" as const, interestId: outgoing.id, conversationId: null, interestUpdatedAt: outgoing.updatedAt };
   if (outgoing?.status === "declined") return { state: "interest_declined" as const, interestId: outgoing.id, conversationId: null };
-  const incoming = (await db.select({ id: interestRequests.id }).from(interestRequests).where(and(eq(interestRequests.senderProfileId, targetProfileId), eq(interestRequests.recipientProfileId, profileId), eq(interestRequests.status, "pending"))).limit(1))[0];
-  if (incoming) return { state: "interest_received" as const, interestId: incoming.id, conversationId: null };
+  const incoming = (await db.select({ id: interestRequests.id, updatedAt: interestRequests.updatedAt }).from(interestRequests).where(and(eq(interestRequests.senderProfileId, targetProfileId), eq(interestRequests.recipientProfileId, profileId), eq(interestRequests.status, "pending"))).limit(1))[0];
+  if (incoming && await isInterestPairCurrentlyEligible(targetProfileId, profileId)) return { state: "interest_received" as const, interestId: incoming.id, conversationId: null, interestUpdatedAt: incoming.updatedAt };
   return { state: "not_connected" as const, interestId: null, conversationId: null };
 }
 
@@ -640,9 +680,12 @@ export async function getMatchesForProfile(profileId: number) {
     .orderBy(desc(matches.matchedAt));
   if (!linkedMatches.length) return [];
   const otherIds = linkedMatches.map(match => match.memberOneProfileId === profileId ? match.memberTwoProfileId : match.memberOneProfileId);
-  const profiles = await db.select({ id: memberProfiles.id, displayName: memberProfiles.displayName, religion: memberProfiles.religion, city: memberProfiles.city, country: memberProfiles.country, profession: memberProfiles.profession }).from(memberProfiles).where(inArray(memberProfiles.id, otherIds));
+  const profiles = await db.select({ id: memberProfiles.id, displayName: memberProfiles.displayName }).from(memberProfiles).where(inArray(memberProfiles.id, otherIds));
   const profilesById = new Map(profiles.map(profile => [profile.id, profile]));
-  return linkedMatches.map(match => ({ ...match, otherProfile: profilesById.get(match.memberOneProfileId === profileId ? match.memberTwoProfileId : match.memberOneProfileId) }));
+  return linkedMatches.map(match => {
+    const otherProfile = profilesById.get(match.memberOneProfileId === profileId ? match.memberTwoProfileId : match.memberOneProfileId);
+    return { ...match, otherProfile: otherProfile ? { ...otherProfile, city: null } : undefined };
+  });
 }
 
 export async function getConversationsForProfile(profileId: number) {
@@ -692,7 +735,9 @@ async function getConversationAccess(profileId: number, conversationId: number) 
 export async function listIncomingInterests(profileId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(interestRequests).where(and(eq(interestRequests.recipientProfileId, profileId), eq(interestRequests.status, "pending"))).orderBy(desc(interestRequests.createdAt));
+  const records = await db.select().from(interestRequests).where(and(eq(interestRequests.recipientProfileId, profileId), eq(interestRequests.status, "pending"))).orderBy(desc(interestRequests.createdAt));
+  const current = await Promise.all(records.map(async request => (await isInterestPairCurrentlyEligible(request.senderProfileId, profileId)) ? request : null));
+  return current.filter((request): request is NonNullable<typeof request> => Boolean(request));
 }
 
 export async function listOutgoingInterests(profileId: number) {
@@ -700,9 +745,35 @@ export async function listOutgoingInterests(profileId: number) {
   if (!db) return [];
   const requests = await db.select().from(interestRequests).where(eq(interestRequests.senderProfileId, profileId)).orderBy(desc(interestRequests.createdAt)).limit(100);
   if (!requests.length) return [];
-  const recipients = await db.select({ id: memberProfiles.id, displayName: memberProfiles.displayName }).from(memberProfiles).where(inArray(memberProfiles.id, requests.map(request => request.recipientProfileId)));
+  const visibleRequests = (await Promise.all(requests.map(async request => request.status !== "pending" || await isInterestPairCurrentlyEligible(profileId, request.recipientProfileId) ? request : null))).filter((request): request is NonNullable<typeof request> => Boolean(request));
+  const recipients = visibleRequests.length ? await db.select({ id: memberProfiles.id, displayName: memberProfiles.displayName }).from(memberProfiles).where(inArray(memberProfiles.id, visibleRequests.map(request => request.recipientProfileId))) : [];
   const byId = new Map(recipients.map(recipient => [recipient.id, recipient]));
-  return requests.map(request => ({ ...request, recipient: byId.get(request.recipientProfileId) ?? null }));
+  return visibleRequests.map(request => ({ ...request, recipient: byId.get(request.recipientProfileId) ?? null }));
+}
+
+async function isInterestPairCurrentlyEligible(senderProfileId: number, recipientProfileId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [senderEligibility, recipientEligibility, profiles, blockRows, preferences, internationalPreferences, preferredCountries] = await Promise.all([
+    getMemberEligibility(senderProfileId),
+    getMemberEligibility(recipientProfileId),
+    db.select().from(memberProfiles).where(inArray(memberProfiles.id, [senderProfileId, recipientProfileId])),
+    db.select({ id: blocks.id }).from(blocks).where(or(and(eq(blocks.blockerProfileId, senderProfileId), eq(blocks.blockedProfileId, recipientProfileId)), and(eq(blocks.blockerProfileId, recipientProfileId), eq(blocks.blockedProfileId, senderProfileId)))).limit(1),
+    db.select().from(memberPreferences).where(inArray(memberPreferences.profileId, [senderProfileId, recipientProfileId])),
+    db.select().from(memberInternationalPreferences).where(inArray(memberInternationalPreferences.profileId, [senderProfileId, recipientProfileId])),
+    db.select({ profileId: memberPreferredCountries.profileId, countryId: memberPreferredCountries.countryId }).from(memberPreferredCountries).where(and(inArray(memberPreferredCountries.profileId, [senderProfileId, recipientProfileId]), eq(memberPreferredCountries.preferencePurpose, "discovery"))),
+  ]);
+  if (!senderEligibility.discoveryEligible || !recipientEligibility.discoveryEligible || blockRows[0] || profiles.length !== 2) return false;
+  const sender = profiles.find(profile => profile.id === senderProfileId);
+  const recipient = profiles.find(profile => profile.id === recipientProfileId);
+  if (!sender || !recipient || [sender, recipient].some(profile => profile.profileStatus !== "active" || !profile.searchVisible || profile.profileVisibility === "hidden" || profile.deletedAt)) return false;
+  const preferenceByProfile = new Map(preferences.map(preference => [preference.profileId, preference as CompatibilityPreferences]));
+  const countriesByProfile = new Map<number, Set<number>>();
+  preferredCountries.forEach(row => { const selected = countriesByProfile.get(row.profileId) ?? new Set<number>(); selected.add(row.countryId); countriesByProfile.set(row.profileId, selected); });
+  const internationalByProfile = new Map(internationalPreferences.map(preference => [preference.profileId, preference]));
+  const internationalState = (profile: typeof memberProfiles.$inferSelect): InternationalDiscoveryState => ({ residenceCountryId: profile.residenceCountryId, longDistancePreference: internationalByProfile.get(profile.id)?.longDistancePreference ?? "no_preference", preferredDiscoveryCountryIds: countriesByProfile.get(profile.id) ?? new Set<number>() });
+  if (!permitsInternationalDiscovery(internationalState(sender), internationalState(recipient))) return false;
+  return evaluatePair(sender as CompatibilityProfile, recipient as CompatibilityProfile, preferenceByProfile.get(senderProfileId), preferenceByProfile.get(recipientProfileId)).eligible;
 }
 
 export async function upsertFamilyLink(profileId: number, input: { relationship: "parent" | "wali_guardian"; contactName: string; contactEmail?: string; contactPhone?: string; canReceiveMatchNotifications: boolean }) {

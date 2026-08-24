@@ -9,6 +9,7 @@ const profileDetails = readFileSync(join(process.cwd(), "client/src/pages/Profil
 const compatibility = readFileSync(join(process.cwd(), "client/src/pages/CompatibilityPreferencesPage.tsx"), "utf8");
 const profileMedia = readFileSync(join(process.cwd(), "client/src/pages/ProfileMediaPage.tsx"), "utf8");
 const memberRouteStates = readFileSync(join(process.cwd(), "client/src/pages/MemberRouteStates.tsx"), "utf8");
+const connections = readFileSync(join(process.cwd(), "client/src/pages/ConnectionsPage.tsx"), "utf8");
 const international = readFileSync(join(process.cwd(), "client/src/pages/InternationalPage.tsx"), "utf8");
 const recommendations = readFileSync(join(process.cwd(), "client/src/pages/RecommendationsPage.tsx"), "utf8");
 const verification = readFileSync(join(process.cwd(), "client/src/pages/VerificationCenter.tsx"), "utf8");
@@ -57,11 +58,12 @@ describe("full product experience interaction contracts", () => {
   it("gives the core protected member journey consistent loading, error, retry, and privacy-safe recovery before rendering established route content", () => {
     expect(memberRouteStates).toContain("Loading your protected command center…");
     expect(memberRouteStates).toContain("Loading your profile overview…");
-    expect(memberRouteStates).toContain("Loading your private introductions…");
+    expect(memberRouteStates).toContain("return <ConnectionsPage />");
+    expect(connections).toContain("Loading your introductions and connections…");
     expect(memberRouteStates).toContain("Loading your protected message space…");
     expect(memberRouteStates).toContain("Loading your notification center and preferences…");
     expect(memberRouteStates).toContain("No profile, privacy, or relationship state has been changed.");
-    expect(memberRouteStates).toContain("incoming.refetch(); void matches.refetch();");
+    expect(connections).toContain("void incoming.refetch(); void outgoing.refetch(); void matches.refetch(); void conversations.refetch();");
     expect(memberRouteStates).toContain("notifications.refetch(); void preferences.refetch();");
   });
 

@@ -196,8 +196,8 @@ export async function recordRecommendationInterest(profileId: number, actorUserI
   return { candidateProfileId: record[0].candidateProfileId };
 }
 
-/** Used by existing block, safety, and profile-state paths to revoke presentation without changing a match, interest, or connection state. */
-export async function withdrawRecommendationsForProfilePair(profileId: number, candidateProfileId: number, reason: "block" | "report" | "safety_restriction" | "profile_hidden") {
+/** Used by existing safety, interest, and connection paths to revoke a stale presentation without changing an unrelated member decision. */
+export async function withdrawRecommendationsForProfilePair(profileId: number, candidateProfileId: number, reason: "block" | "report" | "safety_restriction" | "profile_hidden" | "interest_started" | "connection_created" | "connection_closed") {
   const db = await requireDb();
   const rows = await db.select().from(recommendations).where(and(or(and(eq(recommendations.profileId, profileId), eq(recommendations.candidateProfileId, candidateProfileId)), and(eq(recommendations.profileId, candidateProfileId), eq(recommendations.candidateProfileId, profileId))), eq(recommendations.status, "active")));
   for (const row of rows) {
