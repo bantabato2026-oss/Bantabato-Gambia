@@ -5,6 +5,7 @@ import { evaluateCompatibility, type CompatibilityPreferences, type Compatibilit
 import { buildRecommendationDecision, DEFAULT_RECOMMENDATION_POLICY, isEligibleForRecommendation, memberSafeConsideration, memberSafeExplanation, rankRecommendationCandidates, type RecommendationCategory, type RecommendationFeedbackResponse, type RecommendationPolicy } from "./domain/recommendationPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
 import { permitsInternationalDiscovery, type InternationalDiscoveryState } from "./domain/internationalDiscovery";
+import { safeLocationDisplay } from "./domain/internationalPolicy";
 
 const MAX_PAGE_SIZE = 18;
 
@@ -147,16 +148,18 @@ export async function getRecommendationsForMember(profileId: number, input: { cu
     }
     if (!categoryVisible(record.categoryKey as RecommendationCategory, viewerSettings) || (input.category && record.categoryKey !== input.category)) continue;
     await db.insert(recommendationEvents).values({ recommendationId: record.id, profileId, eventType: "presented", policyVersion: policy.policyVersion, metadata: { categoryKey: record.categoryKey } });
-    items.push(presentRecommendation(record, source.candidate, source.identityVerified));
+	    items.push(presentRecommendation(record, source.candidate, source.identityVerified, visibilityByProfile.get(source.candidate.id), Boolean(viewerVerification[0])));
   }
   const last = candidatePool[candidatePool.length - 1];
   return { items, nextCursor: candidatePool.length > limit * 8 ? last?.id : undefined, policyVersion: policy.policyVersion };
 }
 
-function presentRecommendation(record: Pick<typeof recommendations.$inferSelect, "id" | "categoryKey" | "explanationKeys" | "considerationKeys">, candidate: typeof memberProfiles.$inferSelect, identityVerified: boolean) {
+function presentRecommendation(record: Pick<typeof recommendations.$inferSelect, "id" | "categoryKey" | "explanationKeys" | "considerationKeys">, candidate: typeof memberProfiles.$inferSelect, identityVerified: boolean, visibility: Map<string, string> | undefined, viewerIdentityVerified: boolean) {
   const explanations = arrayStrings(record.explanationKeys).map(memberSafeExplanation);
   const considerations = arrayStrings(record.considerationKeys).map(memberSafeConsideration);
-  return { id: record.id, profileId: candidate.id, categoryKey: record.categoryKey as RecommendationCategory, displayName: candidate.displayName, city: candidate.city, country: candidate.country, residenceType: candidate.residenceType, photoVisibility: candidate.photoVisibility, identityVerified, explanations, considerations };
+  const locationAllowed = canViewerSeeProfileField(visibility?.get("country"), { viewerIdentityVerified, hasMutualMatch: false }) && candidate.locationVisibility === "eligible_members";
+  const locationDisplay = locationAllowed ? safeLocationDisplay({ visibility: candidate.locationVisibility, detail: candidate.locationDetailLevel, countryName: candidate.country, region: candidate.region, city: candidate.city, relationship: "eligible" }) : null;
+  return { id: record.id, profileId: candidate.id, categoryKey: record.categoryKey as RecommendationCategory, displayName: candidate.displayName, locationDisplay, residenceType: candidate.residenceType, photoVisibility: candidate.photoVisibility, identityVerified, explanations, considerations };
 }
 
 export async function getRecommendationExplanation(profileId: number, recommendationId: number) {

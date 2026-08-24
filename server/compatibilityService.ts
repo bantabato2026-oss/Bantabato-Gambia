@@ -31,6 +31,8 @@ export type FieldVisibilityInput = { fieldKey: string; audience: "public" | "ver
 export type CuratedDiscoveryInput = { cursor?: number; limit?: number; collection?: "recommended" | "new" | "recently_updated" | "verified" | "potentially_compatible"; query?: string; minAge?: number; maxAge?: number; gender?: "woman" | "man" | "self_described"; religion?: "muslim" | "christian"; country?: string; residenceType?: "gambia" | "diaspora"; city?: string; maritalStatus?: "never_married" | "married" | "divorced" | "widowed"; hasChildren?: boolean; relocationWillingness?: "open" | "within_gambia" | "not_open" | "discuss"; polygynyOpenness?: "open" | "not_open" | "discuss" | "not_applicable"; verifiedOnly?: boolean };
 export type DiscoveryFilterInput = Omit<CuratedDiscoveryInput, "cursor" | "limit" | "collection" | "city">;
 type StoredDiscoveryFilterInput = { [Key in keyof DiscoveryFilterInput]: DiscoveryFilterInput[Key] | null | undefined };
+const MIN_DISCOVERY_AGE = 18;
+const MAX_DISCOVERY_AGE = 60;
 
 export async function getCompatibilityPreferences(profileId: number) {
   const db = await getDb();
@@ -57,7 +59,7 @@ export async function getDiscoveryFilters(profileId: number) {
 export async function saveDiscoveryFilters(profileId: number, input: StoredDiscoveryFilterInput, expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Discovery controls are unavailable right now");
-  if (input.minAge != null && input.maxAge != null && input.minAge > input.maxAge) throw new Error("Choose a minimum age that is not above the maximum age");
+  validateDiscoveryAgeFilters(input.minAge, input.maxAge);
   const values = sanitizeDiscoveryFilterInput(input);
   const existing = await db.select().from(memberDiscoveryFilters).where(eq(memberDiscoveryFilters.profileId, profileId)).limit(1);
   if (existing[0]) {
@@ -96,6 +98,7 @@ export async function saveProfileFieldVisibilities(profileId: number, fields: Fi
 export async function getCuratedDiscovery(viewerProfileId: number, input: CuratedDiscoveryInput = {}) {
   const db = await getDb();
   if (!db) return { items: [], nextCursor: undefined };
+  validateDiscoveryAgeFilters(input.minAge, input.maxAge);
   const limit = Math.min(Math.max(input.limit ?? 12, 1), 24);
   const viewer = await db.select().from(memberProfiles).where(and(eq(memberProfiles.id, viewerProfileId), eq(memberProfiles.profileStatus, "active"), isNull(memberProfiles.deletedAt))).limit(1);
   const viewerEligibility = await getMemberEligibility(viewerProfileId);
@@ -160,19 +163,35 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
 
 export async function getCompatibilityExplanation(viewerProfileId: number, candidateProfileId: number) {
   const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
+  if (!db) throw new Error("Compatibility is unavailable");
   const profiles = await db.select().from(memberProfiles).where(and(inArray(memberProfiles.id, [viewerProfileId, candidateProfileId]), eq(memberProfiles.profileStatus, "active"), isNull(memberProfiles.deletedAt)));
   const viewer = profiles.find(profile => profile.id === viewerProfileId);
   const candidate = profiles.find(profile => profile.id === candidateProfileId);
-  if (!viewer || !candidate) throw new Error("Compatibility is unavailable for this profile");
+  const [viewerEligibility, candidateEligibility] = await Promise.all([getMemberEligibility(viewerProfileId), getMemberEligibility(candidateProfileId)]);
+  if (!viewer || !candidate || !viewerEligibility.discoveryEligible || !candidateEligibility.discoveryEligible || !candidate.searchVisible || candidate.profileVisibility === "hidden") throw new Error("Compatibility is unavailable for this profile");
   const blocked = await db.select({ id: blocks.id }).from(blocks).where(or(and(eq(blocks.blockerProfileId, viewerProfileId), eq(blocks.blockedProfileId, candidateProfileId)), and(eq(blocks.blockerProfileId, candidateProfileId), eq(blocks.blockedProfileId, viewerProfileId)))).limit(1);
   if (blocked[0]) throw new Error("Compatibility is unavailable for this profile");
-  const [viewerPreferences, candidatePreferences] = await Promise.all([getCompatibilityPreferences(viewerProfileId), getCompatibilityPreferences(candidateProfileId)]);
-  const result = evaluatePair(viewer as CompatibilityProfile, candidate as CompatibilityProfile, normalizePreferences(viewerPreferences), normalizePreferences(candidatePreferences));
+  const [viewerPreferences, candidatePreferences, visibilityRows, viewerVerification, internationalPreferenceRows, preferredCountryRows] = await Promise.all([
+    getCompatibilityPreferences(viewerProfileId),
+    getCompatibilityPreferences(candidateProfileId),
+    db.select({ profileId: profileFieldVisibilities.profileId, fieldKey: profileFieldVisibilities.fieldKey, audience: profileFieldVisibilities.audience }).from(profileFieldVisibilities).where(eq(profileFieldVisibilities.profileId, candidateProfileId)),
+    db.select({ id: verificationRecords.id }).from(verificationRecords).where(and(eq(verificationRecords.profileId, viewerProfileId), eq(verificationRecords.verificationType, "identity_document"), eq(verificationRecords.status, "approved"))).limit(1),
+    db.select().from(memberInternationalPreferences).where(inArray(memberInternationalPreferences.profileId, [viewerProfileId, candidateProfileId])),
+    db.select({ profileId: memberPreferredCountries.profileId, countryId: memberPreferredCountries.countryId }).from(memberPreferredCountries).where(and(inArray(memberPreferredCountries.profileId, [viewerProfileId, candidateProfileId]), eq(memberPreferredCountries.preferencePurpose, "discovery"))),
+  ]);
+  const preferenceByProfile = new Map(internationalPreferenceRows.map(row => [row.profileId, row]));
+  const countriesByProfile = new Map<number, Set<number>>();
+  preferredCountryRows.forEach(row => { const countries = countriesByProfile.get(row.profileId) ?? new Set<number>(); countries.add(row.countryId); countriesByProfile.set(row.profileId, countries); });
+  const internationalState = (profile: typeof memberProfiles.$inferSelect): InternationalDiscoveryState => ({ residenceCountryId: profile.residenceCountryId, longDistancePreference: preferenceByProfile.get(profile.id)?.longDistancePreference ?? "no_preference", preferredDiscoveryCountryIds: countriesByProfile.get(profile.id) ?? new Set<number>() });
+  if (!permitsInternationalDiscovery(internationalState(viewer), internationalState(candidate))) throw new Error("Compatibility is unavailable for this profile");
+  const viewerResult = evaluatePair(viewer as CompatibilityProfile, candidate as CompatibilityProfile, normalizePreferences(viewerPreferences), normalizePreferences(candidatePreferences));
+  if (!viewerResult.eligible) throw new Error("Compatibility is unavailable for this profile");
+  const visibility = new Map(visibilityRows.map(row => [row.fieldKey, row.audience]));
+  const visible = (dimension: string) => compatibilityDimensionIsVisible(dimension, visibility, Boolean(viewerVerification[0]));
   return {
-    eligible: result.eligible,
-    compatible: result.dimensions.filter(dimension => dimension.result === "compatible").map(dimension => ({ dimension: dimension.dimension, explanation: dimension.explanation })),
-    considerations: result.dimensions.filter(dimension => dimension.result === "consideration").map(dimension => ({ dimension: dimension.dimension, explanation: dimension.explanation })),
+    eligible: true,
+    compatible: viewerResult.dimensions.filter(dimension => dimension.result === "compatible" && visible(dimension.dimension)).map(dimension => ({ dimension: dimension.dimension, explanation: dimension.explanation })),
+    considerations: viewerResult.dimensions.filter(dimension => dimension.result === "consideration" && visible(dimension.dimension)).map(dimension => ({ dimension: dimension.dimension, explanation: dimension.explanation })),
   };
 }
 
@@ -252,10 +271,19 @@ function normalizePreferences(preferences: any): CompatibilityPreferences {
   };
 }
 
+function validateDiscoveryAgeFilters(min?: number | null, max?: number | null) {
+  if (min != null && (!Number.isInteger(min) || min < MIN_DISCOVERY_AGE || min > MAX_DISCOVERY_AGE)) throw new Error(`Choose a minimum age from ${MIN_DISCOVERY_AGE} to ${MAX_DISCOVERY_AGE}`);
+  if (max != null && (!Number.isInteger(max) || max < MIN_DISCOVERY_AGE || max > MAX_DISCOVERY_AGE)) throw new Error(`Choose a maximum age from ${MIN_DISCOVERY_AGE} to ${MAX_DISCOVERY_AGE}`);
+  if (min != null && max != null && min > max) throw new Error("Choose a minimum age that is not above the maximum age");
+}
+
 function passesAgeFilter(birthDate: Date | null, min?: number, max?: number) {
   if (min === undefined && max === undefined) return true;
   if (!birthDate) return false;
-  const age = new Date().getFullYear() - new Date(birthDate).getFullYear();
+  const today = new Date();
+  const date = new Date(birthDate);
+  let age = today.getUTCFullYear() - date.getUTCFullYear();
+  if (today.getUTCMonth() < date.getUTCMonth() || (today.getUTCMonth() === date.getUTCMonth() && today.getUTCDate() < date.getUTCDate())) age -= 1;
   return (min === undefined || age >= min) && (max === undefined || age <= max);
 }
 
@@ -266,6 +294,12 @@ function collectionAllows(item: { compatibility: ReturnType<typeof evaluatePair>
 }
 
 function profileCompletenessSignals(candidate: typeof memberProfiles.$inferSelect) { return [candidate.about, candidate.marriageIntent, candidate.educationLevel, candidate.profession, candidate.lifestyle].filter(Boolean).length; }
+
+function compatibilityDimensionIsVisible(dimension: string, visibility: Map<string, string>, viewerIdentityVerified: boolean) {
+  const fieldByDimension: Record<string, string> = { age: "birthDate", gender: "gender", religion: "religion", location: "country", marital_status: "maritalStatus", children: "hasChildren", desired_children: "desireChildren", relocation: "relocationWillingness", education: "educationLevel", marriage_timeline: "marriageTimeline", polygyny: "polygynyOpenness", family_involvement: "familyInvolvementPreference", lifestyle: "lifestyle", marriage_intent: "marriageIntent" };
+  const field = fieldByDimension[dimension];
+  return Boolean(field) && canViewerSeeProfileField(visibility.get(field), { viewerIdentityVerified, hasMutualMatch: false });
+}
 
 function presentDiscoveryItem(item: { candidate: typeof memberProfiles.$inferSelect; compatibility: ReturnType<typeof evaluatePair>; identityVerified: boolean; visibility: Map<string, string> }) {
   const field = <T>(key: string, value: T, fallback: T | null = null): T | null => canViewerSeeProfileField(item.visibility.get(key), { viewerIdentityVerified: false, hasMutualMatch: false }) ? value : fallback;
