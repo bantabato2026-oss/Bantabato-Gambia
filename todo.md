@@ -441,3 +441,8 @@
 - [x] Sprint 48 delivered subset: run full local validation; 500 tests passed and 1 persistence test intentionally skipped without an isolated datastore.
 - [ ] Sprint 48 remaining: extend persistence scenarios to safety, Family Circle, connections, readiness, notifications, concurrency, stale versions, rollback, privacy, and Premium neutrality.
 - [ ] Sprint 48 remaining: execute the disposable MySQL CI workflow and verify generated PASS comparison artifacts in CI.
+
+- [ ] Enable the user-approved GitHub integration and verify the disposable persistence workflow and uploaded comparison artifact.
+
+- [ ] Create a private GitHub repository for Bantabato and push the current project checkpoint without exposing secrets or generated artifacts.
+- [ ] Verify the private repository contains the workflow and current source tree, then report its URL.
