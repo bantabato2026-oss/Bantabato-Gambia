@@ -3,11 +3,12 @@ import { createHash, randomBytes } from "crypto";
 import { adminRoles, auditLogs, betaInvitations, familyLinks, memberProfiles, memberSuccessDeclarations, notificationDeliveries, operationalApprovals, operationalFeatureFlags, operationalIncidentEvents, operationalIncidents, paymentReconciliations, paymentRefunds, profilePhotos, reports, safetyAppeals, safetyEnforcementActions, staffInvitations, staffPermissionOverrides, staffPermissions, staffProfiles, staffRolePermissions, staffSessionControls, subscriptions, supportTicketEvents, supportTickets, type StaffRole, users, verificationRecords } from "../drizzle/schema";
 import { createAuditLog, getDb, getMemberEligibility } from "./db";
 import { getActiveAdminScopes } from "./operations";
+import { emitTrustedNotification } from "./notificationService";
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, canDecideApproval, isKnownPermission, permissionRequiresFreshReauthentication, requiresIndependentApproval, roleCan, staffSessionIsUsable, type PermissionKey } from "./domain/adminOperationsPolicy";
 
 type StaffStatus = "invited" | "active" | "suspended" | "deactivated";
 type ApprovalType = "safety_action" | "refund" | "staff_role_change" | "permission_override" | "policy_change" | "configuration_change" | "feature_flag";
-type SupportStatus = "new" | "open" | "waiting_for_member" | "waiting_for_staff" | "escalated" | "resolved" | "closed";
+type SupportStatus = "new" | "open" | "waiting_for_member" | "waiting_for_staff" | "escalated" | "resolved" | "closed" | "withdrawn";
 type IncidentStatus = "detected" | "investigating" | "mitigating" | "monitoring" | "resolved" | "closed";
 
 function hash(value: string) { return createHash("sha256").update(value).digest("hex"); }
@@ -177,12 +178,64 @@ export async function listAssignableSupportStaff(actorUserId: number) {
   if (!db) return [];
   return db.select({ staffProfileId: staffProfiles.id, name: users.name, staffRole: staffProfiles.staffRole }).from(staffProfiles).innerJoin(users, eq(staffProfiles.userId, users.id)).where(eq(staffProfiles.status, "active")).orderBy(asc(staffProfiles.staffRole), asc(users.name)).limit(100);
 }
+function memberSupportProjection(ticket: typeof supportTickets.$inferSelect) {
+  return { id: ticket.id, category: ticket.category, subject: ticket.subject, description: ticket.description, status: ticket.status, resolution: ticket.resolution, createdAt: ticket.createdAt, updatedAt: ticket.updatedAt, resolvedAt: ticket.resolvedAt, closedAt: ticket.closedAt };
+}
+
+export async function listMemberSupportTickets(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(supportTickets).where(eq(supportTickets.requesterUserId, userId)).orderBy(desc(supportTickets.updatedAt)).limit(50);
+  return rows.map(memberSupportProjection);
+}
+
+export async function createMemberSupportTicket(userId: number, input: { category: typeof supportTickets.$inferInsert.category; subject: string; description: string; idempotencyKey: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Support is temporarily unavailable. Nothing was submitted.");
+  const requestKey = `member:${userId}:${input.idempotencyKey.trim()}`;
+  const existing = (await db.select().from(supportTickets).where(eq(supportTickets.idempotencyKey, requestKey)).limit(1))[0];
+  if (existing?.requesterUserId === userId) return { duplicate: true, ticket: memberSupportProjection(existing) };
+  try {
+    await db.insert(supportTickets).values({ requesterUserId: userId, memberProfileId: null, category: input.category, subject: input.subject.trim(), description: input.description.trim(), status: "new", priority: "normal", idempotencyKey: requestKey });
+  } catch {
+    const raced = (await db.select().from(supportTickets).where(eq(supportTickets.idempotencyKey, requestKey)).limit(1))[0];
+    if (!raced || raced.requesterUserId !== userId) throw new Error("This support request could not be confirmed. Please try again.");
+    return { duplicate: true, ticket: memberSupportProjection(raced) };
+  }
+  const ticket = (await db.select().from(supportTickets).where(eq(supportTickets.idempotencyKey, requestKey)).limit(1))[0];
+  if (!ticket) throw new Error("This support request could not be confirmed. Please try again.");
+  await db.insert(supportTicketEvents).values({ ticketId: ticket.id, actorUserId: userId, eventType: "created" });
+  await createAuditLog(userId, "support.member_ticket_created", "support_ticket", String(ticket.id), { category: ticket.category });
+  return { duplicate: false, ticket: memberSupportProjection(ticket) };
+}
+
+async function updateMemberSupportStatus(userId: number, ticketId: number, expectedUpdatedAt: Date, status: "open" | "withdrawn") {
+  const db = await getDb();
+  if (!db) throw new Error("Support is temporarily unavailable. Nothing was changed.");
+  const ticket = (await db.select().from(supportTickets).where(and(eq(supportTickets.id, ticketId), eq(supportTickets.requesterUserId, userId))).limit(1))[0];
+  if (!ticket) throw new Error("This support request is unavailable.");
+  if (ticket.status === "closed") throw new Error("This support request is closed and cannot be changed here.");
+  if (ticket.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This support request changed before your update. Refresh to review the current status.");
+  if (status === "withdrawn" && ticket.status === "withdrawn") return { duplicate: true, ticket: memberSupportProjection(ticket) };
+  if (status === "open" && !["resolved", "withdrawn"].includes(ticket.status)) throw new Error("Only a resolved or withdrawn request can be reopened.");
+  const updated = await db.update(supportTickets).set({ status, resolvedAt: status === "open" ? null : ticket.resolvedAt, updatedAt: new Date() }).where(and(eq(supportTickets.id, ticketId), eq(supportTickets.requesterUserId, userId), eq(supportTickets.updatedAt, expectedUpdatedAt)));
+  if (Number((updated as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This support request changed before your update. Refresh to review the current status.");
+  await db.insert(supportTicketEvents).values({ ticketId, actorUserId: userId, eventType: "status_changed" });
+  await createAuditLog(userId, `support.member_ticket_${status === "open" ? "reopened" : "withdrawn"}`, "support_ticket", String(ticketId));
+  const saved = (await db.select().from(supportTickets).where(eq(supportTickets.id, ticketId)).limit(1))[0];
+  return { duplicate: false, ticket: saved ? memberSupportProjection(saved) : null };
+}
+
+export async function withdrawMemberSupportTicket(userId: number, ticketId: number, expectedUpdatedAt: Date) { return updateMemberSupportStatus(userId, ticketId, expectedUpdatedAt, "withdrawn"); }
+export async function reopenMemberSupportTicket(userId: number, ticketId: number, expectedUpdatedAt: Date) { return updateMemberSupportStatus(userId, ticketId, expectedUpdatedAt, "open"); }
+
 export async function createSupportTicket(actorUserId: number, input: { memberProfileId: number; category: typeof supportTickets.$inferInsert.category; subject: string; description: string; priority: typeof supportTickets.$inferInsert.priority }) { await requireOperationalPermission(actorUserId, "support.manage"); const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(supportTickets).values({ ...input, status: "new" }); const ticketId = asId(result); await db.insert(supportTicketEvents).values({ ticketId, actorUserId, eventType: "created" }); await createAuditLog(actorUserId, "support.ticket_created", "support_ticket", String(ticketId), { category: input.category, priority: input.priority }); return { ticketId }; }
 export async function updateSupportTicket(actorUserId: number, ticketId: number, input: { status?: SupportStatus; assignedStaffProfileId?: number | null; resolution?: string; expectedUpdatedAt: Date }) {
   await requireOperationalPermission(actorUserId, "support.manage");
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const ticket = (await db.select({ status: supportTickets.status, updatedAt: supportTickets.updatedAt }).from(supportTickets).where(eq(supportTickets.id, ticketId)).limit(1))[0];
+  if (input.status === "withdrawn") throw new Error("Staff cannot withdraw a member request. Use the member-owned recovery action.");
+  const ticket = (await db.select({ status: supportTickets.status, updatedAt: supportTickets.updatedAt, requesterUserId: supportTickets.requesterUserId, memberProfileId: supportTickets.memberProfileId }).from(supportTickets).where(eq(supportTickets.id, ticketId)).limit(1))[0];
   if (!ticket) throw new Error("This support ticket is unavailable.");
   if (ticket.status === "closed") throw new Error("This support ticket is closed and cannot be changed here.");
   if (ticket.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) throw new Error("This support ticket changed before your update. Refresh the queue and try again.");
@@ -197,6 +250,9 @@ export async function updateSupportTicket(actorUserId: number, ticketId: number,
   if (Number((updated as { affectedRows?: unknown } | undefined)?.affectedRows ?? 1) === 0) throw new Error("This support ticket changed before your update. Refresh the queue and try again.");
   await db.insert(supportTicketEvents).values({ ticketId, actorUserId, eventType: input.status === "resolved" ? "resolved" : input.status === "closed" ? "closed" : input.assignedStaffProfileId !== undefined ? "assigned" : "status_changed" });
   await createAuditLog(actorUserId, "support.ticket_updated", "support_ticket", String(ticketId), { status: input.status, assignmentChanged: input.assignedStaffProfileId !== undefined, resolutionProvided: Boolean(input.resolution?.trim()) });
+  let recipientUserId = ticket.requesterUserId;
+  if (!recipientUserId && ticket.memberProfileId) recipientUserId = (await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, ticket.memberProfileId)).limit(1))[0]?.userId ?? null;
+  if (recipientUserId && input.status) await emitTrustedNotification({ recipientUserId, actorUserId, eventType: input.status === "resolved" ? "support_request_resolved" : input.status === "waiting_for_member" ? "support_request_action_required" : "support_request_update", notificationType: "product", category: "product_updates", priority: "normal", notificationClass: "transactional", idempotencyKey: `support:${ticketId}:${input.status}:${new Date().getTime()}`, actionPath: "/app/support" });
   return { success: true };
 }
 

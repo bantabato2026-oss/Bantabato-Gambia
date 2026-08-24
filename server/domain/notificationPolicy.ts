@@ -44,6 +44,9 @@ const safeCopies: Record<string, { title: string; body: string }> = {
   account_reactivated: { title: "Account availability updated", body: "Your account availability changed. Sign in to review your current settings and eligibility." },
   account_deletion_requested: { title: "Deletion review request received", body: "Your account deletion review request was received. Sign in to review its current status." },
   data_export_requested: { title: "Data review request received", body: "Your data review request was received. Sign in to review its current status." },
+  support_request_update: { title: "Support request update", body: "Your support request has an update. Sign in to review its current status." },
+  support_request_action_required: { title: "Support request needs your attention", body: "Your support request needs a member action. Sign in to review the next step." },
+  support_request_resolved: { title: "Support request resolved", body: "Your support request was resolved. Sign in to review the factual outcome." },
   international_profile_update: { title: "International profile update", body: "Your location or international profile settings have changed. Sign in to review them securely." },
   product_update: { title: "Bantabato update", body: "There is an optional product update available in Bantabato." },
 };

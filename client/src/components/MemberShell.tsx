@@ -8,7 +8,7 @@ import { useNetworkState } from "@/hooks/useDeviceExperience";
 import { useIsMobile } from "@/hooks/useMobile";
 import { trpc } from "@/lib/trpc";
 import { clearAllMobileDrafts } from "@/lib/mobileExperience";
-import { Bell, Camera, ChevronRight, CircleUserRound, Compass, CreditCard, Eye, Globe2, HeartHandshake, Home, Lightbulb, LockKeyhole, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound, WifiOff, Smartphone } from "lucide-react";
+import { Bell, Camera, ChevronRight, CircleUserRound, Compass, CreditCard, Eye, Globe2, Headphones, HeartHandshake, Home, Lightbulb, LockKeyhole, LogOut, Menu, MessageCircle, Settings, ShieldCheck, SlidersHorizontal, UsersRound, WifiOff, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 
@@ -29,8 +29,9 @@ const secondaryLinks = [
 	  { label: "Verification", href: "/app/verification", icon: ShieldCheck },
 	  { label: "Safety Center", href: "/app/safety", icon: ShieldCheck },
 	  { label: "Settings", href: "/app/settings", icon: Settings },
-	  { label: "Account & privacy", href: "/app/account", icon: LockKeyhole },
-	  { label: "Device & data", href: "/app/device", icon: Smartphone },
+  { label: "Account & privacy", href: "/app/account", icon: LockKeyhole },
+		  { label: "Support", href: "/app/support", icon: Headphones },
+		  { label: "Device & data", href: "/app/device", icon: Smartphone },
 ];
 const mobileBottomLinks = [
   { label: "Home", href: "/app", icon: Home },

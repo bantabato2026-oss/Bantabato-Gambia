@@ -10,7 +10,7 @@ import { Headphones, LockKeyhole, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const states = ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated", "resolved", "closed"] as const;
+const states = ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated", "resolved", "closed", "withdrawn"] as const;
 const categories = ["account_access", "profile", "verification", "membership", "payment", "notifications", "family_circle", "technical_issue", "safety_concern", "other"] as const;
 
 export default function AdminSupportPage() { return <AdminAccessGate><SupportContent /></AdminAccessGate>; }

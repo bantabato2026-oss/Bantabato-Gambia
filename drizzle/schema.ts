@@ -1491,20 +1491,22 @@ export const staffSessionControls = mysqlTable("staff_session_controls", {
 /** Support stays separate from Trust & Safety; escalation records a case link but never grants evidence access. */
 export const supportTickets = mysqlTable("support_tickets", {
   id: int("id").autoincrement().primaryKey(),
-  memberProfileId: int("memberProfileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+  memberProfileId: int("memberProfileId").references(() => memberProfiles.id, { onDelete: "cascade" }),
+  requesterUserId: int("requesterUserId").references(() => users.id, { onDelete: "cascade" }),
   category: mysqlEnum("category", ["account_access", "profile", "verification", "membership", "payment", "notifications", "family_circle", "technical_issue", "safety_concern", "other"]).notNull(),
   subject: varchar("subject", { length: 200 }).notNull(),
   description: text("description").notNull(),
-  status: mysqlEnum("status", ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated", "resolved", "closed"]).default("new").notNull(),
+  status: mysqlEnum("status", ["new", "open", "waiting_for_member", "waiting_for_staff", "escalated", "resolved", "closed", "withdrawn"]).default("new").notNull(),
   priority: mysqlEnum("priority", ["low", "normal", "high", "critical"]).default("normal").notNull(),
   assignedStaffProfileId: int("assignedStaffProfileId").references(() => staffProfiles.id, { onDelete: "set null" }),
   escalatedReportId: int("escalatedReportId").references(() => reports.id, { onDelete: "set null" }),
+  idempotencyKey: varchar("idempotencyKey", { length: 100 }).unique(),
   resolution: varchar("resolution", { length: 1000 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   resolvedAt: timestamp("resolvedAt"),
   closedAt: timestamp("closedAt"),
-}, table => [index("support_ticket_queue_idx").on(table.status, table.priority, table.createdAt), index("support_ticket_member_idx").on(table.memberProfileId, table.createdAt)]);
+}, table => [index("support_ticket_queue_idx").on(table.status, table.priority, table.createdAt), index("support_ticket_member_idx").on(table.memberProfileId, table.createdAt), index("support_ticket_requester_idx").on(table.requesterUserId, table.createdAt)]);
 
 export const supportTicketEvents = mysqlTable("support_ticket_events", {
   id: int("id").autoincrement().primaryKey(),
