@@ -887,13 +887,16 @@ export async function blockProfile(blockerProfileId: number, blockedProfileId: n
 export async function listBlockedProfiles(blockerProfileId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  return db.select({ blockId: blocks.id, profileId: memberProfiles.id, displayName: memberProfiles.displayName, country: memberProfiles.country, createdAt: blocks.createdAt }).from(blocks).innerJoin(memberProfiles, eq(blocks.blockedProfileId, memberProfiles.id)).where(eq(blocks.blockerProfileId, blockerProfileId)).orderBy(desc(blocks.createdAt));
+  return db.select({ blockId: blocks.id, profileId: memberProfiles.id, displayName: memberProfiles.displayName, createdAt: blocks.createdAt }).from(blocks).innerJoin(memberProfiles, eq(blocks.blockedProfileId, memberProfiles.id)).where(eq(blocks.blockerProfileId, blockerProfileId)).orderBy(desc(blocks.createdAt));
 }
 
-export async function unblockProfile(blockerProfileId: number, blockedProfileId: number) {
+export async function unblockProfile(blockerProfileId: number, blockedProfileId: number, expectedCreatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const result = await db.delete(blocks).where(and(eq(blocks.blockerProfileId, blockerProfileId), eq(blocks.blockedProfileId, blockedProfileId)));
+  const active = (await db.select({ createdAt: blocks.createdAt }).from(blocks).where(and(eq(blocks.blockerProfileId, blockerProfileId), eq(blocks.blockedProfileId, blockedProfileId))).limit(1))[0];
+  if (!active) throw new Error("This block is no longer active.");
+  if (expectedCreatedAt && active.createdAt.getTime() !== expectedCreatedAt.getTime()) throw new Error("This block changed in another session. Refresh your safety history before trying again.");
+  const result = await db.delete(blocks).where(and(eq(blocks.blockerProfileId, blockerProfileId), eq(blocks.blockedProfileId, blockedProfileId), eq(blocks.createdAt, active.createdAt)));
   const summary = Array.isArray(result) ? result[0] : result;
   if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error("This block is no longer active.");
   return { removed: true };

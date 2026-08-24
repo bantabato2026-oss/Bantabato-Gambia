@@ -12,6 +12,7 @@ type AppealStatus = "submitted" | "in_review" | "information_requested" | "uphel
 
 async function requireDb() { const db = await getDb(); if (!db) throw new Error("Trust & Safety operations are temporarily unavailable."); return db; }
 const asId = (result: any) => Number(result?.[0]?.id ?? result?.[0]?.insertId ?? 0);
+function requireMutationApplied(result: unknown, message: string) { const summary = Array.isArray(result) ? result[0] : result; if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error(message); }
 
 export async function getActiveIntegrityPolicy() {
   const db = await getDb();
@@ -169,8 +170,8 @@ export async function getMemberSafetyCenter(userId: number) {
   await expireSafetyEnforcements(null, 25);
   const profile = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, userId)).limit(1))[0];
   if (!profile) return { actions: [], appeals: [] };
-  const actions = await db.select({ id: safetyEnforcementActions.id, actionType: safetyEnforcementActions.actionType, status: safetyEnforcementActions.status, scope: safetyEnforcementActions.scope, memberSafeMessage: safetyEnforcementActions.memberSafeMessage, effectiveAt: safetyEnforcementActions.effectiveAt, expiresAt: safetyEnforcementActions.expiresAt, reportId: safetyEnforcementActions.reportId, appealEligible: reports.appealEligible }).from(safetyEnforcementActions).innerJoin(reports, eq(safetyEnforcementActions.reportId, reports.id)).where(eq(safetyEnforcementActions.subjectProfileId, profile.id)).orderBy(desc(safetyEnforcementActions.createdAt));
-  const appeals = await db.select({ id: safetyAppeals.id, enforcementActionId: safetyAppeals.enforcementActionId, status: safetyAppeals.status, submittedAt: safetyAppeals.submittedAt, decidedAt: safetyAppeals.decidedAt, decisionSummary: safetyAppeals.decisionSummary }).from(safetyAppeals).where(eq(safetyAppeals.appellantUserId, userId)).orderBy(desc(safetyAppeals.submittedAt));
+  const actions = await db.select({ id: safetyEnforcementActions.id, actionType: safetyEnforcementActions.actionType, status: safetyEnforcementActions.status, scope: safetyEnforcementActions.scope, memberSafeMessage: safetyEnforcementActions.memberSafeMessage, effectiveAt: safetyEnforcementActions.effectiveAt, expiresAt: safetyEnforcementActions.expiresAt, updatedAt: safetyEnforcementActions.updatedAt, reportId: safetyEnforcementActions.reportId, appealEligible: reports.appealEligible }).from(safetyEnforcementActions).innerJoin(reports, eq(safetyEnforcementActions.reportId, reports.id)).where(eq(safetyEnforcementActions.subjectProfileId, profile.id)).orderBy(desc(safetyEnforcementActions.createdAt));
+  const appeals = await db.select({ id: safetyAppeals.id, enforcementActionId: safetyAppeals.enforcementActionId, status: safetyAppeals.status, submittedAt: safetyAppeals.submittedAt, decidedAt: safetyAppeals.decidedAt, updatedAt: safetyAppeals.updatedAt, decisionSummary: safetyAppeals.decisionSummary }).from(safetyAppeals).where(eq(safetyAppeals.appellantUserId, userId)).orderBy(desc(safetyAppeals.submittedAt));
   return { actions, appeals };
 }
 
@@ -181,18 +182,22 @@ export async function submitSafetyAppeal(userId: number, enforcementActionId: nu
   const action = (await db.select({ id: safetyEnforcementActions.id, reportId: safetyEnforcementActions.reportId, actionType: safetyEnforcementActions.actionType, subjectProfileId: safetyEnforcementActions.subjectProfileId, status: safetyEnforcementActions.status, appealEligible: reports.appealEligible }).from(safetyEnforcementActions).innerJoin(reports, eq(safetyEnforcementActions.reportId, reports.id)).where(eq(safetyEnforcementActions.id, enforcementActionId)).limit(1))[0];
   if (!action || action.subjectProfileId !== profile.id || !action.appealEligible || !isEligibleForAppeal(action.actionType)) throw new Error("This safety action is not eligible for an appeal.");
   const existing = (await db.select().from(safetyAppeals).where(and(eq(safetyAppeals.enforcementActionId, action.id), eq(safetyAppeals.appellantUserId, userId))).limit(1))[0];
-  if (existing) throw new Error("An appeal for this safety action has already been submitted.");
-  const appealId = asId(await db.insert(safetyAppeals).values({ reportId: action.reportId, enforcementActionId: action.id, appellantUserId: userId, reason: reason.trim() }).$returningId());
+  if (existing) return { appealId: existing.id, duplicate: true };
+  let appealId = 0;
+  try { appealId = asId(await db.insert(safetyAppeals).values({ reportId: action.reportId, enforcementActionId: action.id, appellantUserId: userId, reason: reason.trim() }).$returningId()); }
+  catch (error) { const recovered = (await db.select({ id: safetyAppeals.id }).from(safetyAppeals).where(and(eq(safetyAppeals.enforcementActionId, action.id), eq(safetyAppeals.appellantUserId, userId))).limit(1))[0]; if (recovered) return { appealId: recovered.id, duplicate: true }; throw error; }
   await db.update(reports).set({ status: "appealed" }).where(eq(reports.id, action.reportId));
   await createAuditLog(userId, "safety.appeal_submitted", "safety_appeal", String(appealId), { enforcementActionId });
-  return { appealId };
+  return { appealId, duplicate: false };
 }
 
-export async function withdrawSafetyAppeal(userId: number, appealId: number) {
+export async function withdrawSafetyAppeal(userId: number, appealId: number, expectedUpdatedAt?: Date) {
 	const db = await requireDb();
-	const appeal = (await db.select({ id: safetyAppeals.id, status: safetyAppeals.status, enforcementActionId: safetyAppeals.enforcementActionId }).from(safetyAppeals).where(and(eq(safetyAppeals.id, appealId), eq(safetyAppeals.appellantUserId, userId))).limit(1))[0];
+	const appeal = (await db.select({ id: safetyAppeals.id, status: safetyAppeals.status, updatedAt: safetyAppeals.updatedAt, enforcementActionId: safetyAppeals.enforcementActionId }).from(safetyAppeals).where(and(eq(safetyAppeals.id, appealId), eq(safetyAppeals.appellantUserId, userId))).limit(1))[0];
 	if (!appeal || !["submitted", "information_requested"].includes(appeal.status)) throw new Error("This appeal can no longer be withdrawn.");
-	await db.update(safetyAppeals).set({ status: "withdrawn", decidedAt: new Date(), decisionSummary: "The member withdrew this appeal." }).where(and(eq(safetyAppeals.id, appeal.id), inArray(safetyAppeals.status, ["submitted", "information_requested"])));
+	if (expectedUpdatedAt && appeal.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This appeal changed in another session. Refresh your Safety Center before trying again.");
+	const withdrawn = await db.update(safetyAppeals).set({ status: "withdrawn", decidedAt: new Date(), decisionSummary: "The member withdrew this appeal." }).where(and(eq(safetyAppeals.id, appeal.id), eq(safetyAppeals.updatedAt, appeal.updatedAt), inArray(safetyAppeals.status, ["submitted", "information_requested"])));
+	requireMutationApplied(withdrawn, "This appeal changed in another session. Refresh your Safety Center before trying again.");
 	await createAuditLog(userId, "safety.appeal_withdrawn", "safety_appeal", String(appeal.id), { enforcementActionId: appeal.enforcementActionId });
 	return { withdrawn: true };
 }
@@ -204,25 +209,29 @@ export async function getMemberSafetyReports(userId: number) {
 	return db.select({ id: reports.id, reason: reports.reason, status: reports.status, memberSafeSummary: reports.memberSafeSummary, memberMessage: reports.memberMessage, createdAt: reports.createdAt, updatedAt: reports.updatedAt, memberUpdatedAt: reports.memberUpdatedAt, memberWithdrawnAt: reports.memberWithdrawnAt }).from(reports).where(and(eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).orderBy(desc(reports.createdAt)).limit(50);
 }
 
-export async function updateMemberSafetyReport(userId: number, reportId: number, details: string) {
+export async function updateMemberSafetyReport(userId: number, reportId: number, details: string, expectedUpdatedAt?: Date) {
 	const db = await requireDb();
 	const profile = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, userId)).limit(1))[0];
 	if (!profile) throw new Error("A member profile is required to update a report.");
-	const record = (await db.select({ id: reports.id, status: reports.status }).from(reports).where(and(eq(reports.id, reportId), eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).limit(1))[0];
+	const record = (await db.select({ id: reports.id, status: reports.status, updatedAt: reports.updatedAt }).from(reports).where(and(eq(reports.id, reportId), eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).limit(1))[0];
 	if (!record || !["open", "triage"].includes(record.status)) throw new Error("This report can no longer be updated because review has started.");
-	await db.update(reports).set({ details: details.trim(), memberUpdatedAt: new Date() }).where(and(eq(reports.id, record.id), inArray(reports.status, ["open", "triage"])));
+	if (expectedUpdatedAt && record.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This report changed in another session. Refresh your report history before trying again.");
+	const updated = await db.update(reports).set({ details: details.trim(), memberUpdatedAt: new Date() }).where(and(eq(reports.id, record.id), eq(reports.updatedAt, record.updatedAt), inArray(reports.status, ["open", "triage"])));
+	requireMutationApplied(updated, "This report changed in another session. Refresh your report history before trying again.");
 	await createAuditLog(userId, "safety.report_updated", "report", String(record.id), { memberOwned: true, detailLength: details.trim().length });
 	return { updated: true };
 }
 
-export async function withdrawMemberSafetyReport(userId: number, reportId: number) {
+export async function withdrawMemberSafetyReport(userId: number, reportId: number, expectedUpdatedAt?: Date) {
 	const db = await requireDb();
 	const profile = (await db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, userId)).limit(1))[0];
 	if (!profile) throw new Error("A member profile is required to withdraw a report.");
-	const record = (await db.select({ id: reports.id, status: reports.status }).from(reports).where(and(eq(reports.id, reportId), eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).limit(1))[0];
+	const record = (await db.select({ id: reports.id, status: reports.status, updatedAt: reports.updatedAt }).from(reports).where(and(eq(reports.id, reportId), eq(reports.reporterProfileId, profile.id), eq(reports.caseSource, "member_report"))).limit(1))[0];
 	if (!record || !["open", "triage"].includes(record.status)) throw new Error("This report can no longer be withdrawn because review has started.");
+	if (expectedUpdatedAt && record.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This report changed in another session. Refresh your report history before trying again.");
 	const now = new Date();
-	await db.update(reports).set({ status: "closed", memberWithdrawnAt: now, memberSafeSummary: "You withdrew this report before a review began.", memberMessage: "You withdrew this report before a review began." }).where(and(eq(reports.id, record.id), inArray(reports.status, ["open", "triage"])));
+	const withdrawn = await db.update(reports).set({ status: "closed", memberWithdrawnAt: now, memberSafeSummary: "You withdrew this report before a review began.", memberMessage: "You withdrew this report before a review began." }).where(and(eq(reports.id, record.id), eq(reports.updatedAt, record.updatedAt), inArray(reports.status, ["open", "triage"])));
+	requireMutationApplied(withdrawn, "This report changed in another session. Refresh your report history before trying again.");
 	await db.update(integritySignals).set({ status: "dismissed", reviewedAt: now }).where(and(eq(integritySignals.reportId, record.id), eq(integritySignals.status, "new")));
 	await createAuditLog(userId, "safety.report_withdrawn", "report", String(record.id), { memberOwned: true });
 	return { withdrawn: true };
