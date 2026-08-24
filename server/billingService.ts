@@ -60,7 +60,19 @@ async function membershipCatalog(currency: string, publicOnly: boolean) {
 	const activeVersions = versions.filter(version => planIds.has(version.membershipPlanId));
 	const versionIds = activeVersions.map(version => version.id);
 	const prices = versionIds.length ? await db.select().from(membershipPrices).where(and(inArray(membershipPrices.membershipPlanVersionId, versionIds), eq(membershipPrices.currency, normalizedCurrency), eq(membershipPrices.status, "active"))) : [];
-	return plans.flatMap(plan => activeVersions.filter(version => version.membershipPlanId === plan.id).flatMap(version => prices.filter(price => price.membershipPlanVersionId === version.id && isPriceEffective(price, now)).map(price => {
+	const versionById = new Map(activeVersions.map(version => [version.id, version]));
+	const currentPrices = prices.filter(price => isPriceEffective(price, now)).filter(price => {
+		const version = versionById.get(price.membershipPlanVersionId);
+		if (!version) return false;
+		return !prices.some(candidate => {
+			const candidateVersion = versionById.get(candidate.membershipPlanVersionId);
+			if (!candidateVersion || candidate.id === price.id || candidateVersion.membershipPlanId !== version.membershipPlanId || candidate.currency !== price.currency || candidate.billingInterval !== price.billingInterval || !isPriceEffective(candidate, now)) return false;
+			const candidateEffectiveAt = candidate.effectiveFrom?.getTime() ?? 0;
+			const effectiveAt = price.effectiveFrom?.getTime() ?? 0;
+			return candidateEffectiveAt > effectiveAt || (candidateEffectiveAt === effectiveAt && candidate.id > price.id);
+		});
+	});
+	return plans.flatMap(plan => activeVersions.filter(version => version.membershipPlanId === plan.id).flatMap(version => currentPrices.filter(price => price.membershipPlanVersionId === version.id).map(price => {
 		const config = price.provider ? configurations.find(item => item.provider === price.provider) : undefined;
 		const checkoutState = providerCheckoutState(price.provider, config);
 		return {
@@ -100,7 +112,7 @@ export async function getMemberBilling(profileId: number) {
   const membershipRecord = active ?? subscriptionsForProfile[0] ?? null;
   const pendingCheckout = transactions.find((transaction: any) => ["created", "pending", "processing"].includes(transaction.status)) ?? null;
   return {
-    membership: membershipRecord ? { subscriptionId: membershipRecord.id, level: membershipRecord.plan === "premium" ? "premium" : "free", status: membershipRecord.status, currentPeriodEndsAt: membershipRecord.currentPeriodEndsAt, gracePeriodEndsAt: membershipRecord.gracePeriodEndsAt, cancelAtPeriodEnd: membershipRecord.cancelAtPeriodEnd, autoRenew: membershipRecord.autoRenew } : { subscriptionId: null, level: "free", status: "not_subscribed", currentPeriodEndsAt: null, gracePeriodEndsAt: null, cancelAtPeriodEnd: false, autoRenew: false },
+	    membership: membershipRecord ? { subscriptionId: membershipRecord.id, level: membershipRecord.plan === "premium" ? "premium" : "free", status: membershipRecord.status, currentPeriodEndsAt: membershipRecord.currentPeriodEndsAt, gracePeriodEndsAt: membershipRecord.gracePeriodEndsAt, cancelAtPeriodEnd: membershipRecord.cancelAtPeriodEnd, autoRenew: membershipRecord.autoRenew, updatedAt: membershipRecord.updatedAt } : { subscriptionId: null, level: "free", status: "not_subscribed", currentPeriodEndsAt: null, gracePeriodEndsAt: null, cancelAtPeriodEnd: false, autoRenew: false, updatedAt: null },
     checkout: pendingCheckout ? { transactionId: pendingCheckout.id, status: pendingCheckout.status, reference: pendingCheckout.internalReference, createdAt: pendingCheckout.createdAt, membershipPriceId: pendingCheckout.membershipPriceId } : null,
     billingSettings: settings[0] ?? { preferredCurrency: "GMD", receiptEmail: null },
     transactions: transactions.map((transaction: any) => {
@@ -138,17 +150,17 @@ export async function saveMemberBillingSettings(profileId: number, actorUserId: 
 
 /** Creates only a server-side pending transaction. No entitlement exists until a provider result is independently verified. */
 export async function initiatePayment(profileId: number, actorUserId: number, input: { membershipPriceId: number; provider: PaymentProviderKey; idempotencyKey: string; acknowledgedTerms: boolean; returnUrl?: string }) {
-  if (!input.acknowledgedTerms) throw new Error("Please confirm the plan, price, renewal, and cancellation terms before continuing.");
-  const db = await getDb();
-  if (!db) throw new Error("Billing is temporarily unavailable.");
+	if (!input.acknowledgedTerms) throw new Error("Please confirm the plan, price, renewal, and cancellation terms before continuing.");
+	const db = await getDb();
+	if (!db) throw new Error("Billing is temporarily unavailable.");
 	  const existing = await db.select().from(paymentTransactions).where(eq(paymentTransactions.idempotencyKey, input.idempotencyKey)).limit(1);
 	  if (existing[0]) {
 		if (existing[0].profileId !== profileId) throw new Error("This checkout request key cannot be reused.");
 		const configuration = await db.select().from(paymentProviderConfigurations).where(and(eq(paymentProviderConfigurations.provider, existing[0].provider), eq(paymentProviderConfigurations.enabled, true))).limit(1);
 		const checkoutState = providerCheckoutState(existing[0].provider, configuration[0]);
-		return { transaction: safeBillingSummary(existing[0]), redirectUrl: undefined, providerAvailable: checkoutState === "sandbox" || checkoutState === "live", checkoutState, duplicate: true, message: ["created", "pending", "processing"].includes(existing[0].status) ? "A checkout attempt for this plan is already pending. No duplicate transaction was created; wait for authoritative confirmation or return after its status changes." : "This checkout request has already reached a final state. Review private payment history before starting a new checkout." };
-	  }
-  const { price, version, plan } = await activePlanVersion(db, input.membershipPriceId);
+			return { transaction: safeBillingSummary(existing[0]), redirectUrl: undefined, providerAvailable: checkoutState === "sandbox" || checkoutState === "live", checkoutState, duplicate: true, message: ["created", "pending", "processing"].includes(existing[0].status) ? "A checkout attempt for this plan is already pending. No duplicate transaction was created; wait for authoritative confirmation or return after its status changes." : "This checkout request has already reached a final state. Review private payment history before starting a new checkout." };
+		  }
+	  const { price, version, plan } = await activePlanVersion(db, input.membershipPriceId);
   if (plan.membershipLevel !== "premium") throw new Error("This plan is not available for checkout.");
 	  if (!price.provider || price.provider !== input.provider) throw new Error("This selected plan does not have the requested payment method available.");
   const providerConfig = await db.select().from(paymentProviderConfigurations).where(and(eq(paymentProviderConfigurations.provider, input.provider), eq(paymentProviderConfigurations.enabled, true))).limit(1);
@@ -263,16 +275,19 @@ export async function hasEntitlement(profileId: number, entitlementKey: Entitlem
   return rows.some((row: any) => entitlementIsActive({ subscriptionStatus: row.subscriptionStatus, entitlementStatus: row.entitlementStatus, startsAt: row.startsAt, endsAt: row.endsAt, graceEntitlementsActive: row.graceEntitlementsActive, now }));
 }
 
-export async function cancelSubscriptionRenewal(profileId: number, actorUserId: number, subscriptionId: number) {
+export async function cancelSubscriptionRenewal(profileId: number, actorUserId: number, subscriptionId: number, expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Billing is temporarily unavailable.");
 
   const result = await db.transaction(async tx => {
     const record = await tx.select().from(subscriptions).where(and(eq(subscriptions.id, subscriptionId), eq(subscriptions.profileId, profileId))).for("update");
-    if (!record[0]) throw new Error("Subscription not found.");
-    if (!["active", "trial", "past_due", "grace_period"].includes(record[0].status)) throw new Error("This subscription is not eligible for renewal cancellation.");
-    if (record[0].cancelAtPeriodEnd) return { alreadyCancelled: true, currentPeriodEndsAt: record[0].currentPeriodEndsAt };
-    await tx.update(subscriptions).set({ cancelAtPeriodEnd: true, autoRenew: false, cancelledAt: new Date() }).where(eq(subscriptions.id, subscriptionId));
+	    if (!record[0]) throw new Error("Subscription not found.");
+	    if (!["active", "trial", "past_due", "grace_period"].includes(record[0].status)) throw new Error("This subscription is not eligible for renewal cancellation.");
+		if (expectedUpdatedAt && record[0].updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("This membership changed in another session. Refresh billing before trying again.");
+	    if (record[0].cancelAtPeriodEnd) return { alreadyCancelled: true, currentPeriodEndsAt: record[0].currentPeriodEndsAt };
+	    const updated = await tx.update(subscriptions).set({ cancelAtPeriodEnd: true, autoRenew: false, cancelledAt: new Date() }).where(and(eq(subscriptions.id, subscriptionId), eq(subscriptions.updatedAt, record[0].updatedAt), eq(subscriptions.cancelAtPeriodEnd, false)));
+		const summary = Array.isArray(updated) ? updated[0] : updated;
+		if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error("This membership changed in another session. Refresh billing before trying again.");
     return { alreadyCancelled: false, currentPeriodEndsAt: record[0].currentPeriodEndsAt };
   });
 
@@ -324,8 +339,8 @@ export async function requestMemberRefund(profileId: number, actorUserId: number
     const transactions = await tx.select().from(paymentTransactions).where(and(eq(paymentTransactions.id, transactionId), eq(paymentTransactions.profileId, profileId))).for("update");
     const transaction = transactions[0];
     if (!transaction || !["successful", "partially_refunded"].includes(transaction.status)) throw new Error("Only a confirmed payment on your account can be requested for refund review.");
-    const existing = await tx.select({ amountMinor: paymentRefunds.amountMinor, status: paymentRefunds.status }).from(paymentRefunds).where(eq(paymentRefunds.paymentTransactionId, transactionId)).for("update");
-    if (existing.some((refund: any) => ["requested", "processing"].includes(refund.status))) throw new Error("A refund request for this payment is already under review.");
+	    const existing = await tx.select({ amountMinor: paymentRefunds.amountMinor, status: paymentRefunds.status }).from(paymentRefunds).where(eq(paymentRefunds.paymentTransactionId, transactionId)).for("update");
+	    if (existing.some((refund: any) => ["requested", "processing"].includes(refund.status))) throw new Error("A refund request for this payment is already under review.");
     const committedAmount = existing.filter((refund: any) => refund.status === "succeeded").reduce((sum: number, refund: any) => sum + refund.amountMinor, 0);
     const remainingAmount = transaction.amountMinor - committedAmount;
     if (remainingAmount <= 0) throw new Error("This payment has no remaining amount eligible for a refund request.");
@@ -334,7 +349,7 @@ export async function requestMemberRefund(profileId: number, actorUserId: number
   });
   await createNotification(actorUserId, "billing", "Refund request received", "Your request is awaiting scoped finance review. No money has moved and your membership conveniences and protections are unchanged.", "/app/billing", `member-refund-request:${result.refundId}`);
   await createAuditLog(actorUserId, "billing.member_refund_requested", "payment_refund", String(result.refundId), { transactionId, amountMinor: result.amountMinor });
-  return { ...result, status: "requested" as const };
+	  return { ...result, status: "requested" as const };
 }
 
 export async function listRefundRequests() {

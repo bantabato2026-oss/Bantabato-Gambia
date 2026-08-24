@@ -16,7 +16,8 @@ describe("Sprint 7 membership and billing contracts", () => {
     expect(schema).toContain('effectiveFrom: timestamp("effectiveFrom")');
     expect(schema).toContain('effectiveUntil: timestamp("effectiveUntil")');
     expect(billing).toContain('function isPriceEffective');
-    expect(billing).toContain('price => price.membershipPlanVersionId === version.id && isPriceEffective(price, now)');
+	    expect(billing).toContain('const currentPrices = prices.filter(price => isPriceEffective(price, now))');
+	    expect(billing).toContain('currentPrices.filter(price => price.membershipPlanVersionId === version.id)');
     expect(billing).toContain('export async function listPublicMembershipCatalog');
     expect(router).toContain('membershipCatalog: publicProcedure');
     expect(publicPages).toContain('trpc.publicContent.membershipCatalog.useQuery');
