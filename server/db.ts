@@ -131,8 +131,28 @@ export async function getProfileByUserId(userId: number) {
   return result[0];
 }
 
+export const MIN_MEMBER_AGE = 18;
+export const MAX_MEMBER_AGE = 60;
+
+function ageOnCurrentDate(birthDate: Date, today = new Date()) {
+  let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+  const hasHadBirthday = today.getUTCMonth() > birthDate.getUTCMonth() || (today.getUTCMonth() === birthDate.getUTCMonth() && today.getUTCDate() >= birthDate.getUTCDate());
+  if (!hasHadBirthday) age -= 1;
+  return age;
+}
+
+export function meetsMemberAgeRequirement(birthDate: Date | null | undefined, today = new Date()) {
+  if (!birthDate || Number.isNaN(birthDate.getTime())) return false;
+  const age = ageOnCurrentDate(birthDate, today);
+  return age >= MIN_MEMBER_AGE && age <= MAX_MEMBER_AGE;
+}
+
+function assertMemberAgeRequirement(birthDate: Date) {
+  if (!meetsMemberAgeRequirement(birthDate)) throw new Error(`Members must be between ${MIN_MEMBER_AGE} and ${MAX_MEMBER_AGE} years old to create a profile.`);
+}
+
 function coreProfileIsComplete(profile: Pick<typeof memberProfiles.$inferSelect, "displayName" | "birthDate" | "gender" | "country" | "maritalStatus">) {
-  return Boolean(profile.displayName && profile.birthDate && profile.gender && profile.country && profile.maritalStatus);
+  return Boolean(profile.displayName && meetsMemberAgeRequirement(profile.birthDate) && profile.gender && profile.country && profile.maritalStatus);
 }
 
 export async function getMemberEligibility(profileId: number) {
@@ -306,6 +326,7 @@ export type ProfileUpdate = Partial<{
 export async function saveMemberProfile(userId: number, input: ProfileUpdate, expectedUpdatedAt?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  if (input.birthDate) assertMemberAgeRequirement(input.birthDate);
   const normalizedInput = normalizeTextRecord(input);
   const current = await getProfileByUserId(userId);
   if (!current) {
