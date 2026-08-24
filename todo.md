@@ -446,3 +446,6 @@
 
 - [ ] Create a private GitHub repository for Bantabato and push the current project checkpoint without exposing secrets or generated artifacts.
 - [ ] Verify the private repository contains the workflow and current source tree, then report its URL.
+
+- [ ] Access the provided private GitHub repository and safely synchronize the checkpointed Bantabato source tree.
+- [ ] Verify the persistence workflow is present remotely and report the repository access result.
