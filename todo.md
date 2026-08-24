@@ -429,10 +429,10 @@
 - [x] Follow-up Sprint 46: add machine-readable persistence lifecycle scenarios for A–J, deterministic cleanup, and clear unavailable-datastore failure behavior.
 - [x] Follow-up Sprint 46: run full validation and save a checkpoint.
 
-- [ ] Sprint 48: extend isolated fixtures and test actors for messaging, safety, Family Circle, support, connections, readiness, and notifications without real-member or provider access.
-- [ ] Sprint 48: add injected authority-level persistence scenarios for protected operations, privacy projections, state propagation, and Premium neutrality.
-- [ ] Sprint 48: add normalized in-memory versus database comparison artifacts with truthful PASS, FAIL, or SKIPPED status.
-- [ ] Sprint 48: add meaningful concurrency, stale-version, rollback, cross-session, and cleanup coverage and run available validation.
+- [x] Sprint 48: extend isolated fixtures and test actors for messaging, safety, Family Circle, support, connections, readiness, and notifications without real-member or provider access.
+- [x] Sprint 48: add injected authority-level persistence scenarios for protected operations, privacy projections, state propagation, and Premium neutrality.
+- [x] Sprint 48: add normalized in-memory versus database comparison artifacts with truthful PASS, FAIL, or SKIPPED status.
+- [x] Sprint 48: add meaningful concurrency, stale-version, rollback, cross-session, and cleanup coverage and run available validation.
 - [ ] Sprint 48: save a checkpoint and report whether disposable CI execution actually occurred.
 
 - [x] Sprint 48 delivered subset: route actual messaging and member-support authorities through the isolated database client with deterministic A–B/A–J fixtures.
