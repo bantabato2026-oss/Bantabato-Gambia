@@ -101,6 +101,7 @@ function Router() {
 	    <Route path="/app/connections" component={ConnectionsPage} />
     <Route path="/app/matches" component={MatchesPage} />
     <Route path="/app/messages" component={MessagesPage} />
+    <Route path="/app/readiness/:conversationId">{params => <MessageThreadPage conversationId={Number(params.conversationId)} />}</Route>
     <Route path="/app/messages/:conversationId">{params => <MessageThreadPage conversationId={Number(params.conversationId)} />}</Route>
 	    <Route path="/app/family" component={FamilyCirclePage} />
 	    <Route path="/family" component={FamilyParticipantPage} />

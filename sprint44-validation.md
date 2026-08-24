@@ -1,0 +1,7 @@
+# Sprint 44 validation
+
+Sprint 44 made targeted post-match quality refinements without introducing providers, real accounts, fabricated activity, ranking, private-data exposure, or launch claims. Connection-state reads now stop on a blocked pair before exposing active-match or communication state. Interest and mutual-match notifications route to the active Connections surface. Family Circle owner and participant notifications preserve their separate authorized destinations (`/app/family` versus `/family`). The protected `/app/readiness/:conversationId` destination now reuses the existing authorized message-thread/readiness experience instead of falling through to a 404. Member detail actions treat blocked, restricted, suspended, expired, and unavailable relationship states as unavailable rather than offering a new introduction.
+
+Focused coverage passed: 34 tests across 5 files. The final release gate passed `pnpm check`, the full suite with **486 tests across 99 files**, production build, and `pnpm audit --prod --audit-level=high` with no known vulnerabilities.
+
+Read-only responsive review covered `/app/connections`, `/app/profile/1`, `/app/messages`, `/app/messages/1`, `/app/readiness/1`, `/app/family`, `/family`, and `/app/notifications` at desktop 1280×720 and mobile 375×812. The profileless preview account truthfully showed prerequisite or unavailable states; no member activity or mutation was created. The review was visual and read-only, not a substitute for real multi-account, assistive-technology, provider, or production activity testing.

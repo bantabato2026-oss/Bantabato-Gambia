@@ -544,7 +544,7 @@ export async function createInterest(senderProfileId: number, recipientProfileId
     const summary = Array.isArray(update) ? update[0] : update;
     if (typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) return { interestId: existing.id, state: "pending" as const, duplicate: true };
     const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, recipientProfileId)).limit(1);
-    if (recipient[0]) await createNotification(recipient[0].userId, "interest", "A renewed introduction request", "Someone would like to be introduced to you. Review it on your own terms.", "/app/matches", `interest-renewed:${existing.id}`);
+    if (recipient[0]) await createNotification(recipient[0].userId, "interest", "A renewed introduction request", "Someone would like to be introduced to you. Review it on your own terms.", "/app/connections", `interest-renewed:${existing.id}`);
     return { interestId: existing.id, state: "pending" as const, duplicate: false };
   }
   let interestId: number | undefined;
@@ -557,7 +557,7 @@ export async function createInterest(senderProfileId: number, recipientProfileId
     throw error;
   }
   const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, recipientProfileId)).limit(1);
-  if (recipient[0]) await createNotification(recipient[0].userId, "interest", "A new introduction request", "Someone would like to be introduced to you.", "/app/matches", `interest:${senderProfileId}:${recipientProfileId}`);
+  if (recipient[0]) await createNotification(recipient[0].userId, "interest", "A new introduction request", "Someone would like to be introduced to you.", "/app/connections", `interest:${senderProfileId}:${recipientProfileId}`);
   return { interestId: interestId ?? 0, state: "pending" as const, duplicate: false };
 }
 
@@ -625,9 +625,9 @@ export async function respondToInterest(recipientProfileId: number, interestId: 
   }
   if (conversationId) await db.insert(conversationEvents).values({ conversationId, actorProfileId: recipientProfileId, eventType: "mutual_interest" });
   const sender = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, request[0].senderProfileId)).limit(1);
-  if (sender[0]) await createNotification(sender[0].userId, "match", "Your introduction was accepted", "You can now begin a private conversation together.", "/app/messages", `match:${matchId}:sender`);
+  if (sender[0]) await createNotification(sender[0].userId, "match", "Your introduction was accepted", "You can now begin a private conversation together.", "/app/connections", `match:${matchId}:sender`);
   const recipient = await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, recipientProfileId)).limit(1);
-  if (recipient[0]) await createNotification(recipient[0].userId, "match", "You have a new mutual match", "You can now begin a private conversation together.", "/app/messages", `match:${matchId}:recipient`);
+  if (recipient[0]) await createNotification(recipient[0].userId, "match", "You have a new mutual match", "You can now begin a private conversation together.", "/app/connections", `match:${matchId}:recipient`);
   return { matched: true, matchId: establishedMatchId, duplicate: false, otherProfileId: request[0].senderProfileId };
 }
 
@@ -649,7 +649,7 @@ export async function withdrawInterest(profileId: number, interestId: number, ex
     throw new Error("This introduction request is no longer available");
   }
   const recipient = (await db.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.id, request.recipientProfileId)).limit(1))[0];
-  if (recipient) await createNotification(recipient.userId, "interest", "An introduction request was withdrawn", "The sender withdrew their pending introduction request.", "/app/matches", `interest-withdrawn:${interestId}`);
+  if (recipient) await createNotification(recipient.userId, "interest", "An introduction request was withdrawn", "The sender withdrew their pending introduction request.", "/app/connections", `interest-withdrawn:${interestId}`);
   return { withdrawn: true, duplicate: false };
 }
 
@@ -657,6 +657,8 @@ export async function getInterestConnectionState(profileId: number, targetProfil
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const pair = canonicalProfilePair(profileId, targetProfileId);
+  const blocked = (await db.select({ id: blocks.id }).from(blocks).where(or(and(eq(blocks.blockerProfileId, profileId), eq(blocks.blockedProfileId, targetProfileId)), and(eq(blocks.blockerProfileId, targetProfileId), eq(blocks.blockedProfileId, profileId)))).limit(1))[0];
+  if (blocked) return { state: "blocked" as const, interestId: null, conversationId: null };
   const match = (await db.select().from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId), eq(matches.status, "active"))).limit(1))[0];
   if (match) {
     const conversation = (await db.select({ id: conversations.id, status: conversations.status }).from(conversations).where(eq(conversations.matchId, match.id)).limit(1))[0];
