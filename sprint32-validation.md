@@ -1,0 +1,7 @@
+# Sprint 32 validation evidence
+
+Sprint 32 adds member-owned, server-confirmed discovery controls and server-authoritative approved display-name search. The persisted controls include only query, age, gender, faith, country, residence type, marital status, children, relocation, polygyny, and identity-review preference. The controls reject stale writes, validate age ranges, clear nullable values intentionally, and do not store or search exact location, contacts, documents, safety data, Family Circle data, scores, or ranking inputs.
+
+Focused contracts and adjacent discovery, recommendation, interest/connection, notification, Family Circle, safety, international, and premium-neutrality regressions passed: **51 tests across 7 files**. The full release gate passed: **421 tests across 86 files**, TypeScript, production build, and production dependency audit.
+
+Read-only desktop and 375px reviews covered `/app/discover`, `/app/recommendations`, `/app/profile/1`, `/app/matches`, and `/app/international`. The available preview account has not completed a profile, so discovery and recommendation routes truthfully showed prerequisite recovery, profile detail showed an unavailable state without protected details, the connection route showed its recovery state, and international settings showed core-profile recovery. No login, member, filter save, interest, match, safety, Family Circle, notification, or provider action was performed.

@@ -304,6 +304,30 @@ export const memberPreferences = mysqlTable(
   table => [uniqueIndex("member_preferences_profile_unique").on(table.profileId)],
 );
 
+/** Member-owned discovery controls. These are filters only; they do not alter eligibility, ordering policy, or other members' privacy. */
+export const memberDiscoveryFilters = mysqlTable(
+  "member_discovery_filters",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    profileId: int("profileId").notNull().references(() => memberProfiles.id, { onDelete: "cascade" }),
+    query: varchar("query", { length: 80 }),
+    minAge: int("minAge"),
+    maxAge: int("maxAge"),
+    gender: mysqlEnum("gender", ["woman", "man", "self_described"]),
+    religion: mysqlEnum("religion", ["muslim", "christian"]),
+    country: varchar("country", { length: 100 }),
+    residenceType: mysqlEnum("residenceType", ["gambia", "diaspora"]),
+    maritalStatus: mysqlEnum("maritalStatus", ["never_married", "married", "divorced", "widowed"]),
+    hasChildren: boolean("hasChildren"),
+    relocationWillingness: mysqlEnum("relocationWillingness", ["open", "within_gambia", "not_open", "discuss"]),
+    polygynyOpenness: mysqlEnum("polygynyOpenness", ["open", "not_open", "discuss", "not_applicable"]),
+    verifiedOnly: boolean("verifiedOnly").default(false).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("member_discovery_filters_profile_unique").on(table.profileId)],
+);
+
 /** Per-field profile audiences; absent rows use the privacy-preserving service defaults. */
 export const profileFieldVisibilities = mysqlTable(
   "profile_field_visibilities",

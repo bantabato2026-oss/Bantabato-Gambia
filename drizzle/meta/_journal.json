@@ -218,6 +218,13 @@
       "when": 1787574247999,
       "tag": "0030_neat_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1787582709423,
+      "tag": "0031_ambiguous_prowler",
+      "breakpoints": true
     }
   ]
 }

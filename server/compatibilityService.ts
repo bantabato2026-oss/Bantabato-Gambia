@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
-import { blocks, memberInternationalPreferences, memberPreferredCountries, memberPreferences, memberProfiles, profileFieldVisibilities, verificationRecords } from "../drizzle/schema";
+import { and, desc, eq, inArray, isNull, like, lt, ne, or } from "drizzle-orm";
+import { blocks, memberDiscoveryFilters, memberInternationalPreferences, memberPreferredCountries, memberPreferences, memberProfiles, profileFieldVisibilities, verificationRecords } from "../drizzle/schema";
 import { evaluatePair, type CompatibilityPreferences, type CompatibilityProfile, type PreferenceImportance } from "./domain/compatibility";
 import { compareCuratedOrder, isEligibleForDiscovery } from "./domain/discoveryPolicy";
 import { canViewerSeeProfileField } from "./domain/profileVisibility";
@@ -28,7 +28,9 @@ export type CompatibilityPreferenceInput = {
 };
 
 export type FieldVisibilityInput = { fieldKey: string; audience: "public" | "verified_members" | "potential_matches" | "matched_members" | "family_circle" | "private" | "admin_restricted" };
-export type CuratedDiscoveryInput = { cursor?: number; limit?: number; collection?: "recommended" | "new" | "recently_updated" | "verified" | "potentially_compatible"; minAge?: number; maxAge?: number; gender?: "woman" | "man" | "self_described"; religion?: "muslim" | "christian"; country?: string; city?: string; maritalStatus?: "never_married" | "married" | "divorced" | "widowed"; hasChildren?: boolean; relocationWillingness?: "open" | "within_gambia" | "not_open" | "discuss"; polygynyOpenness?: "open" | "not_open" | "discuss" | "not_applicable"; verifiedOnly?: boolean };
+export type CuratedDiscoveryInput = { cursor?: number; limit?: number; collection?: "recommended" | "new" | "recently_updated" | "verified" | "potentially_compatible"; query?: string; minAge?: number; maxAge?: number; gender?: "woman" | "man" | "self_described"; religion?: "muslim" | "christian"; country?: string; residenceType?: "gambia" | "diaspora"; city?: string; maritalStatus?: "never_married" | "married" | "divorced" | "widowed"; hasChildren?: boolean; relocationWillingness?: "open" | "within_gambia" | "not_open" | "discuss"; polygynyOpenness?: "open" | "not_open" | "discuss" | "not_applicable"; verifiedOnly?: boolean };
+export type DiscoveryFilterInput = Omit<CuratedDiscoveryInput, "cursor" | "limit" | "collection" | "city">;
+type StoredDiscoveryFilterInput = { [Key in keyof DiscoveryFilterInput]: DiscoveryFilterInput[Key] | null | undefined };
 
 export async function getCompatibilityPreferences(profileId: number) {
   const db = await getDb();
@@ -43,6 +45,37 @@ export async function saveCompatibilityPreferences(profileId: number, input: Com
   const values = sanitizePreferenceInput(input);
   await db.insert(memberPreferences).values({ profileId, ...values }).onDuplicateKeyUpdate({ set: values });
   return getCompatibilityPreferences(profileId);
+}
+
+export async function getDiscoveryFilters(profileId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db.select().from(memberDiscoveryFilters).where(eq(memberDiscoveryFilters.profileId, profileId)).limit(1);
+  return row[0] ? presentDiscoveryFilters(row[0]) : null;
+}
+
+export async function saveDiscoveryFilters(profileId: number, input: StoredDiscoveryFilterInput, expectedUpdatedAt?: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Discovery controls are unavailable right now");
+  if (input.minAge != null && input.maxAge != null && input.minAge > input.maxAge) throw new Error("Choose a minimum age that is not above the maximum age");
+  const values = sanitizeDiscoveryFilterInput(input);
+  const existing = await db.select().from(memberDiscoveryFilters).where(eq(memberDiscoveryFilters.profileId, profileId)).limit(1);
+  if (existing[0]) {
+    if (expectedUpdatedAt && existing[0].updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("Your saved discovery controls changed before this update. Refresh and review the current filters.");
+    const where = expectedUpdatedAt ? and(eq(memberDiscoveryFilters.id, existing[0].id), eq(memberDiscoveryFilters.updatedAt, expectedUpdatedAt)) : eq(memberDiscoveryFilters.id, existing[0].id);
+    const update = await db.update(memberDiscoveryFilters).set(values).where(where);
+    const summary = Array.isArray(update) ? update[0] : update;
+    if (expectedUpdatedAt && typeof (summary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (summary as { affectedRows: number }).affectedRows === 0) throw new Error("Your saved discovery controls changed before this update. Refresh and review the current filters.");
+  } else {
+    try {
+      await db.insert(memberDiscoveryFilters).values({ profileId, ...values });
+    } catch {
+      throw new Error("Your discovery controls were saved elsewhere first. Refresh and review the current filters.");
+    }
+  }
+  const saved = await getDiscoveryFilters(profileId);
+  if (!saved) throw new Error("Discovery controls could not be confirmed");
+  return saved;
 }
 
 export async function listProfileFieldVisibilities(profileId: number) {
@@ -71,9 +104,11 @@ export async function getCuratedDiscovery(viewerProfileId: number, input: Curate
 
   const conditions = [eq(memberProfiles.profileStatus, "active"), eq(memberProfiles.searchVisible, true), isNull(memberProfiles.deletedAt), ne(memberProfiles.id, viewerProfileId), ne(memberProfiles.profileVisibility, "hidden")];
   if (input.cursor) conditions.push(lt(memberProfiles.id, input.cursor));
+  if (input.query) conditions.push(like(memberProfiles.displayName, `%${input.query.trim()}%`));
   if (input.gender) conditions.push(eq(memberProfiles.gender, input.gender));
   if (input.religion) conditions.push(eq(memberProfiles.religion, input.religion));
   if (input.country) conditions.push(eq(memberProfiles.country, input.country));
+  if (input.residenceType) conditions.push(eq(memberProfiles.residenceType, input.residenceType));
   if (input.city) conditions.push(eq(memberProfiles.city, input.city));
   if (input.maritalStatus) conditions.push(eq(memberProfiles.maritalStatus, input.maritalStatus));
   if (input.hasChildren !== undefined) conditions.push(eq(memberProfiles.hasChildren, input.hasChildren));
@@ -157,6 +192,41 @@ function sanitizePreferenceInput(input: CompatibilityPreferenceInput) {
     preferenceImportance: input.preferenceImportance ?? null,
     marriageIntent: input.marriageIntent ?? null,
     mustHaves: input.mustHaves ?? null,
+  };
+}
+
+function sanitizeDiscoveryFilterInput(input: StoredDiscoveryFilterInput) {
+  return {
+    query: input.query?.trim() || null,
+    minAge: input.minAge ?? null,
+    maxAge: input.maxAge ?? null,
+    gender: input.gender ?? null,
+    religion: input.religion ?? null,
+    country: input.country?.trim() || null,
+    residenceType: input.residenceType ?? null,
+    maritalStatus: input.maritalStatus ?? null,
+    hasChildren: input.hasChildren ?? null,
+    relocationWillingness: input.relocationWillingness ?? null,
+    polygynyOpenness: input.polygynyOpenness ?? null,
+    verifiedOnly: Boolean(input.verifiedOnly),
+  };
+}
+
+function presentDiscoveryFilters(row: typeof memberDiscoveryFilters.$inferSelect): DiscoveryFilterInput & { updatedAt: Date } {
+  return {
+    query: row.query ?? undefined,
+    minAge: row.minAge ?? undefined,
+    maxAge: row.maxAge ?? undefined,
+    gender: row.gender ?? undefined,
+    religion: row.religion ?? undefined,
+    country: row.country ?? undefined,
+    residenceType: row.residenceType ?? undefined,
+    maritalStatus: row.maritalStatus ?? undefined,
+    hasChildren: row.hasChildren ?? undefined,
+    relocationWillingness: row.relocationWillingness ?? undefined,
+    polygynyOpenness: row.polygynyOpenness ?? undefined,
+    verifiedOnly: row.verifiedOnly,
+    updatedAt: row.updatedAt,
   };
 }
 
