@@ -64,7 +64,8 @@ describe("Sprint 28 account lifecycle, privacy controls, and data rights", () =>
   });
 
   it("keeps sensitive account actions text-first, explicitly confirmed, offline-safe, and keyboard-native", () => {
-    expect(page).toContain('role="region"');
+	    expect(page).toContain('role="dialog"');
+	    expect(page).toContain('aria-modal="true"');
     expect(page).toContain('type="checkbox"');
     expect(page).toContain("I understand what will happen and want to continue.");
     expect(page).toContain("actions are not queued");

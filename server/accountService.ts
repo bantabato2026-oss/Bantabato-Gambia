@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, lt, ne } from "drizzle-orm";
-import { memberAccountEvents, memberAccountStates, memberDataRightsRequests, memberPreferences, memberProfiles, memberSecuritySessions, profilePhotos, users } from "../drizzle/schema";
+import { memberAccountEvents, memberAccountStates, memberDataRightsRequests, memberPreferences, memberProfiles, memberSecuritySessions, profilePhotos, subscriptions, users } from "../drizzle/schema";
 import { createAuditLog, getDb, getProfileByUserId, requireFreshMemberAuthentication, synchronizeProfileEligibility } from "./db";
 import { withdrawRecommendationsForProfile } from "./recommendationService";
 import { revokeConnectionsForProfile } from "./readinessService";
@@ -105,11 +105,14 @@ export async function getMemberAccountSummary(userId: number, currentReferenceHa
     db.select({ eventType: memberAccountEvents.eventType, createdAt: memberAccountEvents.createdAt }).from(memberAccountEvents).where(eq(memberAccountEvents.userId, userId)).orderBy(desc(memberAccountEvents.createdAt)).limit(12),
     getMemberSecuritySessions(userId, currentReferenceHash),
   ]);
-  const photoCount = profile ? (await db.select({ id: profilePhotos.id }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profile.id), eq(profilePhotos.photoPurpose, "profile"))).limit(20)).length : 0;
-  const accountState = state[0] ?? null;
-  return {
-    account: { displayName: user[0]?.name ?? null, emailPresent: Boolean(user[0]?.email), lifecycleStatus: accountState?.lifecycleStatus ?? "active", updatedAt: accountState?.updatedAt ?? null, pausedAt: accountState?.pausedAt ?? null, deletionRequestedAt: accountState?.deletionRequestedAt ?? null },
-    profile: profile ? { exists: true, profileStatus: profile.profileStatus, profileVisibility: profile.profileVisibility, photoVisibility: profile.photoVisibility, discoveryVisible: profile.searchVisible, familyVisibility: profile.familyVisibility, locationVisibility: profile.locationVisibility, locationDetailLevel: profile.locationDetailLevel, updatedAt: profile.updatedAt, photoCount } : { exists: false },
+	const photoCount = profile ? (await db.select({ id: profilePhotos.id }).from(profilePhotos).where(and(eq(profilePhotos.profileId, profile.id), eq(profilePhotos.photoPurpose, "profile"))).limit(20)).length : 0;
+	const membershipRecords = profile ? await db.select({ plan: subscriptions.plan, status: subscriptions.status, currentPeriodEndsAt: subscriptions.currentPeriodEndsAt, cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd }).from(subscriptions).where(eq(subscriptions.profileId, profile.id)).orderBy(desc(subscriptions.createdAt)).limit(12) : [];
+	const activeMembership = membershipRecords.find(record => ["trial", "active", "past_due", "grace_period"].includes(record.status)) ?? membershipRecords[0] ?? null;
+	const accountState = state[0] ?? null;
+	return {
+	  account: { displayName: user[0]?.name ?? null, emailPresent: Boolean(user[0]?.email), lifecycleStatus: accountState?.lifecycleStatus ?? "active", updatedAt: accountState?.updatedAt ?? null, pausedAt: accountState?.pausedAt ?? null, deletionRequestedAt: accountState?.deletionRequestedAt ?? null },
+	  membership: activeMembership ? { level: activeMembership.plan, status: activeMembership.status, currentPeriodEndsAt: activeMembership.currentPeriodEndsAt, cancelAtPeriodEnd: activeMembership.cancelAtPeriodEnd } : { level: "free", status: "not_subscribed", currentPeriodEndsAt: null, cancelAtPeriodEnd: false },
+	  profile: profile ? { exists: true, profileStatus: profile.profileStatus, profileVisibility: profile.profileVisibility, photoVisibility: profile.photoVisibility, discoveryVisible: profile.searchVisible, familyVisibility: profile.familyVisibility, locationVisibility: profile.locationVisibility, locationDetailLevel: profile.locationDetailLevel, updatedAt: profile.updatedAt, photoCount } : { exists: false },
     dataReview: { profileStored: Boolean(profile), preferencesStored: Boolean(preferences[0]), profilePhotoRecords: photoCount, profile: "Your matrimonial profile", preferences: "Your matching and visibility preferences", account: "Your account settings and security controls", connections: "Your authorized connection information", familyCircle: "Your member-owned Family Circle information", membership: "Your private membership information", safetyActivity: "Your member-owned safety activity", exclusions: ["other members’ private information", "staff notes", "private safety decisions", "identity documents", "credentials", "internal ranking information"] },
     currentSession: { signedInAt: user[0]?.lastSignedIn ?? null, signInMethod: user[0]?.loginMethod ? "Secure sign-in" : "Secure session", signOutAvailable: true, otherSessionsAvailable: sessions.some(session => session.canRevoke) },
     sessions,

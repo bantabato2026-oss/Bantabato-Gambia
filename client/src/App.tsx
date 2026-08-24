@@ -90,7 +90,8 @@ function Router() {
 		<Route path="/app/international" component={InternationalPage} />
 		<Route path="/app/device" component={DeviceExperiencePage} />
 		<Route path="/app/account" component={AccountCenterPage} />
-    <Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
+		<Route path="/app/privacy" component={AccountCenterPage} />
+	<Route path="/app/profile/:profileId">{params => <MemberProfileDetailPage profileId={Number(params.profileId)} />}</Route>
     <Route path="/app/photos" component={ProfileMediaPage} />
     <Route path="/app/discover" component={CuratedDiscoveryPage} />
 	    <Route path="/app/recommendations" component={RecommendationsPage} />
