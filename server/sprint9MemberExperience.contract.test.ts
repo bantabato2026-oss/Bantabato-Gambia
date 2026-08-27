@@ -43,7 +43,7 @@ describe("Sprint 9 member Command Center and daily experience contracts", () => 
     expect(dashboard).toContain("Review connections");
     expect(dashboard).toContain("unread private message");
     expect(dashboard).toContain("Family Circle invitation or verification item");
-    expect(dashboard).toContain("Conveniences never override safety, privacy, consent, matching, verification, or Family Circle rules.");
+    expect(dashboard).toContain("Core access is currently free; safety, privacy, consent, matching, verification, and Family Circle rules still apply.");
     expect(dashboard).toContain("It never ranks you, scores your activity, or changes any state automatically.");
   });
 

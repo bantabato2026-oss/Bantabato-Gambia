@@ -70,9 +70,9 @@ describe("communication and authenticated experience contracts", () => {
     expect(family).toContain('StateSkeleton label="Loading your Family Circle…"');
     expect(family).toContain('title="Family Circle is unavailable right now."');
     expect(family).toContain("familyStatusExplanation");
-	    expect(billing).toContain('StateSkeleton label="Loading available membership terms…"');
-	    expect(billing).toContain("Payment not configured");
-	    expect(billing).toContain("Checkout unavailable");
-	    expect(billing).toContain("No transaction, charge, refund, or Premium entitlement was created.");
+	    expect(billing).toContain('StateSkeleton label="Checking access status…"');
+	    expect(billing).toContain("Billing is dormant for now.");
+	    expect(billing).toContain("No payment provider is active");
+	    expect(billing).toContain("No payment, subscription, checkout, or account state was changed.");
   });
 });

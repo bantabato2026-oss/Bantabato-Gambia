@@ -54,7 +54,7 @@ describe("Sprint 33 — member activation, profile completion & first-discovery 
     expect(eligibility).toContain("discoveryEligible: false");
     expect(eligibility).toContain("profileStatus === \"paused\"");
     expect(connection).toContain("An interest request does not create a conversation.");
-    expect(dashboard).toContain("Premium conveniences");
+    expect(dashboard).toContain("Bantabato Free Launch");
     expect(account).toContain("Family Circle never gets access to messages");
   });
 

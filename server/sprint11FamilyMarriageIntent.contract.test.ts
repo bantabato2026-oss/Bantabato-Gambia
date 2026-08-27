@@ -67,6 +67,6 @@ describe("Sprint 11 Family Circle, Wali, and marriage-intent contracts", () => {
     expect(family).toContain("Family Circle feedback. It is advisory and does not change your match or communication access.");
     expect(family).not.toContain("ranking");
     expect(policy).toContain("canPublishSuccessDeclaration(): false");
-    expect(dashboard).toContain("Conveniences never override safety, privacy, consent, matching, verification, or Family Circle rules.");
+    expect(dashboard).toContain("Core access is currently free; safety, privacy, consent, matching, verification, and Family Circle rules still apply.");
   });
 });

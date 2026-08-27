@@ -615,8 +615,8 @@ export async function respondToInterest(recipientProfileId: number, interestId: 
       matchId = Number(result[0].insertId) || undefined;
     } catch (error) {
       const concurrent = (await db.select().from(matches).where(and(eq(matches.memberOneProfileId, pair.memberOneProfileId), eq(matches.memberTwoProfileId, pair.memberTwoProfileId), eq(matches.status, "active"))).limit(1))[0];
-      if (!concurrent) throw error;
-      matchId = concurrent.id;
+      if (!concurrent?.id) throw error;
+      matchId = Number(concurrent.id);
     }
   }
   if (!matchId) throw new Error("Unable to establish a match");

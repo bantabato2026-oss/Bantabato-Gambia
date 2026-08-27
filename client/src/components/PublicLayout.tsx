@@ -22,7 +22,7 @@ const publicMetadata: Record<string, { title: string; description: string }> = {
   "/family-circle": { title: "Family Circle and Wali — Bantabato", description: "Understand Bantabato’s optional, member-controlled Family Circle and Wali/Guardian privacy boundaries." },
   "/safety": { title: "Safety, privacy and verification — Bantabato", description: "Explore manual identity review, privacy choices, mutual communication, reporting, blocking, and Bantabato’s safety limits." },
   "/privacy": { title: "Privacy choices — Bantabato", description: "See how Bantabato keeps profile choices, private documents, media, communication, and Family Circle permissions appropriately separated." },
-  "/membership": { title: "Membership — Bantabato", description: "Review current effective Bantabato membership terms, available currencies, and provider-neutral checkout availability." },
+  "/membership": { title: "Free Launch membership — Bantabato", description: "Bantabato is currently free during its initial launch period. Core access remains governed by privacy, eligibility, verification, consent, and safety rules." },
   "/stories": { title: "Member stories — Bantabato", description: "Read only voluntary, independently reviewed, currently published Bantabato member stories." },
   "/faq": { title: "Bantabato FAQ — Clear answers before you begin", description: "Find factual answers about membership, photos, privacy, verification, Family Circle, communication, safety, and account controls." },
   "/contact": { title: "Support and contact — Bantabato", description: "Find Bantabato’s public guidance for general questions, secure account support, privacy, and safety concerns." },

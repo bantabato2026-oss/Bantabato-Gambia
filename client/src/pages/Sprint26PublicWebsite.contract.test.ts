@@ -36,11 +36,11 @@ describe("Sprint 26 complete public website and conversion experience", () => {
     expect(pages).toContain("No email, ticket, form submission, external support message, or provider delivery is initiated from this page.");
   });
 
-  it("keeps public trust, Family Circle, privacy, and premium messages bounded", () => {
+  it("keeps public trust, Family Circle, privacy, and Free Launch messages bounded", () => {
     expect(pages).toContain("It is not a safety guarantee");
     expect(pages).toContain("Family Circle never grants automatic access to private conversations, voice notes, identity documents");
     expect(pages).toContain("Private identity documents, private media, messages, voice, safety records, payment details");
-    expect(pages).toContain("Premium cannot override a block, report, Trust & Safety restriction");
+    expect(pages).toContain("Free access never buys a match, visibility, approval, or exemption.");
     expect(pages).not.toContain("pay-to-win");
   });
 

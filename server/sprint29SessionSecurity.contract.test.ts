@@ -53,7 +53,7 @@ describe("Sprint 29 — session security, data rights & account control", () => 
     expect(page).toContain("Sensitive actions may need a recent sign-in");
     expect(page).toContain("Offline requests are not queued");
     expect(page).toContain("Family Circle never gets access to messages, documents, safety records, account controls, or call consent");
-    expect(page).toContain("There is no score or Premium bypass");
+    expect(page).toContain("There is no score or paid shortcut");
     expect(policy).toContain("memberSecurityIsPremiumNeutral");
   });
 });

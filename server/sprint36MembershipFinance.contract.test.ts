@@ -16,11 +16,12 @@ describe("Sprint 36 — membership, checkout & finance lifecycle", () => {
     expect(billing).toContain("planVersion: version?.versionCode ?? null");
   });
 
-	it("keeps GMD, XOF, and USD as separate explicit catalog presentations without conversion", () => {
-		const page = read("client/src/pages/BillingPage.tsx");
-		expect(page).toContain('["GMD", "XOF", "USD"]');
-		expect(page).toContain("does not invent exchange rates or perform automatic conversion");
-	});
+	it("presents Free Launch access without member-facing currency or plan selection", () => {
+			const page = read("client/src/pages/BillingPage.tsx");
+			expect(page).toContain("Free Launch access");
+			expect(page).toContain("No payment provider is active");
+			expect(page).not.toContain('["GMD", "XOF", "USD"]');
+		});
 
   it("does not create checkout state when payment is unavailable and protects paused or suspended accounts", () => {
     const billing = read("server/billingService.ts");
@@ -29,7 +30,8 @@ describe("Sprint 36 — membership, checkout & finance lifecycle", () => {
 		expect(router).toContain("No transaction or membership change was created.");
     expect(billing).toContain("checkoutState === \"payment_not_configured\" || checkoutState === \"checkout_unavailable\"");
     expect(billing).toContain("return { transaction: null, redirectUrl: undefined, providerAvailable: false");
-    expect(billing).toContain("No charge, transaction, or Premium entitlement was created.");
+    expect(billing).toContain("if (isFreeLaunch()) throw new Error(FREE_LAUNCH_CHECKOUT_NOTICE);");
+    expect(billing).toContain("if (isFreeLaunch()) return false;");
   });
 
   it("requires authoritative confirmation for activation and preserves terminal payment outcomes", () => {
@@ -53,15 +55,14 @@ describe("Sprint 36 — membership, checkout & finance lifecycle", () => {
     expect(billing).toContain("It never changes payment, subscription, refund, or entitlement state.");
   });
 
-  it("keeps finance records private, provider-neutral, accessible, offline-safe, and Premium-neutral in the member interface", () => {
+  it("keeps finance records private, provider-neutral, accessible, offline-safe, and Free Launch-neutral in the member interface", () => {
     const page = read("client/src/pages/BillingPage.tsx");
     const router = read("server/routers.ts");
-    expect(page).toContain("Billing data is not cached for offline access");
-    expect(page).toContain("pending={requestRefund.isPending || network !== \"online\"}");
-    expect(page).toContain("expectedUpdatedAt: current.updatedAt ?? undefined");
-    expect(page).toContain("Premium cannot override protections.");
-    expect(page).toContain("This boundary never generates a provider receipt, invoice number, or tax claim.");
-    expect(page).toContain("aria-live=\"polite\"");
+    expect(page).toContain("No billing action is available or queued");
+    expect(page).toContain("Free access does not mean unverified or unrestricted.");
+    expect(page).toContain("No invoice, renewal date, charge, receipt, or paid-subscription action is presented here.");
+    expect(page).toContain("role=\"status\"");
+    expect(page).not.toContain("Premium cannot override protections.");
     expect(router).toContain("expectedUpdatedAt: z.date().optional()");
     expect(router).toContain("requestMemberRefund((await requireProfile(ctx.user.id)).id");
   });

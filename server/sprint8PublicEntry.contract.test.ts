@@ -79,8 +79,9 @@ describe("Sprint 8 public website and onboarding contracts", () => {
     expect(publicLayout).toContain("Stories");
     expect(publicLayout).toContain("applyPublicMetadata(location)");
     expect(publicLayout).toContain('link[rel="canonical"]');
-    expect(publicPages).toContain("catalog.refetch()");
-    expect(publicPages).toContain("No active, currently effective Premium plan is available");
+    expect(publicPages).toContain("Bantabato is currently free during our initial launch period");
+    expect(publicPages).toContain("No payment provider is active, no checkout is available");
+    expect(publicPages).not.toContain("catalog.refetch()");
     expect(motion).toContain('audience?: "member" | "public"');
     expect(motion).toContain("Preparing Bantabato…");
     expect(indexHtml).toContain('meta property="og:title"');

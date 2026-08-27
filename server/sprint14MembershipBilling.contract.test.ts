@@ -26,10 +26,11 @@ describe("Sprint 14 membership, checkout, finance, and provider-neutral contract
     expect(billing).toContain("getMemberReceipt(profileId: number, transactionId: number)");
     expect(billing).toContain("eq(paymentTransactions.profileId, profileId)");
     expect(billing).toContain("not a tax invoice or a provider-issued receipt");
-    expect(page).toContain("Internal payment record");
-    expect(page).toContain("No invoice number or tax claim is generated");
-    expect(page).toContain("under review");
-    expect(page).toContain("approved / awaiting provider");
+    expect(page).toContain("Free Launch access");
+    expect(page).toContain("Billing is dormant for now.");
+    expect(page).toContain("No invoice, renewal date, charge, receipt, or paid-subscription action is presented here.");
+    expect(page).not.toContain("Internal payment record");
+    expect(page).not.toContain("approved / awaiting provider");
     expect(page).not.toContain("cardNumber");
     expect(page).not.toContain("providerSecret");
   });
@@ -37,14 +38,12 @@ describe("Sprint 14 membership, checkout, finance, and provider-neutral contract
   it("renders truthful membership, checkout, currency, offline, low-bandwidth, accessibility, and profile-prerequisite recovery states", () => {
     const page = read("client/src/pages/BillingPage.tsx");
     expect(page).toContain("profile.mine.useQuery");
-    expect(page).toContain("Start your profile before reviewing private billing");
-    expect(page).toContain("You appear to be offline");
-    expect(page).toContain("low-bandwidth mode is active");
-    expect(page).toContain('["GMD", "XOF", "USD"]');
-    expect(page).toContain("Effective version");
-    expect(page).toContain("Checkout pending");
-    expect(page).toContain("aria-live=\"polite\"");
-    expect(page).toContain("Retry current checkout safely");
+    expect(page).toContain("Start your profile first.");
+    expect(page).toContain("You are offline.");
+    expect(page).toContain("Free Launch access");
+    expect(page).toContain("Checkout:</strong> Unavailable during Free Launch");
+    expect(page).toContain("role=\"status\"");
+    expect(page).not.toContain("Retry current checkout safely");
   });
 
   it("preserves premium neutrality, scoped finance boundaries, reconciliation review, and factual finance workload without revenue analytics", () => {

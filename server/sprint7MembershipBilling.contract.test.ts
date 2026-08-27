@@ -20,8 +20,9 @@ describe("Sprint 7 membership and billing contracts", () => {
 	    expect(billing).toContain('currentPrices.filter(price => price.membershipPlanVersionId === version.id)');
     expect(billing).toContain('export async function listPublicMembershipCatalog');
     expect(router).toContain('membershipCatalog: publicProcedure');
-    expect(publicPages).toContain('trpc.publicContent.membershipCatalog.useQuery');
-    expect(publicPages).toContain('The public page never begins checkout, collects payment data');
+    expect(publicPages).toContain('Bantabato is currently free during our initial launch period');
+    expect(publicPages).toContain('No payment provider is active, no checkout is available');
+    expect(publicPages).not.toContain('trpc.publicContent.membershipCatalog.useQuery');
     expect(publicPages).not.toContain('providerSecret');
   });
 
@@ -31,9 +32,9 @@ describe("Sprint 7 membership and billing contracts", () => {
     expect(billing).toContain('if (checkoutState === "payment_not_configured" || checkoutState === "checkout_unavailable")');
     expect(billing).toContain('transaction: null');
     expect(billing).toContain('billing.checkout_unavailable');
-    expect(billingPage).toContain('No transaction, charge, refund, or Premium entitlement was created.');
-    expect(billingPage).toContain('Payment not configured');
-    expect(billingPage).toContain('Checkout unavailable');
+    expect(billingPage).toContain('No payment, subscription, checkout, or account state was changed.');
+    expect(billingPage).toContain('Checkout:</strong> Unavailable during Free Launch');
+    expect(billingPage).toContain('Billing is dormant for now.');
     expect(adminBilling).toContain('Metadata and environment only.');
     expect(adminBilling).toContain('No adapter or credential was connected.');
   });
@@ -54,8 +55,8 @@ describe("Sprint 7 membership and billing contracts", () => {
     expect(billing).toContain('billing-renewal-cancelled:${subscriptionId}');
     expect(billing).toContain('billing-expired:${subscription.id}');
     expect(billing).toContain('handleBillingAccountClosure');
-    expect(billingPage).toContain('Membership never changes Parent or Wali/Guardian permissions');
-    expect(billingPage).toContain('Factual status, no invented money movement.');
+    expect(billingPage).toContain('Core access never removes the rules that keep members safe and respected.');
+    expect(billingPage).toContain('No invoice, renewal date, charge, receipt, or paid-subscription action is presented here.');
     expect(policy).toContain('family_circle');
     expect(policy).toContain('connection_readiness');
   });
@@ -75,10 +76,10 @@ describe("Sprint 7 membership and billing contracts", () => {
 
   it("retains premium neutrality, privacy, accessible recovery copy, and scoped finance authorization", () => {
     expect(policy).toContain('PREMIUM_NEUTRAL_BOUNDARIES');
-    expect(billingPage).toContain('Premium cannot override protections.');
-    expect(billingPage).toContain('Payment credentials, provider secrets, and financial history are never public or visible to other members or Family Circle participants.');
-    expect(billingPage).toContain('No membership, plan, transaction, refund, or checkout state has been changed. Please try again.');
-    expect(publicPages).toContain('Membership never changes who gets to decide.');
+    expect(billingPage).toContain('Free access does not mean unverified or unrestricted.');
+    expect(billingPage).toContain('No payment provider is active');
+    expect(billingPage).not.toContain('Premium cannot override protections.');
+    expect(publicPages).toContain('Free access never buys a match, visibility, approval, or exemption.');
     expect(adminBilling).toContain('Finance access cannot change matching, compatibility, verification, safety, blocks, privacy, Family Circle, consent');
     expect(adminBilling).toContain('Scoped finance operations');
   });

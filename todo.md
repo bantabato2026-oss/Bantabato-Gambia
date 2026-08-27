@@ -449,3 +449,9 @@
 
 - [ ] Access the provided private GitHub repository and safely synchronize the checkpointed Bantabato source tree.
 - [ ] Verify the persistence workflow is present remotely and report the repository access result.
+
+- [x] Free Launch: audit billing, entitlement, member navigation, account, landing-page, pricing, and subscription-notification surfaces.
+- [x] Free Launch: add an explicit provider-neutral FREE_LAUNCH mode with server-side commercial and entitlement guards.
+- [x] Free Launch: remove member-facing checkout and upgrade flows while preserving dormant billing architecture and truthful free-access copy.
+- [x] Free Launch: add regression coverage for free core access, Premium neutrality, safety/eligibility/verification/privacy/consent gates, dormant billing, and notification behavior.
+- [x] Free Launch: run full validation, review relevant routes, and save a checkpoint.

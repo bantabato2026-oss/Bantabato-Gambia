@@ -33,7 +33,7 @@ describe("authenticated experience state contracts", () => {
     expect(memberPages).toContain('title="Your start is unavailable right now."');
     expect(memberPages).toContain('title="Your notification center is unavailable right now."');
     expect(memberPages).toContain("notifications.refetch(); preferenceQuery.refetch();");
-    expect(billingPage).toContain('title="Your billing information is unavailable right now."');
+    expect(billingPage).toContain('title="Membership status is unavailable right now."');
     expect(safetyPage).toContain('title="Your Safety Center is unavailable right now."');
   });
 });

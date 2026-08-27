@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type Collection = "recommended" | "new" | "recently_updated" | "verified" | "potentially_compatible";
 type FilterDraft = { query: string; minAge: string; maxAge: string; gender: string; religion: string; country: string; residenceType: string; maritalStatus: string; verifiedOnly: boolean };
 const collections: { value: Collection; label: string; description: string }[] = [
-  { value: "recommended", label: "Recommended for you", description: "A considered starting point based on your stated preferences. It does not use popularity, activity, attractiveness, or Premium ranking." },
+  { value: "recommended", label: "Recommended for you", description: "A considered starting point based on your stated preferences. It does not use popularity, activity, attractiveness, or paid ranking." },
   { value: "potentially_compatible", label: "Potentially compatible", description: "Profiles with clear, explainable areas of alignment under current policy." },
   { value: "verified", label: "Identity reviewed", description: "Profiles with an approved identity-document review. This is not a safety guarantee or compatibility signal." },
   { value: "new", label: "New members", description: "Recently established eligible profiles, shown without popularity ranking." },

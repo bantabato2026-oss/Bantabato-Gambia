@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getDb: vi.fn(), createAuditLog: vi.fn(), createNotification: vi.fn() }));
 vi.mock("./db", () => ({ getDb: mocks.getDb, createAuditLog: mocks.createAuditLog, createNotification: mocks.createNotification }));
@@ -25,7 +25,13 @@ const version = { id: 2, membershipPlanId: 1, versionCode: "premium-monthly-v1",
 const price = { id: 3, membershipPlanVersionId: 2, currency: "GMD", amountMinor: 15000, taxMinor: 0, billingInterval: "monthly", status: "active", provider: "paystack" };
 
 describe("Phase 8 billing service flows", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.BANTABATO_COMMERCIAL_MODE = "FUTURE_PAID";
+  });
+  afterAll(() => {
+    delete process.env.BANTABATO_COMMERCIAL_MODE;
+  });
 
   it("returns a truthful unavailable checkout state without creating a transaction or Premium entitlement when no provider boundary is configured", async () => {
     const fake = fakeDb([[], [price], [version], [plan], []]);

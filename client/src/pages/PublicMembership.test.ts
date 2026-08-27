@@ -8,11 +8,12 @@ describe("public membership experience", () => {
     const routes = readFileSync(join(process.cwd(), "client/src/App.tsx"), "utf8");
 
     expect(routes).toContain('path="/membership"');
-    expect(pages).toContain("Bantabato Free");
-    expect(pages).toContain("Bantabato Premium");
-	    expect(pages).toContain("trpc.publicContent.membershipCatalog.useQuery");
-	    expect(pages).toContain("The public page never begins checkout, collects payment data");
-	    expect(pages).toContain("No active, currently effective Premium plan is available for this currency.");
+    expect(pages).toContain("Free during initial launch");
+    expect(pages).toContain("Core access does not require a subscription");
+    expect(pages).toContain("Billing is dormant for now.");
+    expect(pages).toContain("Checkout:</strong> Unavailable during Free Launch");
+    expect(pages).not.toContain("Bantabato Premium");
+    expect(pages).not.toContain("trpc.publicContent.membershipCatalog.useQuery");
     expect(pages).not.toContain("Payment successful");
   });
 });

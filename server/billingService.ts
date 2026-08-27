@@ -4,6 +4,7 @@ import { memberBillingSettings, memberProfiles, membershipPlans, membershipPlanV
 import { createAuditLog, createNotification, getDb } from "./db";
 import { assertPaymentTransition, entitlementIsActive, normalizeCurrency, safeBillingSummary, safePaymentFailureMessage, subscriptionStatusAfterPaymentFailure, type EntitlementKey, type PaymentStatus, type SubscriptionStatus } from "./domain/paymentPolicy";
 import { getPaymentProvider, payloadHash, requireConfiguredProvider } from "./paymentProvider";
+import { FREE_LAUNCH_CHECKOUT_NOTICE, assertCommercialMutationAllowed, isFreeLaunch } from "./commercialMode";
 
 export const PAYMENT_PROVIDERS = ["paystack", "flutterwave"] as const;
 export type PaymentProviderKey = (typeof PAYMENT_PROVIDERS)[number] | string;
@@ -86,11 +87,12 @@ async function membershipCatalog(currency: string, publicOnly: boolean) {
 }
 
 export async function listMembershipOptions(currency = "GMD") {
-	return membershipCatalog(currency, false);
+  if (isFreeLaunch()) return [];
+  return membershipCatalog(currency, false);
 }
 
 /** Public catalog exposes only commercial terms and truthful availability labels, never provider credentials, secret configuration, or member financial data. */
-export async function listPublicMembershipCatalog(currency = "GMD") { return membershipCatalog(currency, true); }
+export async function listPublicMembershipCatalog(currency = "GMD") { return isFreeLaunch() ? [] : membershipCatalog(currency, true); }
 
 export async function getMemberBilling(profileId: number) {
   const db = await getDb();
@@ -150,6 +152,7 @@ export async function saveMemberBillingSettings(profileId: number, actorUserId: 
 
 /** Creates only a server-side pending transaction. No entitlement exists until a provider result is independently verified. */
 export async function initiatePayment(profileId: number, actorUserId: number, input: { membershipPriceId: number; provider: PaymentProviderKey; idempotencyKey: string; acknowledgedTerms: boolean; returnUrl?: string }) {
+  if (isFreeLaunch()) throw new Error(FREE_LAUNCH_CHECKOUT_NOTICE);
 	if (!input.acknowledgedTerms) throw new Error("Please confirm the plan, price, renewal, and cancellation terms before continuing.");
 	const db = await getDb();
 	if (!db) throw new Error("Billing is temporarily unavailable.");
@@ -269,6 +272,7 @@ export async function processProviderWebhook(input: { provider: string; rawPaylo
 }
 
 export async function hasEntitlement(profileId: number, entitlementKey: EntitlementKey, now = new Date()) {
+  if (isFreeLaunch()) return false;
   const db = await getDb();
   if (!db) return false;
   const rows = await db.select({ entitlementStatus: subscriptionEntitlements.status, startsAt: subscriptionEntitlements.startsAt, endsAt: subscriptionEntitlements.endsAt, subscriptionStatus: subscriptions.status, graceEntitlementsActive: membershipPlanVersions.graceEntitlementsActive }).from(subscriptionEntitlements).innerJoin(subscriptions, eq(subscriptionEntitlements.subscriptionId, subscriptions.id)).innerJoin(membershipPlanVersions, eq(subscriptions.membershipPlanVersionId, membershipPlanVersions.id)).where(and(eq(subscriptions.profileId, profileId), eq(subscriptionEntitlements.entitlementKey, entitlementKey)));
@@ -276,6 +280,7 @@ export async function hasEntitlement(profileId: number, entitlementKey: Entitlem
 }
 
 export async function cancelSubscriptionRenewal(profileId: number, actorUserId: number, subscriptionId: number, expectedUpdatedAt?: Date) {
+  assertCommercialMutationAllowed("Renewal cancellation");
   const db = await getDb();
   if (!db) throw new Error("Billing is temporarily unavailable.");
 
