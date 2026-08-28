@@ -433,22 +433,22 @@
 - [x] Sprint 48: add injected authority-level persistence scenarios for protected operations, privacy projections, state propagation, and Premium neutrality.
 - [x] Sprint 48: add normalized in-memory versus database comparison artifacts with truthful PASS, FAIL, or SKIPPED status.
 - [x] Sprint 48: add meaningful concurrency, stale-version, rollback, cross-session, and cleanup coverage and run available validation.
-- [ ] Sprint 48: save a checkpoint and report whether disposable CI execution actually occurred.
+- [x] Sprint 48: save a checkpoint and report whether disposable CI execution actually occurred.
 
 - [x] Sprint 48 delivered subset: route actual messaging and member-support authorities through the isolated database client with deterministic A–B/A–J fixtures.
 - [x] Sprint 48 delivered subset: add non-sensitive in-memory versus database state normalization and comparison artifact generation.
 - [x] Sprint 48 delivered subset: add persistence failure-diagnostics artifact generation and validate fail-closed requested execution locally.
 - [x] Sprint 48 delivered subset: run full local validation; 500 tests passed and 1 persistence test intentionally skipped without an isolated datastore.
-- [ ] Sprint 48 remaining: extend persistence scenarios to safety, Family Circle, connections, readiness, notifications, concurrency, stale versions, rollback, privacy, and Premium neutrality.
-- [ ] Sprint 48 remaining: execute the disposable MySQL CI workflow and verify generated PASS comparison artifacts in CI.
+- [x] Sprint 48 remaining: extend persistence scenarios to safety, Family Circle, connections, readiness, notifications, concurrency, stale versions, rollback, privacy, and Premium neutrality.
+- [x] Sprint 48 remaining: execute the disposable MySQL CI workflow and verify generated PASS comparison artifacts in CI.
 
-- [ ] Enable the user-approved GitHub integration and verify the disposable persistence workflow and uploaded comparison artifact.
+- [x] Enable the user-approved GitHub integration and verify the disposable persistence workflow and uploaded comparison artifact.
 
-- [ ] Create a private GitHub repository for Bantabato and push the current project checkpoint without exposing secrets or generated artifacts.
-- [ ] Verify the private repository contains the workflow and current source tree, then report its URL.
+- [x] Create and synchronize the user-created GitHub repository for Bantabato without exposing secrets or generated artifacts; repository visibility remained user-selected.
+- [x] Verify the user-created repository contains the workflow and current source tree, then report its URL; repository visibility remained user-selected.
 
-- [ ] Access the provided private GitHub repository and safely synchronize the checkpointed Bantabato source tree.
-- [ ] Verify the persistence workflow is present remotely and report the repository access result.
+- [x] Access the provided GitHub repository and safely synchronize the checkpointed Bantabato source tree; repository visibility remained user-selected.
+- [x] Verify the persistence workflow is present remotely and report the repository access result.
 
 - [x] Free Launch: audit billing, entitlement, member navigation, account, landing-page, pricing, and subscription-notification surfaces.
 - [x] Free Launch: add an explicit provider-neutral FREE_LAUNCH mode with server-side commercial and entitlement guards.
@@ -456,4 +456,4 @@
 - [x] Free Launch: add regression coverage for free core access, Premium neutrality, safety/eligibility/verification/privacy/consent gates, dormant billing, and notification behavior.
 - [x] Free Launch: run full validation, review relevant routes, and save a checkpoint.
 
-- [ ] Fix the GitHub persistence workflow’s duplicate pnpm version declaration, then rerun CI and verify result artifacts.
+- [x] Fix the GitHub persistence workflow’s duplicate pnpm version declaration, then rerun CI and verify result artifacts.
