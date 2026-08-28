@@ -455,3 +455,5 @@
 - [x] Free Launch: remove member-facing checkout and upgrade flows while preserving dormant billing architecture and truthful free-access copy.
 - [x] Free Launch: add regression coverage for free core access, Premium neutrality, safety/eligibility/verification/privacy/consent gates, dormant billing, and notification behavior.
 - [x] Free Launch: run full validation, review relevant routes, and save a checkpoint.
+
+- [ ] Fix the GitHub persistence workflow’s duplicate pnpm version declaration, then rerun CI and verify result artifacts.
