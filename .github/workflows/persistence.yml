@@ -41,10 +41,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Apply committed schema migrations to test database
+      - name: Apply committed Drizzle schema to disposable test database
         env:
           DATABASE_URL: mysql://root:testpassword@127.0.0.1:3306/bantabato_test
-        run: pnpm exec drizzle-kit migrate
+        run: pnpm exec drizzle-kit push --force
       - name: Run persistence authority suite
         run: env -u DATABASE_URL pnpm test:persistence
       - name: Upload persistence result artifacts
