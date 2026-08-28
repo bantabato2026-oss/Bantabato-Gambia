@@ -457,3 +457,9 @@
 - [x] Free Launch: run full validation, review relevant routes, and save a checkpoint.
 
 - [x] Fix the GitHub persistence workflow’s duplicate pnpm version declaration, then rerun CI and verify result artifacts.
+
+- [x] Sprint 50: extend fictional A–J fixtures and non-sensitive projection comparison helpers for member, Family Circle, safety, support, finance, and operations boundaries.
+- [x] Sprint 50: add actual member privacy, private declaration, document, photo, messaging, relationship, readiness, and notification isolation scenarios.
+- [x] Sprint 50: add actual staff support/safety/finance/operations minimum-necessary, four-eyes, stale-action, session-revocation, and privilege-isolation scenarios.
+- [ ] Sprint 50: preserve fail-closed manual disposable CI and add secret-free PASS/FAIL/SKIPPED reporting for privacy comparisons.
+- [ ] Sprint 50: run local and disposable CI validation, review safety evidence, and save a checkpoint.
