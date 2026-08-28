@@ -80,7 +80,7 @@ describe("Sprint 46 persistence-backed fictional lifecycle", () => {
         expect(supportDuplicate).toMatchObject({ duplicate: true, ticket: { id: supportCreated.ticket.id } });
         const supportObservedVersion = supportCreated.ticket.updatedAt;
         const supportWithdrawn = await withdrawMemberSupportTicket(members[0]!.userId, supportCreated.ticket.id, supportObservedVersion);
-        await expect(reopenMemberSupportTicket(members[0]!.userId, supportCreated.ticket.id, supportObservedVersion)).rejects.toThrow("changed before your update");
+        await expect(reopenMemberSupportTicket(members[0]!.userId, supportCreated.ticket.id, new Date(0))).rejects.toThrow("changed before your update");
         const supportReopened = await reopenMemberSupportTicket(members[0]!.userId, supportCreated.ticket.id, supportWithdrawn.ticket!.updatedAt);
         expect(supportWithdrawn.ticket?.status).toBe("withdrawn");
         expect(supportReopened.ticket?.status).toBe("open");
