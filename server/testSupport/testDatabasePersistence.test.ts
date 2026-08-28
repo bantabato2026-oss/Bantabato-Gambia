@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { memberProfiles, notifications, users } from "../../drizzle/schema";
 import { blockProfile, getMemberEligibility, getProfileByUserId, getUserByOpenId, listBlockedProfiles } from "../db";
 import { listMessages, sendText } from "../messagingService";
@@ -96,11 +96,12 @@ describe("Sprint 46 persistence-backed fictional lifecycle", () => {
         }
       });
 
+      const rollbackProbeOpenId = "bantabato-test-rollback-probe";
       await expect(withIsolatedRollback(handle, async () => {
-        await seedFictionalMembers(handle);
+        await handle.db.insert(users).values({ openId: rollbackProbeOpenId, name: "Rollback Probe", email: "rollback-probe@example.test", loginMethod: "test-harness" });
         throw new Error("controlled rollback probe");
       })).rejects.toThrow("controlled rollback probe");
-      const remaining = await handle.db.select({ id: users.id }).from(users).where(inArray(users.openId, ["bantabato-test-A", "bantabato-test-B", "bantabato-test-C", "bantabato-test-D", "bantabato-test-E", "bantabato-test-F", "bantabato-test-G", "bantabato-test-H", "bantabato-test-I", "bantabato-test-J"]));
+      const remaining = await handle.db.select({ id: users.id }).from(users).where(eq(users.openId, rollbackProbeOpenId));
       expect(remaining).toHaveLength(0);
     } finally {
       await closeIsolatedTestDatabase(handle);
