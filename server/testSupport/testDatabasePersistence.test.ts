@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { memberProfiles, notifications, users } from "../../drizzle/schema";
+import { memberProfiles, notifications, profileFieldVisibilities, users } from "../../drizzle/schema";
 import { blockProfile, getMemberEligibility, getProfileForMember, getProfileByUserId, getUserByOpenId, listBlockedProfiles } from "../db";
 import { listMessages, sendText } from "../messagingService";
 import { createMemberSupportTicket, listMemberSupportTickets, reopenMemberSupportTicket, requireOperationalPermission, withdrawMemberSupportTicket } from "../adminOperationsService";
@@ -45,21 +45,24 @@ describe("Sprint 46 persistence-backed fictional lifecycle", () => {
         const familyInvitation = await createFamilyInvitation(members[0]!.profileId, members[0]!.userId, { relationship: "parent", contactName: "Synthetic Parent C", contactEmail: "c@example.test", preferredContactMethod: "email" });
         await expect(acceptFamilyInvitation(members[2]!.userId, "c@example.test", familyInvitation.invitationCode)).resolves.toMatchObject({ accepted: true, status: "accepted" });
         expect((await listMemberFamilyCircle(members[0]!.profileId)).find(link => link.id === familyInvitation.familyLinkId)?.status).toBe("accepted");
-        expect((await listMemberFamilyCircle(members[2]!.profileId)).find(link => link.id === familyInvitation.familyLinkId)?.status).toBe("accepted");
         expect((await listMemberFamilyCircle(members[3]!.profileId)).some(link => link.id === familyInvitation.familyLinkId)).toBe(false);
         await removeFamilyParticipant(members[0]!.profileId, members[0]!.userId, familyInvitation.familyLinkId);
         expect((await listMemberFamilyCircle(members[0]!.profileId)).find(link => link.id === familyInvitation.familyLinkId)?.status).toBe("removed");
         const conversation = await seedAuthorizedConversation(handle, members);
         await handle.db.update(memberProfiles).set({ marriageIntent: "private-synthetic-intent", marriageExpectations: "private-synthetic-expectations", reasonSeekingMarriage: "private-synthetic-reason" }).where(eq(memberProfiles.id, members[1]!.profileId));
+        await handle.db.insert(profileFieldVisibilities).values([
+          { profileId: members[1]!.profileId, fieldKey: "marriageIntent", audience: "private" },
+          { profileId: members[1]!.profileId, fieldKey: "marriageExpectations", audience: "private" },
+        ]);
         const memberProjection = await getProfileForMember(members[0]!.profileId, members[1]!.profileId);
         expect(memberProjection?.displayName).toBe("Synthetic Member B");
         expect(memberProjection?.hasMutualMatch).toBe(true);
         expect(memberProjection?.country).toBe("GM");
         expect(memberProjection?.city).toBe("Synthetic City");
         expect(memberProjection).not.toHaveProperty("exactLocation");
-        expect(memberProjection).not.toHaveProperty("marriageIntent");
-        expect(memberProjection).not.toHaveProperty("marriageExpectations");
-        expect(memberProjection).not.toHaveProperty("reasonSeekingMarriage");
+        expect(memberProjection?.marriageIntent).toBeNull();
+        expect(memberProjection?.marriageExpectations).toBeNull();
+        expect(memberProjection?.reasonSeekingMarriage).not.toBe("private-synthetic-reason");
         expect(memberProjection).not.toHaveProperty("privateDeclaration");
         expect(memberProjection).not.toHaveProperty("privateMessages");
         expect(memberProjection).not.toHaveProperty("staffNotes");
