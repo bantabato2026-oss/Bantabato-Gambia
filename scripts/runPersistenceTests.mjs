@@ -39,7 +39,7 @@ try {
 }
 
 await mkdir(outputFile.substring(0, outputFile.lastIndexOf("/")) || ".", { recursive: true });
-const child = spawn("pnpm", ["exec", "vitest", "run", "server/testSupport/testDatabasePersistence.test.ts", "server/testSupport/testDatabaseStaffPersistence.test.ts", "--reporter=json", `--outputFile=${outputFile}`], { stdio: "inherit", env: process.env });
+const child = spawn("pnpm", ["exec", "vitest", "run", "server/testSupport/testDatabasePersistence.test.ts", "server/testSupport/testDatabaseStaffPersistence.test.ts", "--no-file-parallelism", "--reporter=json", `--outputFile=${outputFile}`], { stdio: "inherit", env: process.env });
 child.on("exit", async code => {
   try {
     const raw = JSON.parse(await readFile(outputFile, "utf8"));

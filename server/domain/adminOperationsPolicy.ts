@@ -50,11 +50,11 @@ const allPermissions = PERMISSION_CATALOG.map(([key]) => key) as PermissionKey[]
 export const DEFAULT_ROLE_PERMISSIONS: Record<StaffRole, readonly PermissionKey[]> = {
   platform_administrator: allPermissions,
   operations_manager: ["members.view", "members.search", "members.support", "verification.view", "safety.cases.view", "finance.transactions.view", "subscriptions.view", "notifications.view", "notifications.manage", "recommendations.policy.view", "settings.view", "audit.view", "staff.view", "support.view", "support.manage", "incidents.view", "incidents.manage", "approvals.view", "beta.view", "beta.manage"],
-  trust_safety_officer: ["members.view", "members.search", "safety.cases.view", "safety.cases.update", "safety.cases.escalate", "safety.actions.create", "safety.actions.approve", "audit.view", "incidents.view", "approvals.view"],
+  trust_safety_officer: ["members.view", "members.search", "safety.cases.view", "safety.cases.update", "safety.cases.escalate", "safety.actions.create", "safety.actions.approve", "audit.view", "incidents.view", "approvals.view", "approvals.decide"],
   verification_officer: ["members.view", "members.search", "verification.view", "verification.review", "verification.approve", "verification.reject", "photos.review", "audit.view"],
   customer_support_officer: ["members.view", "members.search", "members.support", "support.view", "support.manage"],
-  finance_officer: ["members.view", "finance.transactions.view", "finance.refunds.create", "finance.refunds.approve", "subscriptions.view", "subscriptions.manage", "audit.view", "approvals.view"],
-  content_policy_manager: ["recommendations.policy.view", "recommendations.policy.manage", "recommendations.policy.approve", "settings.view", "settings.manage", "feature_flags.view", "feature_flags.manage", "success_stories.review", "success_stories.publish", "audit.view", "approvals.view"],
+  finance_officer: ["members.view", "finance.transactions.view", "finance.refunds.create", "finance.refunds.approve", "subscriptions.view", "subscriptions.manage", "audit.view", "approvals.view", "approvals.decide"],
+  content_policy_manager: ["recommendations.policy.view", "recommendations.policy.manage", "recommendations.policy.approve", "settings.view", "settings.manage", "feature_flags.view", "feature_flags.manage", "success_stories.review", "success_stories.publish", "audit.view", "approvals.view", "approvals.decide"],
   read_only_auditor: ["verification.view", "safety.cases.view", "finance.transactions.view", "subscriptions.view", "notifications.view", "recommendations.policy.view", "settings.view", "audit.view", "staff.view", "support.view", "incidents.view", "approvals.view", "feature_flags.view"],
 };
 
