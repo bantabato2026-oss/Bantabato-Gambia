@@ -39,7 +39,7 @@ try {
 }
 
 await mkdir(outputFile.substring(0, outputFile.lastIndexOf("/")) || ".", { recursive: true });
-const child = spawn("pnpm", ["exec", "vitest", "run", "server/testSupport/testDatabasePersistence.test.ts", "--reporter=json", `--outputFile=${outputFile}`], { stdio: "inherit", env: process.env });
+const child = spawn("pnpm", ["exec", "vitest", "run", "server/testSupport/testDatabasePersistence.test.ts", "server/testSupport/testDatabaseStaffPersistence.test.ts", "--reporter=json", `--outputFile=${outputFile}`], { stdio: "inherit", env: process.env });
 child.on("exit", async code => {
   try {
     const raw = JSON.parse(await readFile(outputFile, "utf8"));
@@ -47,7 +47,7 @@ child.on("exit", async code => {
     const scenarios = files.flatMap(file => (Array.isArray(file.assertionResults) ? file.assertionResults : []).map(assertion => ({
       scenarioId: assertion.fullName ?? assertion.title ?? "persistence-scenario",
       category: "persistence",
-      fixture: "A–J",
+      fixture: assertion.fullName?.includes("staff") || assertion.fullName?.includes("role") || assertion.fullName?.includes("session") || assertion.fullName?.includes("four-eyes") ? "fictional-staff" : "A–J",
       expected: assertion.status === "passed" ? "authoritative persistence result" : "test assertion succeeds",
       actual: assertion.status,
       pass: assertion.status === "passed",

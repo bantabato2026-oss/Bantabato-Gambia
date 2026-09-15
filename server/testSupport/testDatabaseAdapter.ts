@@ -1,7 +1,7 @@
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { eq } from "drizzle-orm";
-import { conversations, matches, memberProfiles, profilePhotos, users, verificationRecords } from "../../drizzle/schema";
+import { conversations, matches, memberProfiles, profilePhotos, staffProfiles, staffSessionControls, users, verificationRecords, type StaffRole } from "../../drizzle/schema";
 import { withDatabaseOverride } from "../db";
 
 export type TestDatabaseEnvironment = Record<string, string | undefined>;
@@ -60,6 +60,7 @@ export async function withIsolatedRollback<T>(handle: TestDatabaseHandle, work: 
 }
 
 export type SeededMember = { id: string; userId: number; profileId: number };
+export type SeededStaff = { id: string; userId: number; staffProfileId: number; staffRole: StaffRole; sessionReferenceHash: string };
 
 const FICTIONAL_MEMBER_STATES = {
   A: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
@@ -146,8 +147,40 @@ export async function seedAuthorizedConversation(handle: TestDatabaseHandle, mem
   return { matchId, conversationId: Number(conversationResult[0].insertId), memberOneProfileId: one.profileId, memberTwoProfileId: two.profileId };
 }
 
+const FICTIONAL_STAFF_ROLES: Array<{ id: string; role: StaffRole }> = [
+  { id: "OPS", role: "operations_manager" },
+  { id: "VER", role: "verification_officer" },
+  { id: "SAF", role: "trust_safety_officer" },
+  { id: "SAF2", role: "trust_safety_officer" },
+  { id: "SUP", role: "customer_support_officer" },
+  { id: "FIN", role: "finance_officer" },
+  { id: "EDT", role: "content_policy_manager" },
+  { id: "APR", role: "platform_administrator" },
+];
+
+export async function seedFictionalStaff(handle: TestDatabaseHandle): Promise<SeededStaff[]> {
+  const seeded: SeededStaff[] = [];
+  for (const { id, role } of FICTIONAL_STAFF_ROLES) {
+    const openId = `bantabato-test-staff-${id}`;
+    await handle.db.insert(users).values({ openId, name: `Synthetic Staff ${id}`, email: `${id.toLowerCase()}@staff.example.test`, loginMethod: "test-harness" }).onDuplicateKeyUpdate({ set: { name: `Synthetic Staff ${id}` } });
+    const user = (await handle.db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1))[0];
+    if (!user) throw new Error(`Failed to seed synthetic staff user ${id}`);
+    await handle.db.insert(staffProfiles).values({ userId: user.id, staffRole: role, status: "active", mfaRequired: true, activatedAt: new Date("2026-08-24T12:00:00.000Z"), lastReauthenticatedAt: new Date("2026-08-24T12:00:00.000Z"), createdAt: new Date("2026-08-24T12:00:00.000Z"), updatedAt: new Date("2026-08-24T12:00:00.000Z") }).onDuplicateKeyUpdate({ set: { staffRole: role, status: "active", lastReauthenticatedAt: new Date("2026-08-24T12:00:00.000Z") } });
+    const profile = (await handle.db.select({ id: staffProfiles.id }).from(staffProfiles).where(eq(staffProfiles.userId, user.id)).limit(1))[0];
+    if (!profile) throw new Error(`Failed to seed synthetic staff profile ${id}`);
+    const sessionReferenceHash = `bantabato-test-session-${id}`;
+    await handle.db.insert(staffSessionControls).values({ staffProfileId: profile.id, sessionReferenceHash, status: "active", issuedAt: new Date("2026-08-24T12:00:00.000Z"), expiresAt: new Date("2030-08-24T12:00:00.000Z"), reauthenticatedAt: new Date("2026-08-24T12:00:00.000Z") }).onDuplicateKeyUpdate({ set: { status: "active", expiresAt: new Date("2030-08-24T12:00:00.000Z"), reauthenticatedAt: new Date("2026-08-24T12:00:00.000Z") } });
+    seeded.push({ id, userId: user.id, staffProfileId: profile.id, staffRole: role, sessionReferenceHash });
+  }
+  return seeded;
+}
+
 export async function withSeededFictionalMembers<T>(handle: TestDatabaseHandle, work: (members: SeededMember[]) => Promise<T>): Promise<T> {
   return withIsolatedRollback(handle, async () => work(await seedFictionalMembers(handle)));
+}
+
+export async function withSeededFictionalStaff<T>(handle: TestDatabaseHandle, work: (staff: SeededStaff[]) => Promise<T>): Promise<T> {
+  return withIsolatedRollback(handle, async () => work(await seedFictionalStaff(handle)));
 }
 
 export async function closeIsolatedTestDatabase(handle: TestDatabaseHandle): Promise<void> {

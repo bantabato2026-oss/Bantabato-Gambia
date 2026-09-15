@@ -8,8 +8,9 @@ export function isPublicStorageKey(key: string) {
 }
 
 export function registerStorageProxy(app: Express) {
-  app.get("/manus-storage/*", async (req, res) => {
-    const key = (req.params as Record<string, string>)[0];
+  app.get("/manus-storage/{*key}", async (req, res) => {
+    const rawKey = req.params.key;
+    const key = Array.isArray(rawKey) ? rawKey[0] : rawKey;
     // The proxy is reserved for explicitly public deployment assets. Member
     // photos, verification documents, safety evidence, and voice notes must
     // use an authorized service path that returns a short-lived signed URL.

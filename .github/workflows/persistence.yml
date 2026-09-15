@@ -29,13 +29,14 @@ jobs:
       BANTABATO_PERSISTENCE_CI: "1"
       BANTABATO_PERSISTENCE_RESULT_FILE: artifacts/persistence-results.json
       BANTABATO_COMPARISON_RESULT_FILE: artifacts/comparison-results.json
+      BANTABATO_STAFF_COMPARISON_RESULT_FILE: artifacts/staff-comparison-results.json
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -49,7 +50,7 @@ jobs:
         run: env -u DATABASE_URL pnpm test:persistence
       - name: Upload persistence result artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: bantabato-persistence-results
           path: artifacts/*.json
