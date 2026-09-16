@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { operationalApprovals, staffSessionControls } from "../../drizzle/schema";
+import { operationalApprovals, staffProfiles, staffSessionControls } from "../../drizzle/schema";
 import { createSupportTicket, decideOperationalApproval, getEffectiveStaffAccess, listSupportTickets, requireOperationalPermission } from "../adminOperationsService";
 import { canDecideApproval, DEFAULT_ROLE_PERMISSIONS, roleCan, staffSessionIsUsable } from "../domain/adminOperationsPolicy";
 import { closeIsolatedTestDatabase, openIsolatedTestDatabase, seedFictionalMembers, seedFictionalStaff, withIsolatedRollback, withSeededFictionalStaff } from "./testDatabaseAdapter";
@@ -58,7 +58,7 @@ describe("Sprint 51 persisted fictional staff authority", () => {
     const handle = await openIsolatedTestDatabase();
     try {
       await withIsolatedRollback(handle, async () => {
-        const members = await seedFictionalMembers(handle);
+        const members = await seedFictionalMembers(handle, "bantabato-sprint51-staff");
         const staff = await seedFictionalStaff(handle);
         const support = staff.find(identity => identity.id === "SUP")!;
         const finance = staff.find(identity => identity.id === "FIN")!;
@@ -97,6 +97,9 @@ describe("Sprint 51 persisted fictional staff authority", () => {
         const expiresAt = new Date("2030-08-24T12:00:00.000Z");
         const inserted = await handle.db.insert(operationalApprovals).values({ approvalType: "safety_action", resourceType: "synthetic_safety_case", resourceId: "sprint51-case-001", requestedByUserId: requester.userId, requiredApproverRole: "trust_safety_officer", status: "pending", reason: "Synthetic test-only safety decision", impactSummary: "Synthetic test-only approval", expiresAt });
         const approvalId = Number(inserted[0].insertId);
+        const freshReauthentication = new Date();
+        await handle.db.update(staffProfiles).set({ lastReauthenticatedAt: freshReauthentication }).where(eq(staffProfiles.id, requester.staffProfileId));
+        await handle.db.update(staffProfiles).set({ lastReauthenticatedAt: freshReauthentication }).where(eq(staffProfiles.id, approver.staffProfileId));
         expect(canDecideApproval(requester.userId, requester.userId, requester.staffRole, "trust_safety_officer", "pending", expiresAt)).toBe(false);
         await expect(decideOperationalApproval(requester.userId, approvalId, "approved")).rejects.toThrow(/cannot be decided/i);
         await expect(decideOperationalApproval(approver.userId, approvalId, "approved")).resolves.toEqual({ success: true });

@@ -75,10 +75,10 @@ const FICTIONAL_MEMBER_STATES = {
   J: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
 } as const;
 
-export async function seedFictionalMembers(handle: TestDatabaseHandle): Promise<SeededMember[]> {
+export async function seedFictionalMembers(handle: TestDatabaseHandle, openIdPrefix = "bantabato-test"): Promise<SeededMember[]> {
   const seeded: SeededMember[] = [];
   for (const [id, state] of Object.entries(FICTIONAL_MEMBER_STATES)) {
-    const openId = `bantabato-test-${id}`;
+    const openId = `${openIdPrefix}-${id}`;
     await handle.db.insert(users).values({ openId, name: `Synthetic Member ${id}`, email: `${id.toLowerCase()}@example.test`, loginMethod: "test-harness" }).onDuplicateKeyUpdate({ set: { name: `Synthetic Member ${id}` } });
     const user = (await handle.db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1))[0];
     if (!user) throw new Error(`Failed to seed synthetic user ${id}`);
