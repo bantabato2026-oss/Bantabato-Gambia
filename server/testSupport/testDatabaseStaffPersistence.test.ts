@@ -24,7 +24,7 @@ describe("Sprint 51 persisted fictional staff authority", () => {
           const access = await getEffectiveStaffAccess(identity.userId, identity.sessionReferenceHash);
           expect(access.staffRole).toBe(identity.staffRole);
           expect(access.status).toBe("active");
-          expect(access.permissions).toEqual(expect.arrayContaining(["audit.view"]));
+          expect(access.permissions).toEqual(expect.arrayContaining([...DEFAULT_ROLE_PERMISSIONS[identity.staffRole]]));
           const expected = expectedStaffState(identity, DEFAULT_ROLE_PERMISSIONS[identity.staffRole]);
           const inMemory = normalizeInMemoryStaffState(identity, DEFAULT_ROLE_PERMISSIONS[identity.staffRole], true);
           const database = normalizeInMemoryStaffState(identity, access.permissions, true);

@@ -265,7 +265,9 @@ export async function listOperationalApprovals(actorUserId: number) { await requ
 export async function decideOperationalApproval(actorUserId: number, approvalId: number, decision: "approved" | "rejected") {
   const access = await requireOperationalPermission(actorUserId, "approvals.decide", { requireFresh: true }); const db = await getDb(); if (!db) throw new Error("Database unavailable");
   const approval = (await db.select().from(operationalApprovals).where(eq(operationalApprovals.id, approvalId)).limit(1))[0];
-  if (!approval || !canDecideApproval(approval.requestedByUserId, actorUserId, access.staffRole, approval.requiredApproverRole, approval.status, approval.expiresAt)) throw new Error("This approval cannot be decided by the current staff identity.");
+  if (!approval) throw new Error("This approval cannot be decided by the current staff identity.");
+  if (approval.status !== "pending") throw new Error("This approval was already decided or is no longer available.");
+  if (!canDecideApproval(approval.requestedByUserId, actorUserId, access.staffRole, approval.requiredApproverRole, approval.status, approval.expiresAt)) throw new Error("This approval cannot be decided by the current staff identity.");
   const decisionResult = await db.update(operationalApprovals).set({ status: decision, approvedByUserId: actorUserId, decidedAt: new Date() }).where(and(eq(operationalApprovals.id, approvalId), eq(operationalApprovals.status, "pending")));
   const decisionSummary = Array.isArray(decisionResult) ? decisionResult[0] : decisionResult;
   if (typeof (decisionSummary as { affectedRows?: unknown } | undefined)?.affectedRows === "number" && (decisionSummary as { affectedRows: number }).affectedRows === 0) {
