@@ -32,13 +32,13 @@ jobs:
       BANTABATO_STAFF_COMPARISON_RESULT_FILE: artifacts/staff-comparison-results.json
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -50,7 +50,7 @@ jobs:
         run: env -u DATABASE_URL pnpm test:persistence
       - name: Upload persistence result artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: bantabato-persistence-results
           path: artifacts/*.json
