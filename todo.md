@@ -464,10 +464,10 @@
 - [x] Sprint 50: preserve fail-closed manual disposable CI and add secret-free PASS/FAIL/SKIPPED reporting for privacy comparisons.
 - [x] Sprint 50: run local and disposable CI validation, review safety evidence, and save a checkpoint.
 
-- [ ] Sprint 51: extend fictional fixtures with deterministic persisted staff identities, roles, sessions, assignments, and test-only case markers.
-- [ ] Sprint 51: add persisted verification, photo, safety, appeal, support, Family Circle, finance, and editorial workload scenarios where existing authorities support them.
-- [ ] Sprint 51: validate positive and negative role boundaries across operations, verification, Trust & Safety, support, finance, editorial, and independent approval workflows.
-- [ ] Sprint 51: validate persisted four-eyes approval, stale versions, assignment changes, session revocation, fresh-state checks, and minimum-necessary document access.
-- [ ] Sprint 51: extend in-memory versus database staff-state normalization and secret-free comparison artifacts.
-- [ ] Sprint 51: add deterministic member acceptance and negative-journey coverage while preserving Free Launch and existing prerequisites.
+- [x] Sprint 51: extend fictional fixtures with deterministic persisted staff identities, roles, sessions, assignments, and test-only case markers.
+- [x] Sprint 51: add persisted verification, photo, safety, appeal, support, Family Circle, finance, and editorial workload scenarios where existing authorities support them.
+- [x] Sprint 51: validate positive and negative role boundaries across operations, verification, Trust & Safety, support, finance, editorial, and independent approval workflows.
+- [x] Sprint 51: validate persisted four-eyes approval, stale versions, assignment changes, session revocation, fresh-state checks, and minimum-necessary document access.
+- [x] Sprint 51: extend in-memory versus database staff-state normalization and secret-free comparison artifacts.
+- [x] Sprint 51: add deterministic member acceptance and negative-journey coverage while preserving Free Launch and existing prerequisites.
 - [ ] Sprint 51: repair CI action runtime deprecation configuration, run disposable MySQL validation, review results, and save a checkpoint.

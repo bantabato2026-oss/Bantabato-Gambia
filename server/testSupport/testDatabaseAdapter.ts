@@ -1,7 +1,25 @@
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { eq } from "drizzle-orm";
-import { conversations, matches, memberProfiles, profilePhotos, staffProfiles, staffSessionControls, users, verificationRecords, type StaffRole } from "../../drizzle/schema";
+import {
+  conversations,
+  familyLinks,
+  matches,
+  memberProfiles,
+  memberSuccessDeclarations,
+  paymentRefunds,
+  paymentTransactions,
+  profilePhotos,
+  reports,
+  safetyAppeals,
+  safetyEnforcementActions,
+  staffProfiles,
+  staffSessionControls,
+  supportTickets,
+  users,
+  verificationRecords,
+  type StaffRole,
+} from "../../drizzle/schema";
 import { withDatabaseOverride } from "../db";
 
 export type TestDatabaseEnvironment = Record<string, string | undefined>;
@@ -12,20 +30,42 @@ export type SafeTestDatabaseConfig = {
   marker: string;
 };
 
-export function assertSafeTestDatabaseEnvironment(env: TestDatabaseEnvironment): SafeTestDatabaseConfig {
+export function assertSafeTestDatabaseEnvironment(
+  env: TestDatabaseEnvironment
+): SafeTestDatabaseConfig {
   const marker = env.BANTABATO_TEST_MODE;
   const url = env.BANTABATO_TEST_DATABASE_URL;
   const declaredDatabase = env.BANTABATO_TEST_DATABASE_NAME;
-  if (marker !== "1" && marker !== "true") throw new Error("Database-backed harness requires BANTABATO_TEST_MODE=1");
-  if (env.NODE_ENV === "production" || env.APP_ENV === "production") throw new Error("Database-backed harness is disabled in production");
-  if (!url) throw new Error("Database-backed harness requires BANTABATO_TEST_DATABASE_URL");
-  if (url === env.DATABASE_URL) throw new Error("Database-backed harness refuses the application DATABASE_URL");
+  if (marker !== "1" && marker !== "true")
+    throw new Error("Database-backed harness requires BANTABATO_TEST_MODE=1");
+  if (env.NODE_ENV === "production" || env.APP_ENV === "production")
+    throw new Error("Database-backed harness is disabled in production");
+  if (!url)
+    throw new Error(
+      "Database-backed harness requires BANTABATO_TEST_DATABASE_URL"
+    );
+  if (url === env.DATABASE_URL)
+    throw new Error(
+      "Database-backed harness refuses the application DATABASE_URL"
+    );
 
   let parsed: URL;
-  try { parsed = new URL(url); } catch { throw new Error("Database-backed harness requires a valid test database URL"); }
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(
+      "Database-backed harness requires a valid test database URL"
+    );
+  }
   const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  if (!databaseName || !declaredDatabase || declaredDatabase !== databaseName) throw new Error("Database-backed harness cannot confirm test database identity");
-  if (!/(^|[_-])test([_-]|$)/i.test(databaseName)) throw new Error("Database-backed harness requires a database name explicitly marked test");
+  if (!databaseName || !declaredDatabase || declaredDatabase !== databaseName)
+    throw new Error(
+      "Database-backed harness cannot confirm test database identity"
+    );
+  if (!/(^|[_-])test([_-]|$)/i.test(databaseName))
+    throw new Error(
+      "Database-backed harness requires a database name explicitly marked test"
+    );
   return { url, databaseName, marker };
 }
 
@@ -36,9 +76,15 @@ export type TestDatabaseHandle = {
   db: MySql2Database<Record<string, unknown>> & { $client: PoolConnection };
 };
 
-export async function openIsolatedTestDatabase(env: TestDatabaseEnvironment = process.env): Promise<TestDatabaseHandle> {
+export async function openIsolatedTestDatabase(
+  env: TestDatabaseEnvironment = process.env
+): Promise<TestDatabaseHandle> {
   const config = assertSafeTestDatabaseEnvironment(env);
-  const pool = createPool({ uri: config.url, connectionLimit: 1, multipleStatements: false });
+  const pool = createPool({
+    uri: config.url,
+    connectionLimit: 1,
+    multipleStatements: false,
+  });
   const connection = await pool.getConnection();
   try {
     await connection.query("SELECT 1");
@@ -50,7 +96,10 @@ export async function openIsolatedTestDatabase(env: TestDatabaseEnvironment = pr
   return { config, pool, connection, db: drizzle(connection) };
 }
 
-export async function withIsolatedRollback<T>(handle: TestDatabaseHandle, work: (db: TestDatabaseHandle["db"]) => Promise<T>): Promise<T> {
+export async function withIsolatedRollback<T>(
+  handle: TestDatabaseHandle,
+  work: (db: TestDatabaseHandle["db"]) => Promise<T>
+): Promise<T> {
   await handle.connection.beginTransaction();
   try {
     return await withDatabaseOverride(handle.db, () => work(handle.db));
@@ -60,27 +109,100 @@ export async function withIsolatedRollback<T>(handle: TestDatabaseHandle, work: 
 }
 
 export type SeededMember = { id: string; userId: number; profileId: number };
-export type SeededStaff = { id: string; userId: number; staffProfileId: number; staffRole: StaffRole; sessionReferenceHash: string };
+export type SeededStaff = {
+  id: string;
+  userId: number;
+  staffProfileId: number;
+  staffRole: StaffRole;
+  sessionReferenceHash: string;
+};
 
 const FICTIONAL_MEMBER_STATES = {
-  A: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
-  B: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
-  C: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
-  D: { profileStatus: "draft" as const, coreProfileComplete: false, photoCount: 0, verification: "not_started" as const },
-  E: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 4, verification: "approved" as const },
-  F: { profileStatus: "under_review" as const, coreProfileComplete: true, photoCount: 5, verification: "pending_review" as const },
-  G: { profileStatus: "paused" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
-  H: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
-  I: { profileStatus: "suspended" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
-  J: { profileStatus: "active" as const, coreProfileComplete: true, photoCount: 5, verification: "approved" as const },
+  A: {
+    profileStatus: "active" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
+  B: {
+    profileStatus: "active" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
+  C: {
+    profileStatus: "active" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
+  D: {
+    profileStatus: "draft" as const,
+    coreProfileComplete: false,
+    photoCount: 0,
+    verification: "not_started" as const,
+  },
+  E: {
+    profileStatus: "active" as const,
+    coreProfileComplete: true,
+    photoCount: 4,
+    verification: "approved" as const,
+  },
+  F: {
+    profileStatus: "under_review" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "pending_review" as const,
+  },
+  G: {
+    profileStatus: "paused" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
+  H: {
+    profileStatus: "active" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
+  I: {
+    profileStatus: "suspended" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
+  J: {
+    profileStatus: "active" as const,
+    coreProfileComplete: true,
+    photoCount: 5,
+    verification: "approved" as const,
+  },
 } as const;
 
-export async function seedFictionalMembers(handle: TestDatabaseHandle, openIdPrefix = "bantabato-test"): Promise<SeededMember[]> {
+export async function seedFictionalMembers(
+  handle: TestDatabaseHandle,
+  openIdPrefix = "bantabato-test"
+): Promise<SeededMember[]> {
   const seeded: SeededMember[] = [];
   for (const [id, state] of Object.entries(FICTIONAL_MEMBER_STATES)) {
     const openId = `${openIdPrefix}-${id}`;
-    await handle.db.insert(users).values({ openId, name: `Synthetic Member ${id}`, email: `${id.toLowerCase()}@example.test`, loginMethod: "test-harness" }).onDuplicateKeyUpdate({ set: { name: `Synthetic Member ${id}` } });
-    const user = (await handle.db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1))[0];
+    await handle.db
+      .insert(users)
+      .values({
+        openId,
+        name: `Synthetic Member ${id}`,
+        email: `${id.toLowerCase()}@example.test`,
+        loginMethod: "test-harness",
+      })
+      .onDuplicateKeyUpdate({ set: { name: `Synthetic Member ${id}` } });
+    const user = (
+      await handle.db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.openId, openId))
+        .limit(1)
+    )[0];
     if (!user) throw new Error(`Failed to seed synthetic user ${id}`);
     await handle.db.insert(memberProfiles).values({
       userId: user.id,
@@ -95,7 +217,8 @@ export async function seedFictionalMembers(handle: TestDatabaseHandle, openIdPre
       city: "Synthetic City",
       locationVisibility: "matches_only",
       locationDetailLevel: "city",
-      searchVisible: state.profileStatus !== "paused" && state.profileStatus !== "suspended",
+      searchVisible:
+        state.profileStatus !== "paused" && state.profileStatus !== "suspended",
       profileVisibility: "members_only",
       photoVisibility: "mutual_match",
       marriageIntent: "seeking_marriage",
@@ -103,20 +226,28 @@ export async function seedFictionalMembers(handle: TestDatabaseHandle, openIdPre
       createdAt: new Date("2026-08-24T12:00:00.000Z"),
       updatedAt: new Date("2026-08-24T12:00:00.000Z"),
     });
-    const profile = (await handle.db.select({ id: memberProfiles.id }).from(memberProfiles).where(eq(memberProfiles.userId, user.id)).limit(1))[0];
+    const profile = (
+      await handle.db
+        .select({ id: memberProfiles.id })
+        .from(memberProfiles)
+        .where(eq(memberProfiles.userId, user.id))
+        .limit(1)
+    )[0];
     if (!profile) throw new Error(`Failed to seed synthetic profile ${id}`);
     if (state.photoCount > 0) {
-      await handle.db.insert(profilePhotos).values(Array.from({ length: state.photoCount }, (_, index) => ({
-        profileId: profile.id,
-        storageKey: `bantabato-test/${id}/photo-${index + 1}.jpg`,
-        mimeType: "image/jpeg",
-        photoPurpose: "profile" as const,
-        isPrimary: index === 0,
-        displayOrder: index,
-        reviewStatus: "approved" as const,
-        createdAt: new Date("2026-08-24T12:00:00.000Z"),
-        updatedAt: new Date("2026-08-24T12:00:00.000Z"),
-      })));
+      await handle.db.insert(profilePhotos).values(
+        Array.from({ length: state.photoCount }, (_, index) => ({
+          profileId: profile.id,
+          storageKey: `bantabato-test/${id}/photo-${index + 1}.jpg`,
+          mimeType: "image/jpeg",
+          photoPurpose: "profile" as const,
+          isPrimary: index === 0,
+          displayOrder: index,
+          reviewStatus: "approved" as const,
+          createdAt: new Date("2026-08-24T12:00:00.000Z"),
+          updatedAt: new Date("2026-08-24T12:00:00.000Z"),
+        }))
+      );
     }
     if (state.verification !== "not_started") {
       await handle.db.insert(verificationRecords).values({
@@ -124,7 +255,10 @@ export async function seedFictionalMembers(handle: TestDatabaseHandle, openIdPre
         verificationType: "identity_document",
         status: state.verification === "approved" ? "approved" : "under_review",
         priority: "standard",
-        reviewedAt: state.verification === "approved" ? new Date("2026-08-24T12:00:00.000Z") : null,
+        reviewedAt:
+          state.verification === "approved"
+            ? new Date("2026-08-24T12:00:00.000Z")
+            : null,
         createdAt: new Date("2026-08-24T12:00:00.000Z"),
         updatedAt: new Date("2026-08-24T12:00:00.000Z"),
       });
@@ -134,17 +268,44 @@ export async function seedFictionalMembers(handle: TestDatabaseHandle, openIdPre
   return seeded;
 }
 
-export type SeededConversation = { matchId: number; conversationId: number; memberOneProfileId: number; memberTwoProfileId: number };
+export type SeededConversation = {
+  matchId: number;
+  conversationId: number;
+  memberOneProfileId: number;
+  memberTwoProfileId: number;
+};
 
 /** Relationship precondition only; messaging authorization remains in messagingService. */
-export async function seedAuthorizedConversation(handle: TestDatabaseHandle, members: SeededMember[]): Promise<SeededConversation> {
+export async function seedAuthorizedConversation(
+  handle: TestDatabaseHandle,
+  members: SeededMember[]
+): Promise<SeededConversation> {
   const one = members.find(member => member.id === "A");
   const two = members.find(member => member.id === "B");
   if (!one || !two) throw new Error("Synthetic A–B fixtures are required");
-  const matchResult = await handle.db.insert(matches).values({ memberOneProfileId: one.profileId, memberTwoProfileId: two.profileId, status: "active", matchedAt: new Date("2026-08-24T12:00:00.000Z"), createdAt: new Date("2026-08-24T12:00:00.000Z"), updatedAt: new Date("2026-08-24T12:00:00.000Z") });
+  const matchResult = await handle.db.insert(matches).values({
+    memberOneProfileId: one.profileId,
+    memberTwoProfileId: two.profileId,
+    status: "active",
+    matchedAt: new Date("2026-08-24T12:00:00.000Z"),
+    createdAt: new Date("2026-08-24T12:00:00.000Z"),
+    updatedAt: new Date("2026-08-24T12:00:00.000Z"),
+  });
   const matchId = Number(matchResult[0].insertId);
-  const conversationResult = await handle.db.insert(conversations).values({ matchId, status: "active", mutualInterestAt: new Date("2026-08-24T12:00:00.000Z"), lastActivityAt: new Date("2026-08-24T12:00:00.000Z"), createdAt: new Date("2026-08-24T12:00:00.000Z"), updatedAt: new Date("2026-08-24T12:00:00.000Z") });
-  return { matchId, conversationId: Number(conversationResult[0].insertId), memberOneProfileId: one.profileId, memberTwoProfileId: two.profileId };
+  const conversationResult = await handle.db.insert(conversations).values({
+    matchId,
+    status: "active",
+    mutualInterestAt: new Date("2026-08-24T12:00:00.000Z"),
+    lastActivityAt: new Date("2026-08-24T12:00:00.000Z"),
+    createdAt: new Date("2026-08-24T12:00:00.000Z"),
+    updatedAt: new Date("2026-08-24T12:00:00.000Z"),
+  });
+  return {
+    matchId,
+    conversationId: Number(conversationResult[0].insertId),
+    memberOneProfileId: one.profileId,
+    memberTwoProfileId: two.profileId,
+  };
 }
 
 const FICTIONAL_STAFF_ROLES: Array<{ id: string; role: StaffRole }> = [
@@ -158,32 +319,296 @@ const FICTIONAL_STAFF_ROLES: Array<{ id: string; role: StaffRole }> = [
   { id: "APR", role: "platform_administrator" },
 ];
 
-export async function seedFictionalStaff(handle: TestDatabaseHandle): Promise<SeededStaff[]> {
+export async function seedFictionalStaff(
+  handle: TestDatabaseHandle
+): Promise<SeededStaff[]> {
   const seeded: SeededStaff[] = [];
   for (const { id, role } of FICTIONAL_STAFF_ROLES) {
     const openId = `bantabato-test-staff-${id}`;
-    await handle.db.insert(users).values({ openId, name: `Synthetic Staff ${id}`, email: `${id.toLowerCase()}@staff.example.test`, loginMethod: "test-harness" }).onDuplicateKeyUpdate({ set: { name: `Synthetic Staff ${id}` } });
-    const user = (await handle.db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1))[0];
+    await handle.db
+      .insert(users)
+      .values({
+        openId,
+        name: `Synthetic Staff ${id}`,
+        email: `${id.toLowerCase()}@staff.example.test`,
+        loginMethod: "test-harness",
+      })
+      .onDuplicateKeyUpdate({ set: { name: `Synthetic Staff ${id}` } });
+    const user = (
+      await handle.db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.openId, openId))
+        .limit(1)
+    )[0];
     if (!user) throw new Error(`Failed to seed synthetic staff user ${id}`);
-    await handle.db.insert(staffProfiles).values({ userId: user.id, staffRole: role, status: "active", mfaRequired: true, activatedAt: new Date("2026-08-24T12:00:00.000Z"), lastReauthenticatedAt: new Date("2026-08-24T12:00:00.000Z"), createdAt: new Date("2026-08-24T12:00:00.000Z"), updatedAt: new Date("2026-08-24T12:00:00.000Z") }).onDuplicateKeyUpdate({ set: { staffRole: role, status: "active", lastReauthenticatedAt: new Date("2026-08-24T12:00:00.000Z") } });
-    const profile = (await handle.db.select({ id: staffProfiles.id }).from(staffProfiles).where(eq(staffProfiles.userId, user.id)).limit(1))[0];
-    if (!profile) throw new Error(`Failed to seed synthetic staff profile ${id}`);
+    await handle.db
+      .insert(staffProfiles)
+      .values({
+        userId: user.id,
+        staffRole: role,
+        status: "active",
+        mfaRequired: true,
+        activatedAt: new Date("2026-08-24T12:00:00.000Z"),
+        lastReauthenticatedAt: new Date("2026-08-24T12:00:00.000Z"),
+        createdAt: new Date("2026-08-24T12:00:00.000Z"),
+        updatedAt: new Date("2026-08-24T12:00:00.000Z"),
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          staffRole: role,
+          status: "active",
+          lastReauthenticatedAt: new Date("2026-08-24T12:00:00.000Z"),
+        },
+      });
+    const profile = (
+      await handle.db
+        .select({ id: staffProfiles.id })
+        .from(staffProfiles)
+        .where(eq(staffProfiles.userId, user.id))
+        .limit(1)
+    )[0];
+    if (!profile)
+      throw new Error(`Failed to seed synthetic staff profile ${id}`);
     const sessionReferenceHash = `bantabato-test-session-${id}`;
-    await handle.db.insert(staffSessionControls).values({ staffProfileId: profile.id, sessionReferenceHash, status: "active", issuedAt: new Date("2026-08-24T12:00:00.000Z"), expiresAt: new Date("2030-08-24T12:00:00.000Z"), reauthenticatedAt: new Date("2026-08-24T12:00:00.000Z") }).onDuplicateKeyUpdate({ set: { status: "active", expiresAt: new Date("2030-08-24T12:00:00.000Z"), reauthenticatedAt: new Date("2026-08-24T12:00:00.000Z") } });
-    seeded.push({ id, userId: user.id, staffProfileId: profile.id, staffRole: role, sessionReferenceHash });
+    await handle.db
+      .insert(staffSessionControls)
+      .values({
+        staffProfileId: profile.id,
+        sessionReferenceHash,
+        status: "active",
+        issuedAt: new Date("2026-08-24T12:00:00.000Z"),
+        expiresAt: new Date("2030-08-24T12:00:00.000Z"),
+        reauthenticatedAt: new Date("2026-08-24T12:00:00.000Z"),
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          status: "active",
+          expiresAt: new Date("2030-08-24T12:00:00.000Z"),
+          reauthenticatedAt: new Date("2026-08-24T12:00:00.000Z"),
+        },
+      });
+    seeded.push({
+      id,
+      userId: user.id,
+      staffProfileId: profile.id,
+      staffRole: role,
+      sessionReferenceHash,
+    });
   }
   return seeded;
 }
 
-export async function withSeededFictionalMembers<T>(handle: TestDatabaseHandle, work: (members: SeededMember[]) => Promise<T>): Promise<T> {
-  return withIsolatedRollback(handle, async () => work(await seedFictionalMembers(handle)));
+export type SeededStaffWorkloads = {
+  verificationId: number;
+  photoId: number;
+  reportId: number;
+  enforcementActionId: number;
+  appealId: number;
+  supportTicketId: number;
+  familyLinkId: number;
+  paymentTransactionId: number;
+  refundId: number;
+  declarationId: number;
+};
+
+/** Test-only operational records exercise persistence and projections without provider or production data. */
+export async function seedFictionalStaffWorkloads(
+  handle: TestDatabaseHandle,
+  members: SeededMember[],
+  staff: SeededStaff[]
+): Promise<SeededStaffWorkloads> {
+  const at = new Date("2026-08-24T12:00:00.000Z");
+  const member = (id: string) => members.find(identity => identity.id === id)!;
+  const staffIdentity = (id: string) =>
+    staff.find(identity => identity.id === id)!;
+  const verificationMember = member("F");
+  const photoMember = member("E");
+  const safetySubject = member("I");
+  const familyOwner = member("A");
+  const editorialMember = member("C");
+  const verification = (
+    await handle.db
+      .select({ id: verificationRecords.id })
+      .from(verificationRecords)
+      .where(eq(verificationRecords.profileId, verificationMember.profileId))
+      .limit(1)
+  )[0];
+  if (!verification)
+    throw new Error("Synthetic verification fixture is unavailable");
+  await handle.db
+    .update(verificationRecords)
+    .set({
+      status: "submitted",
+      assignedReviewerUserId: null,
+      documentType: "national_id",
+      documentStorageKey: "bantabato-test-only/verification/F/national-id.jpg",
+      submittedAt: at,
+      updatedAt: at,
+    })
+    .where(eq(verificationRecords.id, verification.id));
+  const photoResult = await handle.db.insert(profilePhotos).values({
+    profileId: photoMember.profileId,
+    storageKey: "bantabato-test-only/photos/E/pending-review.jpg",
+    mimeType: "image/jpeg",
+    photoPurpose: "profile",
+    isPrimary: false,
+    displayOrder: 5,
+    reviewStatus: "pending",
+    createdAt: at,
+    updatedAt: at,
+  });
+  const photoId = Number(photoResult[0].insertId);
+  const reportResult = await handle.db.insert(reports).values({
+    reporterProfileId: member("A").profileId,
+    reportedProfileId: safetySubject.profileId,
+    reason: "safety_concern",
+    details: "Synthetic test-only report details",
+    status: "in_review",
+    priority: "high",
+    caseSource: "member_report",
+    policyVersion: "synthetic-sprint-51",
+    appealEligible: true,
+    memberSafeSummary: "A synthetic safety case is under review.",
+    assignedModeratorUserId: staffIdentity("SAF").userId,
+    reviewedByUserId: staffIdentity("SAF").userId,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const reportId = Number(reportResult[0].insertId);
+  const enforcementResult = await handle.db
+    .insert(safetyEnforcementActions)
+    .values({
+      reportId,
+      subjectProfileId: safetySubject.profileId,
+      actionType: "feature_restriction",
+      status: "proposed",
+      scope: { surfaces: ["discovery"] },
+      reasonCode: "synthetic_review",
+      memberSafeMessage: "A synthetic safety restriction is pending review.",
+      policyVersion: "synthetic-sprint-51",
+      requiresSecondApproval: true,
+      requestedByUserId: staffIdentity("SAF").userId,
+      idempotencyKey: "bantabato-sprint-51-enforcement-001",
+      createdAt: at,
+      updatedAt: at,
+    });
+  const enforcementActionId = Number(enforcementResult[0].insertId);
+  const appealResult = await handle.db.insert(safetyAppeals).values({
+    reportId,
+    enforcementActionId,
+    appellantUserId: safetySubject.userId,
+    reason: "Synthetic appeal reason",
+    status: "submitted",
+    submittedAt: at,
+    updatedAt: at,
+  });
+  const appealId = Number(appealResult[0].insertId);
+  const supportResult = await handle.db.insert(supportTickets).values({
+    memberProfileId: member("D").profileId,
+    category: "verification",
+    subject: "Synthetic assigned support case",
+    description: "Synthetic test-only support workload",
+    status: "waiting_for_staff",
+    priority: "normal",
+    assignedStaffProfileId: staffIdentity("SUP").staffProfileId,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const supportTicketId = Number(supportResult[0].insertId);
+  const familyResult = await handle.db.insert(familyLinks).values({
+    memberProfileId: familyOwner.profileId,
+    relationship: "wali_guardian",
+    contactName: "Synthetic Wali",
+    contactEmail: "wali@example.test",
+    preferredContactMethod: "email",
+    familyParticipantUserId: member("B").userId,
+    status: "pending_verification",
+    waliVerificationStatus: "pending",
+    canReceiveMatchNotifications: false,
+    invitedAt: at,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const familyLinkId = Number(familyResult[0].insertId);
+  const transactionResult = await handle.db.insert(paymentTransactions).values({
+    profileId: member("A").profileId,
+    provider: "unconfigured-test-provider",
+    internalReference: "bantabato-sprint-51-transaction-001",
+    idempotencyKey: "bantabato-sprint-51-payment-001",
+    transactionType: "initial",
+    status: "pending",
+    amountMinor: 0,
+    currency: "GMD",
+    createdAt: at,
+    updatedAt: at,
+  });
+  const paymentTransactionId = Number(transactionResult[0].insertId);
+  const refundResult = await handle.db.insert(paymentRefunds).values({
+    paymentTransactionId,
+    status: "requested",
+    amountMinor: 0,
+    reason: "Synthetic provider-neutral refund request",
+    requestedByUserId: staffIdentity("FIN").userId,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const refundId = Number(refundResult[0].insertId);
+  const declarationResult = await handle.db
+    .insert(memberSuccessDeclarations)
+    .values({
+      profileId: editorialMember.profileId,
+      outcome: "engaged",
+      sharingConsent: true,
+      status: "consent_recorded",
+      editorialStatus: "pending_review",
+      publicStoryConsent: true,
+      publicConsentAt: at,
+      storySummary: "Synthetic private story summary",
+      publicDisplayNameAuthorized: false,
+      publicPhotoAuthorized: false,
+      submittedAt: at,
+      consentRecordedAt: at,
+      declaredAt: at,
+      createdAt: at,
+      updatedAt: at,
+    });
+  const declarationId = Number(declarationResult[0].insertId);
+  return {
+    verificationId: verification.id,
+    photoId,
+    reportId,
+    enforcementActionId,
+    appealId,
+    supportTicketId,
+    familyLinkId,
+    paymentTransactionId,
+    refundId,
+    declarationId,
+  };
 }
 
-export async function withSeededFictionalStaff<T>(handle: TestDatabaseHandle, work: (staff: SeededStaff[]) => Promise<T>): Promise<T> {
-  return withIsolatedRollback(handle, async () => work(await seedFictionalStaff(handle)));
+export async function withSeededFictionalMembers<T>(
+  handle: TestDatabaseHandle,
+  work: (members: SeededMember[]) => Promise<T>
+): Promise<T> {
+  return withIsolatedRollback(handle, async () =>
+    work(await seedFictionalMembers(handle))
+  );
 }
 
-export async function closeIsolatedTestDatabase(handle: TestDatabaseHandle): Promise<void> {
+export async function withSeededFictionalStaff<T>(
+  handle: TestDatabaseHandle,
+  work: (staff: SeededStaff[]) => Promise<T>
+): Promise<T> {
+  return withIsolatedRollback(handle, async () =>
+    work(await seedFictionalStaff(handle))
+  );
+}
+
+export async function closeIsolatedTestDatabase(
+  handle: TestDatabaseHandle
+): Promise<void> {
   handle.connection.release();
   await handle.pool.end();
 }
