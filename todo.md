@@ -470,4 +470,4 @@
 - [x] Sprint 51: validate persisted four-eyes approval, stale versions, assignment changes, session revocation, fresh-state checks, and minimum-necessary document access.
 - [x] Sprint 51: extend in-memory versus database staff-state normalization and secret-free comparison artifacts.
 - [x] Sprint 51: add deterministic member acceptance and negative-journey coverage while preserving Free Launch and existing prerequisites.
-- [ ] Sprint 51: repair CI action runtime deprecation configuration, run disposable MySQL validation, review results, and save a checkpoint.
+- [x] Sprint 51: repair CI action runtime deprecation configuration, run disposable MySQL validation, review results, and save a checkpoint.
