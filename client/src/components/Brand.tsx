@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 
 const OFFICIAL_BANTABATO_LOGO =
-  "/manus-storage/public/bantabato-logo-official_9a4e6192.png";
+  "/manus-storage/public/bantabato-logo-official-f445863c.png";
 
 export function Brand({
   inverse = false,
