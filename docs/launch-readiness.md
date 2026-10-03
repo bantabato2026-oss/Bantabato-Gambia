@@ -1,37 +1,47 @@
 # Bantabato Launch-Readiness Matrix
 
-**Review scope:** Sprint 54 application evidence only. No production mutations, real member data, provider activation, or authenticated browser review were performed.
+**Sprint 55 review scope:** Application code, local tests, repository configuration, and disposable MySQL CI only. No production mutation, real member data, provider activation, backup service, external telemetry, legal decision, or authenticated browser review was performed.
 
-| Area | State | Evidence / boundary |
-|---|---|---|
-| Automated regression suite | VERIFIED | Sprint 53: 510 tests passed; Sprint 54 focused tests are recorded with the checkpoint. |
-| Disposable MySQL authority suite | VERIFIED | CI run 37002794891 passed migrations, persisted authority tests, and artifact upload. |
-| Production environment identity | PENDING | Deployment identity contract exists; explicit production values are not verified in this environment. |
-| Staging environment | BLOCKED | No separate staging infrastructure or credentials were verified; no staging claims are made. |
-| Database separation | CONFIGURED | Test adapter rejects production mode, application DATABASE_URL reuse, malformed URLs, and unmarked test databases. |
-| Storage separation | PENDING | Contract requires an explicit storage identity; actual staging/production storage separation is not verified. |
-| OAuth/auth target separation | PENDING | Contract records the auth target; separate staging and production targets are not verified. |
-| Application origin / allowed origins | PENDING | Contract requires an origin and allow-list relationship in production; deployment configuration is not verified here. |
-| Monitoring | PENDING | Provider-neutral event schema and health endpoint exist; no monitoring provider is activated or claimed. |
-| Alerting | OPERATIONAL OWNER REQUIRED | Alert thresholds, escalation, and ownership remain external operational decisions. |
-| Backups | NOT CONFIGURED | No backup infrastructure was verified; application persistence tests are not backups. |
-| Restore test | PENDING | No production restore test was run or claimed. |
-| Rollback procedure | PENDING | Requires deployment-owner runbook and verified rollback rehearsal. |
-| Retention policy | LEGAL DECISION REQUIRED | Retention periods are configurable but no legal periods are invented. |
-| Data export scope | COMPLETE | Member-safe scope and exclusions are explicit; requests remain non-public and member-owned. |
-| Data export delivery | EXTERNAL PROVIDER REQUIRED | Secure delivery infrastructure is not configured or claimed. |
-| Session/device policy | VERIFIED | Current/other session distinction, revocation, fresh-auth, stale-state, and minimum metadata are covered by existing tests and account service. |
-| Support operations | VERIFIED | Member ownership, role-scoped staff access, stale actions, revocation, and separation from Trust & Safety are covered by persisted and contract tests. |
-| Localization | PENDING | English is the only reviewed locale; Wolof, Mandinka, and French are not claimed as reviewed. |
-| Accessibility manual review | PENDING | Automated contracts exist; no manual browser/screen-reader certification was performed. |
-| Security assessment | PENDING | Automated security and authorization coverage exists; independent assessment is not claimed. |
-| Legal/privacy review | LEGAL DECISION REQUIRED | Retention, deletion, export, and privacy decisions still require accountable review. |
-| Operational ownership | OPERATIONAL OWNER REQUIRED | Monitoring, alerts, backups, restore, rollback, and support escalation owners are not verified. |
-| Provider credentials/scopes | EXTERNAL PROVIDER REQUIRED | SMS, email, payments, monitoring, and delivery providers remain dormant. |
-| Free Launch billing state | VERIFIED | FREE_LAUNCH remains provider-neutral; no checkout, subscription paywall, transaction, or Premium gate is activated. |
-| Authenticated member review | BLOCKED | My Browser was not enabled; no authenticated review is claimed. |
-| Authenticated staff review | BLOCKED | My Browser was not enabled and no real staff account was used. |
+| Area                                  | State                        | Evidence / boundary                                                                                                                                                                     |
+| ------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automated regression suite            | VERIFIED                     | 519 tests passed; 6 intentional skips, including the locally gated isolated staff persistence suite.                                                                                    |
+| Disposable MySQL authority suite      | VERIFIED                     | CI run 37130697861 passed schema setup, persistence authority tests, and artifact upload.                                                                                               |
+| Production environment identity       | PENDING                      | Fail-closed identity contract exists; real production values were not verified in this environment.                                                                                     |
+| Staging environment                   | BLOCKED                      | Staging now requires explicit database, storage, auth, origin, and allowed-origin identities; no actual staging deployment was configured or verified.                                  |
+| Staging environment variables/secrets | BLOCKED                      | No staging secret set or owner-controlled environment was verified.                                                                                                                     |
+| Staging notifications/analytics       | PENDING                      | No staging delivery, analytics, or external telemetry target was verified; no provider was activated.                                                                                   |
+| Staging synthetic-data policy         | CONFIGURED                   | Contract blocks production-looking test identities and production mode; A–J fixtures remain test-only.                                                                                  |
+| Database separation                   | CONFIGURED                   | Test adapter and deployment contract reject production mode, application DATABASE_URL reuse, malformed URLs, and unmarked test databases.                                               |
+| Storage separation                    | PENDING                      | Explicit storage identity is required; actual staging/production storage separation is not verified.                                                                                    |
+| OAuth/auth separation                 | PENDING                      | Explicit auth target is required; separate staging and production targets are not verified.                                                                                             |
+| Origin/CORS separation                | PENDING                      | Explicit origin and allowed-origin relationship is required; deployed configuration is not verified here.                                                                               |
+| Monitoring contract                   | CONFIGURED                   | Eight operational categories now have signals, severity, expected response, owner state, alert state, and escalation state.                                                             |
+| Monitoring provider                   | EXTERNAL PROVIDER REQUIRED   | No provider credentials or external telemetry destination is activated.                                                                                                                 |
+| Alerting                              | ALERT CONFIGURATION REQUIRED | Alert thresholds and routes remain unconfigured.                                                                                                                                        |
+| Alert ownership                       | OPERATIONAL OWNER REQUIRED   | No person or team is invented or claimed as owner.                                                                                                                                      |
+| Escalation                            | ESCALATION REQUIRED          | Escalation paths and on-call responsibility remain to be assigned.                                                                                                                      |
+| Backups                               | NOT CONFIGURED               | No backup infrastructure was verified; application persistence tests are not backups.                                                                                                   |
+| Restore rehearsal                     | PENDING                      | No disposable restore rehearsal was available to perform; no success is simulated.                                                                                                      |
+| Rollback rehearsal                    | PENDING                      | A runbook and rehearsal result remain required.                                                                                                                                         |
+| Retention policy                      | LEGAL DECISION REQUIRED      | No retention periods are invented; policy-required periods remain unset.                                                                                                                |
+| Deletion policy                       | LEGAL DECISION REQUIRED      | Account deletion is represented as a lifecycle request; permanent purge and legally retained records require policy decisions.                                                          |
+| Data export scope                     | COMPLETE                     | Member-safe scope and exclusions are explicit; fresh auth, ownership, stale safety, and non-public boundaries are covered.                                                              |
+| Export generation                     | PENDING                      | Request lifecycle exists, but no generated artifact is claimed.                                                                                                                         |
+| Secure export delivery                | EXTERNAL PROVIDER REQUIRED   | No secure private delivery infrastructure is configured or claimed.                                                                                                                     |
+| Session/device policy                 | VERIFIED                     | Current/other session distinction, fresh authentication, revocation, stale-state handling, and minimum metadata are covered.                                                            |
+| Support operations                    | VERIFIED                     | Member ownership, role-scoped staff access, stale actions, revocation, and separation from Trust & Safety are covered.                                                                  |
+| Localization                          | LANGUAGE REVIEW REQUIRED     | English remains the verified fallback; reviewed Wolof, Mandinka, and French translations do not exist.                                                                                  |
+| Accessibility automated contracts     | VERIFIED                     | Labels, focus, reduced motion, PWA, loading/empty states, and mobile contracts are covered by automated tests.                                                                          |
+| Accessibility manual review           | PENDING                      | No manual browser or screen-reader certification was performed.                                                                                                                         |
+| Internal security review              | COMPLETE                     | Sprint 55 code-level review covered auth, authorization, sessions, IDOR-style boundaries, documents, storage, export, privacy, environment separation, secrets, and billing neutrality. |
+| Independent security assessment       | EXTERNAL PROVIDER REQUIRED   | No independent penetration test or assessment has occurred.                                                                                                                             |
+| Legal/privacy review                  | LEGAL DECISION REQUIRED      | Retention, deletion, export delivery, and privacy decisions still require accountable review.                                                                                           |
+| Operational ownership                 | OPERATIONAL OWNER REQUIRED   | Monitoring, alerting, backups, restore, rollback, support escalation, and recovery owners are not verified.                                                                             |
+| Provider credentials/scopes           | EXTERNAL PROVIDER REQUIRED   | SMS, email, push, WhatsApp, payments, monitoring, and delivery providers remain dormant.                                                                                                |
+| Free Launch billing state             | VERIFIED                     | No subscription paywall, Premium gate, checkout, transaction, payment-provider call, or fake payment success is active.                                                                 |
+| Authenticated member review           | BLOCKED                      | My Browser was not enabled; no authenticated member acceptance is claimed.                                                                                                              |
+| Authenticated staff review            | BLOCKED                      | My Browser was not enabled and no real staff account was used.                                                                                                                          |
 
 ## Readiness rule
 
-Automated tests do not equal launch approval. Bantabato remains **NOT READY** until the blocked, pending, legal, owner, and external-provider states above are resolved with evidence.
+Automated tests establish engineering evidence, not launch approval. Bantabato is **ENGINEERING COMPLETE for the reviewed code paths**, but remains **NOT READY** until the blocked, pending, legal, owner, and external-provider dependencies above are resolved with evidence.

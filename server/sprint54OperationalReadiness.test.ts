@@ -14,8 +14,12 @@ import {
   getRetentionPolicy,
   retentionReadiness,
 } from "./domain/operationalReadinessPolicy";
+import {
+  getMonitoringContract,
+  monitoringReadiness,
+} from "./monitoringContract";
 
-describe("Sprint 54 operational readiness contracts", () => {
+describe("Sprint 55 staging and operational readiness contracts", () => {
   it("blocks production without explicit deployment identities", () => {
     const result = evaluateDeploymentContract({ NODE_ENV: "production" });
     expect(result.status).toBe("blocked");
@@ -45,6 +49,28 @@ describe("Sprint 54 operational readiness contracts", () => {
     ).toThrow(/production-looking/);
   });
 
+  it("blocks staging until each non-production identity and allowed origin is explicit", () => {
+    const result = evaluateDeploymentContract({ APP_ENV: "staging" });
+    expect(result.status).toBe("blocked");
+    expect(result.reasons).toEqual(
+      expect.arrayContaining([
+        "staging database identity is not configured",
+        "staging storage identity is not configured",
+        "staging auth target is not configured",
+      ])
+    );
+    expect(
+      evaluateDeploymentContract({
+        APP_ENV: "staging",
+        BANTABATO_DATABASE_IDENTITY: "bantabato_staging_db",
+        BANTABATO_STORAGE_IDENTITY: "bantabato-staging-storage",
+        BANTABATO_AUTH_TARGET: "https://auth-staging.example.test",
+        BANTABATO_APPLICATION_ORIGIN: "https://staging.example.test",
+        BANTABATO_ALLOWED_ORIGINS: "https://staging.example.test",
+      }).status
+    ).toBe("configured");
+  });
+
   it("normalizes operational events without accepting private payloads", () => {
     const event = normalizeOperationalEvent({
       category: "authorization_failure",
@@ -72,6 +98,28 @@ describe("Sprint 54 operational readiness contracts", () => {
       operationalTelemetryReadiness({
         BANTABATO_MONITORING_PROVIDER_CONFIGURED: "1",
       }).status
+    ).toBe("CONFIGURED");
+  });
+
+  it("defines every alert category without inventing an owner or escalation path", () => {
+    const contract = getMonitoringContract();
+    expect(contract).toHaveLength(8);
+    expect(
+      contract.every(entry => entry.ownerStatus === "OWNER REQUIRED")
+    ).toBe(true);
+    expect(
+      contract.every(
+        entry => entry.alertStatus === "ALERT CONFIGURATION REQUIRED"
+      )
+    ).toBe(true);
+    expect(monitoringReadiness().state).toBe("PENDING");
+    expect(
+      monitoringReadiness({
+        BANTABATO_MONITORING_PROVIDER_CONFIGURED: "1",
+        BANTABATO_MONITORING_OWNER_CONFIGURED: "1",
+        BANTABATO_ALERTS_CONFIGURED: "1",
+        BANTABATO_ESCALATION_CONFIGURED: "1",
+      }).state
     ).toBe("CONFIGURED");
   });
 

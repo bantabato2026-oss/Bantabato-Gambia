@@ -92,6 +92,29 @@ export function evaluateDeploymentContract(
     }
   }
 
+  if (identity.environment === "staging") {
+    for (const [label, value] of [
+      ["database identity", identity.databaseIdentity],
+      ["storage identity", identity.storageIdentity],
+      ["auth target", identity.authTarget],
+      ["application origin", identity.applicationOrigin],
+    ] as const) {
+      if (!value) reasons.push(`staging ${label} is not configured`);
+      if (value && /production|prod\b/i.test(value))
+        reasons.push(`staging ${label} looks production-bound`);
+    }
+    if (
+      !identity.applicationOrigin ||
+      !identity.allowedOrigins.includes(identity.applicationOrigin)
+    ) {
+      reasons.push(
+        "staging application origin must be present in the allowed-origin contract"
+      );
+    }
+    if (env.DATABASE_URL && /production|prod\b/i.test(env.DATABASE_URL))
+      reasons.push("staging refuses a production-looking DATABASE_URL");
+  }
+
   if (testMode || ciMode) {
     if (!identity.testDatabaseIdentity && !identity.ciDatabaseIdentity)
       reasons.push("test/CI database identity is not configured");
