@@ -10,7 +10,7 @@ describe("official Brand asset", () => {
     );
 
     expect(source).toContain(
-      '"/manus-storage/public/bantabato-logo-official-f445863c.png"'
+      '"/manus-storage/public/bantabato-logo-official_9a4e6192.png"'
     );
     expect(source).toContain('alt="Bantabato"');
     expect(source).toContain("width={1536}");
@@ -25,7 +25,7 @@ describe("official Brand asset", () => {
     );
 
     expect(icon).toContain(
-      "/manus-storage/public/bantabato-logo-official-f445863c.png"
+      "/manus-storage/public/bantabato-logo-official_9a4e6192.png"
     );
     expect(icon).toContain('preserveAspectRatio="xMidYMid meet"');
   });
