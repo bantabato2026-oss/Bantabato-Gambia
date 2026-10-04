@@ -13,7 +13,8 @@
     "formattingAndStaticChecks": "PASSED_FOR_SPRINT_56_FILES",
     "previousDisposableMySqlCi": "PASSED",
     "previousCiRunId": 37131141898,
-    "currentSprintCi": "PENDING_PUSH"
+    "currentSprintCi": "PASSED",
+    "currentSprintCiRunId": 37232144920
   },
   "rehearsals": {
     "databaseBackup": "PENDING",
