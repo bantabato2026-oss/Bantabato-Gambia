@@ -30,7 +30,8 @@
     "staticFormatting": "PASSED",
     "previousDisposableMySqlCi": "PASSED",
     "previousCiRunId": 37232144920,
-    "currentSprintCi": "PENDING_PUSH"
+    "currentSprintCi": "PASSED",
+    "currentSprintCiRunId": 37232558597
   },
   "monitoring": {
     "provider": "NOT_CONFIGURED",
