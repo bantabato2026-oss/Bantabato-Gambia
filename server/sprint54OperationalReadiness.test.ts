@@ -115,6 +115,13 @@ describe("Sprint 55 staging and operational readiness contracts", () => {
     expect(monitoringReadiness().state).toBe("PENDING");
     expect(
       monitoringReadiness({
+        BANTABATO_MONITORING_OWNER_CONFIGURED: "1",
+        BANTABATO_ALERTS_CONFIGURED: "1",
+        BANTABATO_ESCALATION_CONFIGURED: "1",
+      }).state
+    ).toBe("PENDING");
+    expect(
+      monitoringReadiness({
         BANTABATO_MONITORING_PROVIDER_CONFIGURED: "1",
         BANTABATO_MONITORING_OWNER_CONFIGURED: "1",
         BANTABATO_ALERTS_CONFIGURED: "1",
@@ -157,5 +164,7 @@ describe("Sprint 55 staging and operational readiness contracts", () => {
         BANTABATO_RESTORE_VERIFIED: "1",
       })
     ).toMatchObject({ database: "CONFIGURED", restoreTest: "VERIFIED" });
+    expect(backupRestoreReadiness().lastVerifiedBackup).toBeNull();
+    expect(backupRestoreReadiness().restoreTestDate).toBeNull();
   });
 });

@@ -103,19 +103,22 @@ export function getMonitoringContract(
 
 export function monitoringReadiness(env: NodeJS.ProcessEnv = process.env) {
   const entries = getMonitoringContract(env);
-  const configured = entries.every(
-    entry =>
-      entry.ownerStatus === "OWNER CONFIGURED" &&
-      entry.alertStatus === "ALERT CONFIGURED" &&
-      entry.escalationStatus === "ESCALATION CONFIGURED"
-  );
+  const providerConfigured =
+    env.BANTABATO_MONITORING_PROVIDER_CONFIGURED === "1";
+  const configured =
+    providerConfigured &&
+    entries.every(
+      entry =>
+        entry.ownerStatus === "OWNER CONFIGURED" &&
+        entry.alertStatus === "ALERT CONFIGURED" &&
+        entry.escalationStatus === "ESCALATION CONFIGURED"
+    );
   return {
     state: configured ? ("CONFIGURED" as const) : ("PENDING" as const),
     entries,
-    providerStatus:
-      env.BANTABATO_MONITORING_PROVIDER_CONFIGURED === "1"
-        ? "EXTERNAL PROVIDER CONFIGURED"
-        : "EXTERNAL PROVIDER REQUIRED",
+    providerStatus: providerConfigured
+      ? "EXTERNAL PROVIDER CONFIGURED"
+      : "EXTERNAL PROVIDER REQUIRED",
     note: "No provider credentials, telemetry destinations, or named owners are inferred or activated by this contract.",
   };
 }

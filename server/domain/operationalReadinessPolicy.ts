@@ -129,6 +129,14 @@ export function backupRestoreReadiness(env: NodeJS.ProcessEnv = process.env) {
       ? ("OPERATIONAL OWNER REQUIRED" as const)
       : ("PENDING" as const),
     rollback: "PENDING" as const,
+    lastVerifiedBackup: null as string | null,
+    restoreTestDate: verified ? (null as string | null) : null,
+    backupOwnerStatus: configured
+      ? ("OPERATIONAL OWNER REQUIRED" as const)
+      : ("OWNER REQUIRED" as const),
+    recoveryOwnerStatus: configured
+      ? ("OPERATIONAL OWNER REQUIRED" as const)
+      : ("OWNER REQUIRED" as const),
     note: "No backup or restore infrastructure is inferred from application persistence tests.",
   };
 }
