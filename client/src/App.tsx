@@ -11,6 +11,7 @@ import { DesignPreferenceBridge } from "./components/DesignPreferenceBridge";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const AdminVerificationQueuePage = lazy(() => import("@/pages/AdminOperations").then(module => ({ default: module.AdminVerificationQueuePage })));
@@ -137,4 +138,13 @@ function Router() {
   </Switch></PageEnter>;
 }
 
-export default function App() { return <ErrorBoundary><ThemeProvider defaultTheme="light"><DesignPreferenceBridge /><TooltipProvider><Toaster /><Suspense fallback={<BrandedRouteLoading />}><Router /></Suspense></TooltipProvider></ThemeProvider></ErrorBoundary>; }
+function RoutePrivacyMetadata() {
+  const [location] = useLocation();
+  useEffect(() => {
+    const privateRoute = ["/app", "/admin", "/family"].some(prefix => location === prefix || location.startsWith(`${prefix}/`));
+    document.head.querySelector<HTMLMetaElement>('meta[name="robots"]')?.setAttribute("content", privateRoute ? "noindex,nofollow,noarchive" : "index,follow");
+  }, [location]);
+  return null;
+}
+
+export default function App() { return <ErrorBoundary><ThemeProvider defaultTheme="light"><DesignPreferenceBridge /><TooltipProvider><Toaster /><RoutePrivacyMetadata /><Suspense fallback={<BrandedRouteLoading />}><Router /></Suspense></TooltipProvider></ThemeProvider></ErrorBoundary>; }

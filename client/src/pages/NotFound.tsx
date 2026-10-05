@@ -1,52 +1,66 @@
+import { useEffect } from "react";
+import { Link } from "wouter";
+import { ArrowLeft, Compass, Home } from "lucide-react";
+import { PublicLayout } from "@/components/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, Home } from "lucide-react";
-import { useLocation } from "wouter";
 
 export default function NotFound() {
-  const [, setLocation] = useLocation();
-
-  const handleGoHome = () => {
-    setLocation("/");
-  };
+  useEffect(() => {
+    document.title = "Page not found — Bantabato";
+    document.head
+      .querySelector<HTMLMetaElement>('meta[name="description"]')
+      ?.setAttribute(
+        "content",
+        "This Bantabato page is unavailable. Return to the public home page or explore how the service works."
+      );
+    document.head
+      .querySelector<HTMLMetaElement>('meta[name="robots"]')
+      ?.setAttribute("content", "noindex,nofollow,noarchive");
+  }, []);
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-      <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-        <CardContent className="pt-8 pb-8 text-center">
-          <div className="flex justify-center mb-6">
-            <div className="relative">
-              <div className="absolute inset-0 bg-red-100 rounded-full animate-pulse" />
-              <AlertCircle className="relative h-16 w-16 text-red-500" />
-            </div>
-          </div>
-
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">404</h1>
-
-          <h2 className="text-xl font-semibold text-slate-700 mb-4">
-            Page Not Found
-          </h2>
-
-          <p className="text-slate-600 mb-8 leading-relaxed">
-            Sorry, the page you are looking for doesn't exist.
-            <br />
-            It may have been moved or deleted.
-          </p>
-
-          <div
-            id="not-found-button-group"
-            className="flex flex-col sm:flex-row gap-3 justify-center"
-          >
-            <Button
-              onClick={handleGoHome}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+    <PublicLayout>
+      <main className="public-page" aria-labelledby="not-found-title">
+        <div className="container flex min-h-[62vh] items-center justify-center py-16">
+          <section className="w-full max-w-2xl rounded-[1.75rem] border border-forest/10 bg-white p-8 text-center shadow-[0_18px_55px_rgba(21,58,45,.07)] sm:p-12">
+            <div
+              className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-cream text-gold-dark"
+              aria-hidden="true"
             >
-              <Home className="w-4 h-4 mr-2" />
-              Go Home
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+              <Compass size={30} />
+            </div>
+            <p className="mt-7 text-xs font-semibold uppercase tracking-[.18em] text-gold-dark">
+              A quiet detour
+            </p>
+            <h1
+              id="not-found-title"
+              className="mt-4 font-display text-5xl leading-none text-ink sm:text-6xl"
+            >
+              That page isn’t here.
+            </h1>
+            <p className="mx-auto mt-6 max-w-lg text-base leading-7 text-muted-foreground">
+              The link may be outdated or the page may have moved. No member,
+              account, message, or private route information is shown here.
+            </p>
+            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button asChild className="btn-forest">
+                <Link href="/">
+                  <Home size={16} /> Return home
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="border-forest/20 bg-white text-forest hover:bg-forest/5"
+              >
+                <Link href="/how-it-works">
+                  <ArrowLeft size={16} /> How it works
+                </Link>
+              </Button>
+            </div>
+          </section>
+        </div>
+      </main>
+    </PublicLayout>
   );
 }

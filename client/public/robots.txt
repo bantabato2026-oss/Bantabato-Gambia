@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /admin
+Disallow: /family
+Disallow: /api/
+Disallow: /__manus__/
+Disallow: /manus-storage/
+
+Sitemap: https://bantabato-pkgkalne.manus.space/sitemap.xml
