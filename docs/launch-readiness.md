@@ -1,10 +1,10 @@
 # Bantabato Launch-Readiness Matrix
 
-**Sprint 57 review scope:** Repository configuration, sandbox capability inspection, public deployment response, local validation, and disposable MySQL CI. No production mutation, real member data, provider activation, secret values, backup artifact, restore rehearsal, rollback rehearsal, authenticated browser review, or legal decision was performed.
+**Sprint 59 review scope:** Repository source, public UX copy, trust-pattern contracts, sandbox capability inspection, local validation, and prior disposable MySQL CI evidence. No production mutation, real member data, provider activation, secret values, backup artifact, restore rehearsal, rollback rehearsal, authenticated browser review, manual accessibility review, or legal decision was performed.
 
 | Area                            | Status                     | Evidence                                                                                                              | Dependency                           | Owner                   | Next action                            |
 | ------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------- | -------------------------------------- |
-| Tests                           | VERIFIED                   | 523 tests passed; 6 intentional skips across 1 file                                                                   | None for reviewed code               | OWNER REQUIRED          | Preserve regression gate               |
+| Tests                           | VERIFIED                   | 526 tests passed; 6 intentional skips across 1 file                                                                   | None for reviewed code               | OWNER REQUIRED          | Preserve regression gate               |
 | Production build                | VERIFIED                   | `pnpm build` passed                                                                                                   | None                                 | OWNER REQUIRED          | Keep release gate                      |
 | Dependency audit                | VERIFIED                   | No known production vulnerabilities                                                                                   | None                                 | OWNER REQUIRED          | Re-run on dependency changes           |
 | Static/format checks            | VERIFIED                   | TypeScript, targeted Prettier, JSON parse, and diff checks passed                                                     | None                                 | OWNER REQUIRED          | Keep targeted checks                   |
@@ -44,6 +44,12 @@
 | Independent security assessment | EXTERNAL REVIEW REQUIRED   | No independent assessment performed                                                                                   | Qualified external reviewer          | EXTERNAL OWNER REQUIRED | Commission assessment                  |
 | Free Launch                     | VERIFIED                   | No paywall, Premium gate, checkout, transaction, fake payment, or payment-provider activation                         | None                                 | OWNER REQUIRED          | Keep dormant                           |
 | Payment providers               | EXTERNAL PROVIDER REQUIRED | No credentials or calls activated                                                                                     | Future commercial decision           | EXTERNAL OWNER REQUIRED | Do not activate in Free Launch         |
+
+## Sprint 59 trust-pattern evidence
+
+The static audit covered **40 checklist entries**: **10 dark-pattern checks**, **10 fake-review/social-proof checks**, **10 hidden-fee/commercial checks**, and **10 supporting UX/legal-boundary checks**. The reviewed paths found **0 prohibited dark patterns**, **0 fabricated review/social-proof claims**, and **0 active hidden fees or paywalls**. One shared contrast token was corrected and one new regression assertion was added. Full evidence is in [`docs/sprint59-trust-patterns-audit.md`](sprint59-trust-patterns-audit.md).
+
+These are repository/source findings only. They do not close legal approval, retention/deletion policy, contact/business identity, authenticated browser review, manual accessibility, staging, recovery, monitoring, ownership, localization, or independent security blockers.
 
 ## Evidence rule
 
