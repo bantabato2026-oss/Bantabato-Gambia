@@ -7,6 +7,8 @@ export const OPERATIONAL_EVENT_CATEGORIES = [
   "queue_failure",
   "storage_failure",
   "safety_workflow_failure",
+  "backup_failure",
+  "restore_failure",
 ] as const;
 
 export type OperationalEventCategory =

@@ -81,6 +81,22 @@ const CATALOG: Array<
     expectedResponse:
       "Preserve fail-closed safety state and escalate to the authorized safety owner",
   },
+  {
+    category: "backup_failure",
+    signal:
+      "Expected backup artifact or provider backup job fails or is absent",
+    severity: "critical",
+    expectedResponse:
+      "Record the failure without inventing a backup timestamp and escalate to the recovery owner",
+  },
+  {
+    category: "restore_failure",
+    signal:
+      "Synthetic restore rehearsal fails or cannot reach its disposable target",
+    severity: "critical",
+    expectedResponse:
+      "Keep recovery readiness blocked, preserve diagnostics without secrets, and escalate to the recovery owner",
+  },
 ];
 
 export function getMonitoringContract(

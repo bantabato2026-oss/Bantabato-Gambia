@@ -103,7 +103,10 @@ describe("Sprint 55 staging and operational readiness contracts", () => {
 
   it("defines every alert category without inventing an owner or escalation path", () => {
     const contract = getMonitoringContract();
-    expect(contract).toHaveLength(8);
+    expect(contract).toHaveLength(10);
+    expect(contract.map(entry => entry.category)).toEqual(
+      expect.arrayContaining(["backup_failure", "restore_failure"])
+    );
     expect(
       contract.every(entry => entry.ownerStatus === "OWNER REQUIRED")
     ).toBe(true);
