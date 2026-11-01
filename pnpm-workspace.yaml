@@ -2,5 +2,5 @@ packages:
   - .
 overrides:
   tailwindcss>nanoid: 3.3.7
-  express>qs: 6.16.0
-  body-parser>qs: 6.16.0
+  express>qs: 6.17.1
+  body-parser>qs: 6.17.1
