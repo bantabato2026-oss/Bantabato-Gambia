@@ -69,6 +69,8 @@ Every gate below is represented in `docs/launch-readiness.json`; the JSON contra
 
 **Sprint 61 dependency update:** A fresh production audit identified outdated `body-parser`, `zod`, `follow-redirects`, and `qs` versions. They were pinned to patched releases (`2.4.0`, `4.6.7`, `1.16.2`, and `6.17.1` respectively); the final production audit returned **no known vulnerabilities**. This risk was remediated, not treated as evidence of operational readiness.
 
+**Sprint 61 CI update:** Disposable MySQL run **41352689759** passed on commit `e1b67972a08ac5a6dc79811e5567ffa815268128`; dependency installation, schema setup, persistence authority tests, and artifact upload succeeded.
+
 | ID        | Category        | Status                      | Blocking | Evidence                                                                                                 | Dependency                                      | Owner status               | Next action                                      |
 | --------- | --------------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------- | ------------------------------------------------ |
 | ENG-001   | engineering     | VERIFIED                    | NO       | 526 tests passed with 6 intentional skips; full suite output retained locally                            | Reviewed source paths                           | ENGINEERING                | Preserve full regression gate                    |
