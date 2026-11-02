@@ -84,6 +84,21 @@ Every gate below is represented in `docs/launch-readiness.json`; the JSON contra
 
 The founder action sheet identifies the exact resource, approval, owner, gate impact, and next action for each prerequisite. A checklist or appointment template is not completion evidence.
 
+## Sprint 63 approval and execution dashboard
+
+| State                     |  Count | Evidence-backed meaning                                                                                                         |
+| ------------------------- | -----: | ------------------------------------------------------------------------------------------------------------------------------- |
+| Decisions documented      |     10 | All Sprint 62 decisions remain traceable to related launch gates                                                                |
+| Awaiting founder approval |     10 | No approving person, role, or timestamp has been recorded                                                                       |
+| Approved                  |      0 | No founder approval is claimed                                                                                                  |
+| Resources provisioned     |      0 | No staging host, database, storage, OAuth target, secret-manager scope, monitoring destination, or recovery target is available |
+| Actions executed          |      0 | Approval and resource preconditions were absent, so controlled execution stopped                                                |
+| Formal owner acceptances  |      0 | All technical, operational, legal, security, accessibility, localization, and release roles remain `OWNER REQUIRED`             |
+| Verification pending      |      0 | Nothing was executed, so no execution verification is claimed                                                                   |
+| Hard blockers remaining   | **29** | The authoritative gate inventory remains unchanged                                                                              |
+
+The approval register and policy distinguish `APPROVED` from `EXECUTED — VERIFICATION PENDING` and `VERIFIED`; duplicate or stale approvals are rejected by regression-tested policy. FREE_LAUNCH remains active, payment and external communications remain dormant, and launch remains **NOT READY**.
+
 | ID        | Category        | Status                      | Blocking | Evidence                                                                                                 | Dependency                                      | Owner status               | Next action                                      |
 | --------- | --------------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------- | ------------------------------------------------ |
 | ENG-001   | engineering     | VERIFIED                    | NO       | 526 tests passed with 6 intentional skips; full suite output retained locally                            | Reviewed source paths                           | ENGINEERING                | Preserve full regression gate                    |
