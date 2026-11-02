@@ -1,5 +1,5 @@
 {
-  "sprint": 63,
+  "sprint": 64,
   "launchStatus": "NOT READY",
   "engineeringStatus": "ENGINEERING COMPLETE FOR REVIEWED CODE PATHS",
   "reviewedAt": "2026-11-01",
@@ -103,7 +103,10 @@
     "Sprint 63 added a fail-closed founder approval policy with explicit status validation, duplicate decision rejection, stale approval-version rejection, and execution/verification evidence requirements.",
     "Sprint 63 staging authorization, credential ownership, operational appointments, synthetic acceptance, and recovery packages are prepared; no credentials, external integrations, staging resources, production mutations, or real member data were used.",
     "Sprint 63 local validation: 537 tests passed, 6 intentional skips across 111 test files; TypeScript, production build, dependency audit, focused approval/operational tests, formatting, JSON, and diff checks passed.",
-    "Sprint 63 disposable MySQL CI run 41472180330 passed on commit c411cca90b8d8cdf7dc7402c2fffffcb04e6e9b8: dependency installation, schema setup, persistence authority tests, and artifact upload succeeded."
+    "Sprint 63 disposable MySQL CI run 41472180330 passed on commit c411cca90b8d8cdf7dc7402c2fffffcb04e6e9b8: dependency installation, schema setup, persistence authority tests, and artifact upload succeeded.",
+    "Sprint 64 inspected actual project evidence: one WebDev-managed public deployment, MySQL-compatible TiDB Cloud production configuration, Drizzle MySQL migrations, Manus storage/OAuth integrations, and disposable MySQL 8.4 CI. No secret values were copied into documentation.",
+    "Sprint 64 recommends a separate WebDev-managed staging target only if distinct origin, database, storage, OAuth, secret scope, monitoring, and recovery isolation are proven. New spend is unauthorized and current initial/monthly pricing is unverified.",
+    "Sprint 64 decision STAGE-001 remains AWAITING FOUNDER APPROVAL; technical and recovery owners remain OWNER REQUIRED; no provisioning or external activation occurred."
   ],
   "trustPatternAudit": {
     "checklistEntriesAudited": 40,
@@ -664,5 +667,30 @@
       "docs/operational-owner-appointments.md",
       "docs/synthetic-acceptance-and-recovery-plan.md"
     ]
+  },
+  "sprint64InfrastructureInspection": {
+    "hosting": "WEBDEV_MANAGED_RUNTIME_ONE_PUBLIC_TARGET_VERIFIED",
+    "productionDatabase": "MYSQL_COMPATIBLE_TIDB_CLOUD_CONFIGURATION_PRESENT_REDACTED",
+    "databaseEngine": "MYSQL",
+    "migrationStrategy": "DRIZZLE_MYSQL_COMMITTED_SCHEMA_AND_MIGRATIONS",
+    "storage": "MANUS_BUILT_IN_STORAGE_HELPERS_PRESENT_SEPARATE_STAGING_NAMESPACE_UNVERIFIED",
+    "authentication": "MANUS_OAUTH_CONFIGURATION_PRESENT_SEPARATE_STAGING_CLIENT_UNVERIFIED",
+    "secretManagement": "SECRET_NAMES_PRESENT_IN_MANAGED_PROJECT_METADATA_SCOPE_AND_OWNER_UNVERIFIED",
+    "environments": "PUBLIC_MANAGED_TARGET_AND_DISPOSABLE_CI_ONLY",
+    "ci": "GITHUB_ACTIONS_DISPOSABLE_MYSQL_8_4",
+    "backupRecovery": "NO_VERIFIED_BACKUP_RESTORE_OR_ROLLBACK_TARGET"
+  },
+  "sprint64StagingDecision": {
+    "decisionId": "STAGE-001",
+    "recommendedOption": "SEPARATE_WEBDEV_MANAGED_STAGING_TARGET_IF_ISOLATION_AND_ENVIRONMENT_SCOPED_SECRETS_ARE_PROVEN",
+    "approvalStatus": "AWAITING FOUNDER APPROVAL",
+    "provisioned": false,
+    "newSpendAuthorized": false,
+    "initialCost": "UNVERIFIED",
+    "monthlyCost": "UNVERIFIED",
+    "costEvidence": "Provider-console quote/limits not available in current repository or project metadata",
+    "technicalOwner": "OWNER REQUIRED",
+    "recoveryOwner": "OWNER REQUIRED",
+    "rollback": "STOP_ON_FAILED_ISOLATION_OR_MISSING_RESOURCE; NO_PRODUCTION_MUTATION"
   }
 }

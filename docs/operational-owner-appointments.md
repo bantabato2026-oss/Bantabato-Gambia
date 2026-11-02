@@ -26,3 +26,15 @@ An appointment is valid only when a named person or organization explicitly acce
 ## Current result
 
 Zero roles have formal acceptance evidence in Sprint 63. No person was appointed automatically and all related gates remain unresolved.
+
+## Sprint 64 priority appointments
+
+### Technical/platform owner — OWNER REQUIRED
+
+Responsibilities: deployment and environment configuration; access and secret-management coordination; database and storage isolation; infrastructure monitoring. Minimum access: staging deployment and approved secret-manager scope only, with no unnecessary production data access. Escalates failed identity/isolation checks to the release approver and incident owner. Acceptance requires explicit person/role, scope, access boundary, timestamp, and approval reference.
+
+### Database and recovery owner — OWNER REQUIRED
+
+Responsibilities: backup ownership, restore procedures, recovery verification, and rollback coordination. Minimum access: staging/disposable database and approved backup targets only. Escalates failed backup, restore, consistency, or rollback checks to the technical owner and release approver. Acceptance requires explicit person/role, recovery scope, target boundaries, timestamp, and approval reference.
+
+No technical or recovery owner accepted these appointments in Sprint 64.
