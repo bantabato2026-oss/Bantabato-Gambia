@@ -38,3 +38,17 @@ Responsibilities: deployment and environment configuration; access and secret-ma
 Responsibilities: backup ownership, restore procedures, recovery verification, and rollback coordination. Minimum access: staging/disposable database and approved backup targets only. Escalates failed backup, restore, consistency, or rollback checks to the technical owner and release approver. Acceptance requires explicit person/role, recovery scope, target boundaries, timestamp, and approval reference.
 
 No technical or recovery owner accepted these appointments in Sprint 64.
+
+## Sprint 65 acceptance workflow
+
+The appointment request must record the person or role, approved scope, minimum access, escalation contact, acceptance statement, authenticated approval reference, timestamp, and approval version. A budget approval alone does not appoint either owner and does not authorize provisioning.
+
+### Technical/platform owner — acceptance outstanding
+
+The accepted scope must cover WebDev deployment, environment configuration, secret and access controls, storage separation, OAuth separation, and staging monitoring. It must explicitly exclude unapproved production access.
+
+### Database/recovery owner — acceptance outstanding
+
+The accepted scope must cover the separate TiDB staging database, Drizzle migrations, backup and restore, recovery verification, and rollback coordination. It must explicitly exclude production migration and production data access.
+
+No person was assigned or marked accepted in Sprint 65.
