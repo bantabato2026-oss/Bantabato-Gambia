@@ -1,25 +1,28 @@
-# Bantabato Sprint 61 — Operational Ownership Register
+# Bantabato Sprint 62 — Operational Ownership Appointment Register
 
 **Review date:** 2026-11-01  
-**Rule:** No person or organization is marked assigned without explicit founder evidence. Current unassigned roles remain blockers.
+**Rule:** A role becomes assigned only after explicit acceptance is recorded through the approved process. No names are invented and no responsibility is implied.
 
-| Responsibility                         | Required accountable role | Current owner status | Required decision/evidence                                         | Dependencies                              | Founder approval? |
-| -------------------------------------- | ------------------------- | -------------------- | ------------------------------------------------------------------ | ----------------------------------------- | ----------------- |
-| Technical delivery and release quality | Technical owner           | OWNER REQUIRED       | Named owner and release authority                                  | Repository, deployment, migration review  | Yes               |
-| Infrastructure and deployment          | Infrastructure owner      | OWNER REQUIRED       | Named owner and isolated runtime authority                         | Hosting, secrets, domains                 | Yes               |
-| Database administration                | Database owner            | OWNER REQUIRED       | Named owner and least-privilege access                             | Staging DB, migration process             | Yes               |
-| Backup and restore                     | Recovery owner            | OWNER REQUIRED       | Named primary/backup recovery owners and verified artifact process | Backup destination, restore target        | Yes               |
-| Rollback and release recovery          | Deployment/recovery owner | OWNER REQUIRED       | Rollback owner and disposable rehearsal evidence                   | Disposable deployment target              | Yes               |
-| Monitoring and incident response       | Incident owner            | OWNER REQUIRED       | Owner, alert route, escalation schedule                            | Monitoring provider and alert destination | Yes               |
-| Member support                         | Support owner             | OWNER REQUIRED       | Queue owner, response policy, escalation route                     | Support channel and privacy policy        | Yes               |
-| Trust & Safety                         | Trust & Safety owner      | OWNER REQUIRED       | Safety decision authority and escalation coverage                  | Staff roles, incident process             | Yes               |
-| Privacy and data protection            | Privacy owner             | OWNER REQUIRED       | Data-rights, retention, deletion, export decision authority        | Legal review and secure delivery          | Yes               |
-| Legal review                           | Legal reviewer            | OWNER REQUIRED       | Recorded legal decisions and review date/version                   | Founder-approved counsel/reviewer         | Yes               |
-| Security review                        | Security owner            | OWNER REQUIRED       | Internal coordinator and independent assessor engagement           | Security package, external reviewer       | Yes               |
-| Accessibility                          | Accessibility reviewer    | OWNER REQUIRED       | Manual review owner and evidence record                            | Browser/device/screen-reader access       | Yes               |
-| Localization and translation           | Language reviewers        | OWNER REQUIRED       | English/Wolof/Mandinka/French review evidence                      | Competent reviewers and approved copy     | Yes               |
-| Launch/release approval                | Founder/release approver  | OWNER REQUIRED       | Explicit approval decision against the full gate matrix            | All applicable blockers resolved          | Yes               |
+| Responsibility                         | Required role                   | Current status | Acceptance evidence required                                  | Founder next action                      |
+| -------------------------------------- | ------------------------------- | -------------- | ------------------------------------------------------------- | ---------------------------------------- |
+| Technical/platform and release quality | Technical owner                 | OWNER REQUIRED | Name, scope, repository/deployment authority, acceptance date | Appoint primary and backup               |
+| Infrastructure and staging             | Platform/infrastructure owner   | OWNER REQUIRED | Runtime, domain, secrets, environment scope                   | Appoint owner and approve staging target |
+| Database administration                | Database owner                  | OWNER REQUIRED | DB scope, least privilege, migration authority                | Appoint owner and staging DB             |
+| Backup, restore, rollback              | Database/recovery owner         | OWNER REQUIRED | Recovery target, runbook acceptance, escalation route         | Appoint primary and backup               |
+| Monitoring and incident response       | Incident owner                  | OWNER REQUIRED | Alert destination, severity/escalation scope, on-call route   | Appoint owner and approve alert route    |
+| Member support                         | Support owner                   | OWNER REQUIRED | Queue scope, response policy, privacy-safe channel            | Appoint owner                            |
+| Trust & Safety                         | Trust & Safety owner            | OWNER REQUIRED | Safety decision authority and escalation coverage             | Appoint authorized owner                 |
+| Privacy/data protection                | Privacy owner                   | OWNER REQUIRED | Data-rights and privacy decision scope                        | Appoint competent owner                  |
+| Legal review                           | Legal reviewer                  | OWNER REQUIRED | Legal scope, decision record, date/version                    | Appoint reviewer/counsel                 |
+| Independent security                   | Independent reviewer            | OWNER REQUIRED | Independent assessor identity, scope, report                  | Approve and engage reviewer              |
+| Accessibility                          | Accessibility reviewer          | OWNER REQUIRED | Browser/device/screen-reader evidence and date                | Appoint competent reviewer               |
+| Localization                           | Wolof/Mandinka/French reviewers | OWNER REQUIRED | Language, reviewer competence, approved copy                  | Appoint reviewers                        |
+| Release approval                       | Founder/release approver        | OWNER REQUIRED | Decision against all applicable gates                         | Name approver and approval process       |
+
+## Appointment acceptance template
+
+For each role, record: `appointment_id`, role, person/organization, responsibility scope, primary/backup designation, accepted date, approval reference, dependencies, escalation route, review/expiry date, and evidence location. Do not record passwords, tokens, private keys, or identity documents here.
 
 ## Current conclusion
 
-No accountable owner was assigned in this sprint. The register is an assignment instrument, not evidence of acceptance. Until roles are formally assigned, the corresponding launch gates remain `OPERATIONAL OWNER REQUIRED`, `BUSINESS INPUT REQUIRED`, or `LEGAL REVIEW REQUIRED`.
+No role has formal acceptance evidence in Sprint 62. The register is now actionable, but it is not an assignment record. All corresponding ownership, recovery, legal, security, accessibility, localization, and release gates remain unresolved.

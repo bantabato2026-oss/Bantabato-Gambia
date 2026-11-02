@@ -71,6 +71,19 @@ Every gate below is represented in `docs/launch-readiness.json`; the JSON contra
 
 **Sprint 61 CI update:** Disposable MySQL run **41352689759** passed on commit `e1b67972a08ac5a6dc79811e5567ffa815268128`; dependency installation, schema setup, persistence authority tests, and artifact upload succeeded.
 
+## Sprint 62 founder dashboard
+
+| Founder view                        | Current evidence-backed result                                                                                                                  | Required action                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Complete and verified               | 6 gates are `VERIFIED`; 1 gate is `COMPLETE`; Free Launch remains active and billing dormant                                                    | Preserve regression, safety, privacy, and Free Launch controls                 |
+| Configured but not verified         | Environment, storage, authentication, monitoring catalog, and incident procedures have code/contracts but lack live target evidence             | Provide isolated resources, then run identity and health checks                |
+| Founder action required             | Staging origin/database/storage/auth, secrets ownership, backup/recovery targets, monitoring route, and tester access                           | Use `docs/sprint62-founder-action-plan.md` in priority order                   |
+| Owner appointment required          | 8 gates are `OPERATIONAL OWNER REQUIRED`; 11 gates lack an accepted operational owner                                                           | Record explicit primary/backup appointments and acceptance dates               |
+| External provider/reviewer required | Monitoring/alerting, secure export, localization, payment decisions, and independent security review remain external dependencies               | Approve providers/reviewers without activating dormant commercial integrations |
+| Launch blockers                     | **29 hard blockers remain** across staging, recovery, ownership, legal/privacy, acceptance, accessibility, localization, and independent review | Do not change launch status until evidence closes the applicable gates         |
+
+The founder action sheet identifies the exact resource, approval, owner, gate impact, and next action for each prerequisite. A checklist or appointment template is not completion evidence.
+
 | ID        | Category        | Status                      | Blocking | Evidence                                                                                                 | Dependency                                      | Owner status               | Next action                                      |
 | --------- | --------------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------- | ------------------------------------------------ |
 | ENG-001   | engineering     | VERIFIED                    | NO       | 526 tests passed with 6 intentional skips; full suite output retained locally                            | Reviewed source paths                           | ENGINEERING                | Preserve full regression gate                    |

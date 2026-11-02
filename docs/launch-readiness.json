@@ -1,5 +1,5 @@
 {
-  "sprint": 61,
+  "sprint": 62,
   "launchStatus": "NOT READY",
   "engineeringStatus": "ENGINEERING COMPLETE FOR REVIEWED CODE PATHS",
   "reviewedAt": "2026-11-01",
@@ -95,7 +95,10 @@
     "Sprint 61 created staging readiness, provisioning, ownership, recovery, and authenticated acceptance evidence packages. These packages record blockers and do not claim staging, recovery, browser acceptance, legal approval, or owner assignment.",
     "The authoritative matrix remains unchanged at 36 unique gates and 29 hard blockers; launchStatus remains NOT READY.",
     "Sprint 61 dependency audit initially identified vulnerable body-parser 2.3.0, zod 4.1.12, follow-redirects 1.16.0, and qs 6.16.0 in the production graph; pinned patched releases body-parser 2.4.0, zod 4.6.7, follow-redirects 1.16.2, and qs 6.17.1. Final production audit is clean.",
-    "Final Sprint 61 disposable MySQL CI run 41352689759 passed on commit e1b67972a08ac5a6dc79811e5567ffa815268128: dependency installation, schema setup, persistence authority suite, and artifact upload succeeded."
+    "Final Sprint 61 disposable MySQL CI run 41352689759 passed on commit e1b67972a08ac5a6dc79811e5567ffa815268128: dependency installation, schema setup, persistence authority suite, and artifact upload succeeded.",
+    "Sprint 62 created a founder action and approval plan with 10 prioritized resource/decision items; no passwords or secrets are requested in project documentation.",
+    "Sprint 62 converted staging, ownership, and recovery documents into executable appointment/provisioning/rehearsal workflows; no resource was provisioned and no owner was formally appointed.",
+    "Sprint 62 founder dashboard preserves 36 unique gates and 29 hard blockers and distinguishes verified/complete work from configured-but-unverified, founder-action, owner-required, provider-required, and independent-review work."
   ],
   "trustPatternAudit": {
     "checklistEntriesAudited": 40,
@@ -597,5 +600,34 @@
       "evidence": "Sprint 61 staging, ownership, recovery, and acceptance documents.",
       "followUp": "Founder-approved external provisioning and role assignment required."
     }
-  ]
+  ],
+  "sprint62FounderActionPlan": {
+    "file": "docs/sprint62-founder-action-plan.md",
+    "status": "ACTION REQUIRED",
+    "items": 10,
+    "secretsRequestedInDocument": false,
+    "provisioningExecuted": false,
+    "ownersFormallyAppointed": 0,
+    "nextAction": "Founder selects a priority, approves the resource or role, and provides non-secret identity/acceptance evidence through the approved secure process."
+  },
+  "founderDashboard": {
+    "gateCount": 36,
+    "hardBlockerCount": 29,
+    "verifiedGateCount": 6,
+    "completeGateCount": 1,
+    "blockingStatusCounts": {
+      "BLOCKED": 10,
+      "OPERATIONAL OWNER REQUIRED": 8,
+      "EXTERNAL PROVIDER REQUIRED": 3,
+      "LEGAL REVIEW REQUIRED": 3,
+      "PENDING": 3,
+      "BUSINESS INPUT REQUIRED": 1,
+      "INDEPENDENT REVIEW REQUIRED": 1,
+      "VERIFIED_BUT_BLOCKING_FREE_LAUNCH_CONTROL": 1
+    },
+    "stagingProvisioned": false,
+    "recoveryRehearsalCompleted": false,
+    "authenticatedAcceptanceCompleted": false,
+    "formalOwnerAppointments": 0
+  }
 }

@@ -1,31 +1,39 @@
-# Bantabato Sprint 61 — Recovery Evidence
+# Bantabato Sprint 62 — Recovery Evidence and Rehearsal Plan
 
 **Review date:** 2026-11-01  
-**Overall status:** **BLOCKED — NO VERIFIED BACKUP/RESTORE/ROLLBACK EVIDENCE**
+**Overall status:** **BLOCKED — ISOLATED TARGET AND RECOVERY OWNER UNAVAILABLE**
 
-## Evidence boundary
+## What is verified
 
-The repository contains recovery checklists, transaction rollback tests, a disposable MySQL CI workflow, and operational contracts. These do not constitute a production backup, disaster-recovery restore, storage restore, or deployment rollback rehearsal.
+- Transaction rollback cleanup is covered by isolated automated tests.
+- Disposable MySQL CI run `41352689759` passed schema setup and persistence authority tests.
+- Recovery contracts and stop conditions are documented.
 
-No production data, member data, identity document, backup artifact, external recovery service, or destructive rollback was used.
+These do not prove backup integrity, database/storage restore, recovery time, or deployment rollback.
 
-| Capability                    | Current status                    | Evidence actually available                  | Missing dependency                         | Owner status   |
-| ----------------------------- | --------------------------------- | -------------------------------------------- | ------------------------------------------ | -------------- |
-| Backup creation               | NO BACKUP CONFIGURED              | Documentation only; no artifact or timestamp | Approved non-production backup service     | OWNER REQUIRED |
-| Backup integrity              | PENDING                           | No checksum or independent validation        | Backup artifact and integrity method       | OWNER REQUIRED |
-| Database restore              | RESTORE TEST PENDING              | No restore target or execution result        | Disposable database and synthetic A–J data | OWNER REQUIRED |
-| Storage restore               | RESTORE TEST PENDING              | No storage backup artifact or target         | Non-production private storage target      | OWNER REQUIRED |
-| Recovery ownership            | RECOVERY OWNER REQUIRED           | No accepted owner assignment                 | Named recovery owner and escalation path   | OWNER REQUIRED |
-| Rollback procedure            | PROCEDURE DOCUMENTED              | Runbook/checklist exists                     | Disposable deployment target               | OWNER REQUIRED |
-| Disposable rollback rehearsal | DISPOSABLE REHEARSAL NOT EXECUTED | No deployment rehearsal result               | Versioned non-production deployment        | OWNER REQUIRED |
-| Production rollback readiness | NOT VERIFIED                      | Must not be inferred from documentation      | Rehearsal plus operational approval        | OWNER REQUIRED |
+## Safe rehearsal sequence once staging exists
 
-## Verified adjacent evidence
+1. Record staging application, database, storage, and deployment identities without secrets.
+2. Seed only deterministic fictional A–J records and synthetic private media metadata.
+3. Create a timestamped database backup and record artifact identity/checksum outside the application database.
+4. Verify backup readability and checksum using an independent process.
+5. Restore into a disposable non-production database with a distinct identity.
+6. Compare schema/migration version, row invariants, privacy boundaries, eligibility state, and synthetic media references.
+7. Restore storage into a disposable private namespace and verify signed access plus cross-environment denial.
+8. Record measured recovery duration only if a real timer was used.
+9. Rehearse version rollback or compensating migration against a disposable deployment target.
+10. Have the recovery owner and an independent reviewer sign the evidence record.
+11. Update only the applicable launch gates with artifact identity, environment, timestamp, owner, result, and next action.
 
-- The application transaction harness performs rollback cleanup in isolated test transactions.
-- GitHub Actions run `41351669017` passed committed schema setup and persistence authority tests using disposable MySQL.
-- The CI result does not verify backups, storage recovery, production recovery time, or deployment rollback.
+## Current evidence table
 
-## Required next action
+| Capability                | Status         | Missing dependency                                         | Owner status   |
+| ------------------------- | -------------- | ---------------------------------------------------------- | -------------- |
+| Backup creation/integrity | BLOCKED        | Approved non-production backup service and artifact target | OWNER REQUIRED |
+| Database restore          | BLOCKED        | Disposable database and synthetic A–J dataset              | OWNER REQUIRED |
+| Storage restore           | BLOCKED        | Disposable private storage target                          | OWNER REQUIRED |
+| Recovery-time measurement | NOT MEASURED   | Executed rehearsal with timer                              | OWNER REQUIRED |
+| Rollback rehearsal        | BLOCKED        | Versioned disposable deployment target                     | OWNER REQUIRED |
+| Recovery escalation       | OWNER REQUIRED | Accepted primary/backup recovery owners and route          | OWNER REQUIRED |
 
-Provision an isolated staging/recovery target, assign a recovery owner, execute synthetic backup and restore rehearsals, record environment identity and timestamps, then update only the relevant launch gates with actual evidence.
+No production data, real member data, identity documents, external recovery service, or destructive rollback was used. Recovery remains **BLOCKED**.
