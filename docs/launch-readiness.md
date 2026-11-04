@@ -153,3 +153,13 @@ The financial plan records only verified public TiDB Starter pricing: **$0/month
 `STAGE-001` remains **AWAITING FOUNDER APPROVAL**. Provisioning remains unauthorized. Milestone 1 — Isolated Staging Operational — is prepared as an executable plan but is blocked until authenticated approval, budgets, providers, accepted owners, isolated resource identities, and secure secret scope exist. FREE_LAUNCH remains active, payment/subscription services remain dormant, and launch remains **NOT READY** with **36 gates and 29 hard blockers**.
 
 Sprint 66 disposable MySQL CI run **41743904714** passed on commit `8248dcccf1b6510a85d075fc48a026ac86c387b4`; dependency installation, Drizzle schema application, persistence authority tests, and artifact upload succeeded. This verifies disposable persistence behavior only and does not close staging, recovery, ownership, legal, authenticated acceptance, accessibility, localization, or independent security blockers.
+
+## Sprint 67 founder-led ownership and staging-readiness update
+
+**Sprint 67 update (2026-11-04):** Bubacarr Sillah is recorded as founder and sole current active operator, with provisional technical/platform and database, backup, recovery, and rollback contact responsibilities. Formal acceptance remains pending through the authenticated workflow. Salifu Marong remains historically identified as co-founder, with no current operational assignment inferred. Operations, outreach, legal, security, accessibility, localization, Trust & Safety, monitoring, support, and release-approval responsibilities remain unassigned or unaccepted where evidence is absent.
+
+The potential developer is explicitly recorded as `DISCUSSION_ONLY — NOT_APPOINTED — NO_SYSTEM_ACCESS`. No repository invitation, external access, database/storage access, credential or secret disclosure, staff role, member-data access, or onboarding occurred.
+
+Founder planning ceilings are recorded as **D500 initial setup**, **D500 monthly running cost**, and **D1,000 combined first month**. These are budget limits only: spending, payment details, paid services, and infrastructure provisioning remain unauthorized. Provider costs remain unverified except for previously documented public TiDB Starter pricing.
+
+Sprint 67 isolation verification found no demonstrated separate WebDev target, environment-secret scope, TiDB resource, storage namespace, OAuth/session boundary, monitoring destination, backup/restore target, or rollback/production-denial target. Drizzle migrations are verified in disposable CI only. `STAGE-001` remains **BLOCKED**; launch remains **NOT READY** with **36 gates and 29 hard blockers**.

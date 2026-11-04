@@ -52,3 +52,13 @@ The accepted scope must cover WebDev deployment, environment configuration, secr
 The accepted scope must cover the separate TiDB staging database, Drizzle migrations, backup and restore, recovery verification, and rollback coordination. It must explicitly exclude production migration and production data access.
 
 No person was assigned or marked accepted in Sprint 65.
+
+## Sprint 67 founder-led operating arrangement
+
+Bubacarr Sillah is the founder and sole current active operator. He is the provisional technical/platform owner and provisional database, backup, recovery, and rollback contact. Formal role acceptance remains **PENDING** and no signed acceptance, approval timestamp, or evidence record is inferred.
+
+Salifu Marong remains identified historically as a co-founder. No current operational responsibility is assigned to him; current assignment is **UNCONFIRMED / UNASSIGNED** until explicitly accepted.
+
+The potential developer is recorded as `DISCUSSION_ONLY — NOT_APPOINTED — NO_SYSTEM_ACCESS`. No repository invitation, production/staging access, database/storage access, credentials, secrets, API keys, environment variables, staff role, member information, or identity-document access is permitted. No developer was invited or onboarded in Sprint 67.
+
+Bubacarr cannot serve as an independent reviewer of his own high-risk action. Four-eyes actions remain blocked until a genuinely separate authorized reviewer accepts the role.
