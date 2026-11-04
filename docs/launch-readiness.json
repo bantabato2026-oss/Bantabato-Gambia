@@ -30,9 +30,9 @@
     "staticFormatting": "PASSED",
     "previousDisposableMySqlCi": "PASSED",
     "previousCiRunId": 37232144920,
-    "currentSprintCi": "PENDING_NEW_SPRINT67_RUN",
-    "currentSprintCiRunId": null,
-    "currentSprintCiHeadSha": null,
+    "currentSprintCi": "PASSED",
+    "currentSprintCiRunId": 41746227070,
+    "currentSprintCiHeadSha": "a4eef3acb971fbd057262621b39b19969e74b02a",
     "testFilesPassed": 113,
     "testFilesSkipped": 1,
     "focusedSprint66TestsPassed": 33,
@@ -126,7 +126,8 @@
     "Sprint 67 planning ceilings recorded as D500 initial, D500 monthly, and D1000 combined first month. These are limits only; spending, payment, provisioning, and paid upgrades remain unauthorized.",
     "Sprint 67 isolation assessment found no demonstrated separate WebDev, secrets, TiDB, storage, OAuth/session, monitoring, backup/restore, or rollback boundary; STAGE-001 remains blocked. Drizzle migration behavior is verified in disposable CI only.",
     "Sprint 67 local validation: 549 tests passed, 6 intentional skips across 114 test files; 25 focused operational-access/approval/isolation/readiness tests passed; TypeScript, production build, dependency audit, formatting, JSON, and diff checks passed.",
-    "Sprint 67 completion report records no provisioning, spending, developer access, production data use, or external provider activation. Founder-led ownership and provisional contact states are documented without fabricating formal acceptance."
+    "Sprint 67 completion report records no provisioning, spending, developer access, production data use, or external provider activation. Founder-led ownership and provisional contact states are documented without fabricating formal acceptance.",
+    "Sprint 67 disposable MySQL CI run 41746227070 passed on commit a4eef3acb971fbd057262621b39b19969e74b02a: dependency installation, schema application, persistence authority tests, and artifact upload succeeded. This verifies disposable persistence only and does not close staging or operational blockers."
   ],
   "trustPatternAudit": {
     "checklistEntriesAudited": 40,

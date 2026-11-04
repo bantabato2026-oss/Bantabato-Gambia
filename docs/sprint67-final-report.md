@@ -24,7 +24,7 @@ No separate WebDev target, environment-secret scope, TiDB resource, storage name
 
 ## Tests and validation
 
-The complete local suite passed with **549 tests**, **6 intentional skips across 114 test files**. Focused Sprint 67 operational, approval, isolation, readiness, and historical evidence tests passed: **25**. TypeScript, production build, dependency audit with no known vulnerabilities, formatting, JSON, and diff checks passed.
+The complete local suite passed with **549 tests**, **6 intentional skips across 114 test files**. Focused Sprint 67 operational, approval, isolation, readiness, and historical evidence tests passed: **25**. TypeScript, production build, dependency audit with no known vulnerabilities, formatting, JSON, and diff checks passed. Disposable MySQL CI run **41746227070** passed on commit `a4eef3acb971fbd057262621b39b19969e74b02a`; dependency installation, schema application, persistence authority tests, and artifact upload succeeded.
 
 ## Deliberately not performed
 
