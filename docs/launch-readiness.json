@@ -1,8 +1,8 @@
 {
-  "sprint": 65,
+  "sprint": 66,
   "launchStatus": "NOT READY",
   "engineeringStatus": "ENGINEERING COMPLETE FOR REVIEWED CODE PATHS",
-  "reviewedAt": "2026-11-01",
+  "reviewedAt": "2026-11-04",
   "evidenceBoundary": "Repository source, local validation, GitHub Actions disposable MySQL evidence, and documented operational/legal boundaries only; no production mutation, provider activation, real member data, backup artifact, restore rehearsal, rollback rehearsal, authenticated browser review, manual accessibility review, or legal approval.",
   "infrastructure": {
     "applicationDeploymentTarget": "AVAILABLE_VERIFIED",
@@ -22,7 +22,7 @@
     "authenticatedBrowser": "BLOCKED"
   },
   "validation": {
-    "testsPassed": 540,
+    "testsPassed": 543,
     "intentionalSkips": 6,
     "typescript": "PASSED",
     "productionBuild": "PASSED",
@@ -30,11 +30,12 @@
     "staticFormatting": "PASSED",
     "previousDisposableMySqlCi": "PASSED",
     "previousCiRunId": 37232144920,
-    "currentSprintCi": "PASSED",
-    "currentSprintCiRunId": 41474869837,
-    "currentSprintCiHeadSha": "b9e4494c2b0862029117c9edad91bc25682f206e",
-    "testFilesPassed": 111,
-    "testFilesSkipped": 1
+    "currentSprintCi": "PENDING_NEW_SPRINT66_RUN",
+    "currentSprintCiRunId": null,
+    "currentSprintCiHeadSha": null,
+    "testFilesPassed": 112,
+    "testFilesSkipped": 1,
+    "focusedSprint66TestsPassed": 33
   },
   "monitoring": {
     "provider": "NOT_CONFIGURED",
@@ -113,7 +114,11 @@
     "Sprint 65 official TiDB pricing research verified Starter public pricing of $0/month to start with free quotas and variable usage charges. Bantabato account eligibility, region, quota, separate credentials, and actual staging cost remain unverified; all other resource prices remain PRICE NOT VERIFIED.",
     "Sprint 65 STAGE-001 remains AWAITING FOUNDER APPROVAL. Budget approval does not authorize provisioning; explicit APPROVE PROVISIONING, authenticated approval, named owners, and isolation evidence are required. No resources, credentials, production data, or external services were provisioned or activated.",
     "Sprint 65 local validation: 540 tests passed, 6 intentional skips across 112 test files; 34 focused approval/isolation/launch-evidence tests passed; TypeScript, production build, dependency audit, formatting, JSON, and diff checks passed.",
-    "Sprint 65 disposable MySQL CI run 41474869837 passed on commit b9e4494c2b0862029117c9edad91bc25682f206e: dependency installation, schema application, persistence authority tests, and artifact upload succeeded."
+    "Sprint 65 disposable MySQL CI run 41474869837 passed on commit b9e4494c2b0862029117c9edad91bc25682f206e: dependency installation, schema application, persistence authority tests, and artifact upload succeeded.",
+    "Sprint 66 consolidated ten founder decisions into a single register: two budget inputs are NOT PROVIDED, four resource/acceptance decisions remain AWAITING FOUNDER APPROVAL, and four owner/reviewer decisions remain OWNER REQUIRED. No approvals, appointments, or provisioning were inferred.",
+    "Sprint 66 financial plan records verified financial commitment $0. TiDB Starter public pricing is documented, but actual account eligibility, quota, region, separate staging identity, and all non-database resource prices remain unverified; first-year commitment is NOT CALCULABLE.",
+    "Sprint 66 STAGE-001 final approval request and 14-step Milestone 1 plan are prepared. Provisioning remains unauthorized; synthetic A\u2013J acceptance and recovery are blocked until authenticated approvals, accepted owners, isolated resources, and secure secret scope exist.",
+    "Sprint 66 local validation: 543 tests passed, 6 intentional skips across 113 test files; 33 focused founder-decision/approval/isolation/launch-evidence tests passed; TypeScript, production build, dependency audit, formatting, JSON, and diff checks passed."
   ],
   "trustPatternAudit": {
     "checklistEntriesAudited": 40,
@@ -775,6 +780,98 @@
       "TIDB_ACCOUNT_ELIGIBILITY_AND_CREDENTIAL_SCOPE",
       "BACKUP_RESTORE_TARGET",
       "ROLLBACK_TARGET"
+    ]
+  },
+  "sprint66DecisionRegister": {
+    "file": "docs/sprint66-founder-decision-register.md",
+    "decisionCount": 10,
+    "awaitingApproval": 4,
+    "notProvided": 2,
+    "ownerRequired": 4,
+    "approved": 0,
+    "rejected": 0,
+    "deferred": 0,
+    "executed": 0,
+    "verified": 0,
+    "responsibleApprovers": "FOUNDER_OR_RELEASE_APPROVER; QUALIFIED_REVIEWERS_WHERE_REQUIRED",
+    "authenticatedApprovals": 0,
+    "formalOwnerAcceptances": 0,
+    "executionAllowedWithoutApproval": false,
+    "statusPolicy": "NO_INFERENCE; AUTHENTICATED_APPROVAL_REQUIRED; STALE_VERSIONS_REJECTED"
+  },
+  "sprint66FinancialPlan": {
+    "file": "docs/sprint66-staging-investment-plan.md",
+    "currency": "USD",
+    "verifiedFinancialCommitment": "$0",
+    "maximumInitialBudget": "NOT PROVIDED",
+    "maximumMonthlyBudget": "NOT PROVIDED",
+    "oneTimeSetupCost": "NOT AVAILABLE",
+    "expectedMonthlyInfrastructureCost": "NOT AVAILABLE",
+    "optionalServicesAndCosts": "NOT AVAILABLE",
+    "variableUsageCharges": "TIDB_STARTER_PUBLISHED_UNIT_RATES_ONLY; ACTUAL_USAGE_UNVERIFIED",
+    "freeTier": "TIDB_STARTER_PUBLIC_QUOTA; ACCOUNT_ELIGIBILITY_UNVERIFIED",
+    "firstYearCommitment": "NOT CALCULABLE",
+    "spendAuthorized": false,
+    "sources": [
+      "https://www.pingcap.com/tidb-cloud-pricing/",
+      "https://www.pingcap.com/tidb-cloud-starter-pricing-details/"
+    ]
+  },
+  "sprint66Stage001": {
+    "file": "docs/sprint66-stage001-final-approval.md",
+    "decisionId": "STAGE-001",
+    "status": "AWAITING FOUNDER APPROVAL",
+    "approvalAuthenticated": false,
+    "approvalReference": "NOT RECORDED",
+    "decisionVersion": "NOT RECORDED",
+    "maximumInitialBudget": "NOT PROVIDED",
+    "maximumMonthlyBudget": "NOT PROVIDED",
+    "approvedServices": "NOT PROVIDED",
+    "technicalOwner": "OWNER REQUIRED",
+    "recoveryOwner": "OWNER REQUIRED",
+    "provisioningAuthorized": false,
+    "budgetAloneAuthorizesProvisioning": false,
+    "permittedTestScope": "SYNTHETIC_A_TO_J_ONLY_AFTER_APPROVAL_AND_ISOLATION_VERIFICATION",
+    "staleApprovalRejected": true
+  },
+  "sprint66OwnerAcceptance": {
+    "file": "docs/sprint66-owner-acceptance.md",
+    "formalAcceptances": 0,
+    "technicalPlatformOwner": "OWNER REQUIRED",
+    "databaseRecoveryOwner": "OWNER REQUIRED",
+    "privacyLegalOwner": "OWNER REQUIRED; LEGAL DECISION REQUIRED",
+    "independentSecurityReviewer": "OWNER REQUIRED; INDEPENDENT REVIEW REQUIRED",
+    "accessibilityReviewer": "OWNER REQUIRED",
+    "localizationReviewers": "OWNER REQUIRED",
+    "trustAndSafetyOwner": "OWNER REQUIRED",
+    "releaseApprover": "OWNER REQUIRED"
+  },
+  "sprint66Milestone1": {
+    "file": "docs/sprint66-execution-milestone.md",
+    "name": "Isolated Staging Operational",
+    "status": "PLANNED; EXECUTION BLOCKED",
+    "authorized": false,
+    "steps": 14,
+    "syntheticOnly": "REQUIRED",
+    "realMemberData": "PROHIBITED",
+    "productionMutation": "PROHIBITED",
+    "requiredEntryEvidence": [
+      "AUTHENTICATED_APPROVALS",
+      "BUDGET_CEILINGS",
+      "APPROVED_PROVIDERS",
+      "ACCEPTED_TECHNICAL_OWNER",
+      "ACCEPTED_RECOVERY_OWNER",
+      "ISOLATED_RESOURCE_IDENTITIES",
+      "SECURE_SECRET_SCOPE"
+    ],
+    "stopConditions": [
+      "SHARED_PRODUCTION_RESOURCE",
+      "UNCERTAIN_ENDPOINT_IDENTITY",
+      "EXPOSED_SECRET",
+      "MISSING_OWNER_ACCEPTANCE",
+      "MISSING_COST_CEILING",
+      "REAL_USER_COMMUNICATION_RISK",
+      "MISSING_RECOVERY_TARGET"
     ]
   }
 }

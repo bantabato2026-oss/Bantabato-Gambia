@@ -16,7 +16,7 @@ describe("Sprint 65 staging evidence contract", () => {
     const matrix = readJson("docs/launch-readiness.json");
     const staging = matrix.sprint65StagingDecision;
 
-    expect(matrix.sprint).toBe(65);
+    expect(matrix.sprint).toBeGreaterThanOrEqual(65);
     expect(matrix.launchStatus).toBe("NOT READY");
     expect(matrix.gates).toHaveLength(36);
     expect(matrix.hardBlockers).toHaveLength(29);
