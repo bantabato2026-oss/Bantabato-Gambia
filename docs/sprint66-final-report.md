@@ -23,4 +23,4 @@ Milestone 1 contains 14 controlled steps covering isolated deployment, database,
 
 ## Validation
 
-The final local validation passed with **543 tests**, **6 intentional skips across 113 test files**, and **33 focused Sprint 66 tests**. TypeScript, production build, dependency audit, formatting, JSON, and diff checks passed. FREE_LAUNCH remains active; payment and subscription services remain dormant. The authoritative matrix remains **36 gates, 29 hard blockers, NOT READY**.
+The final local validation passed with **543 tests**, **6 intentional skips across 113 test files**, and **33 focused Sprint 66 tests**. TypeScript, production build, dependency audit, formatting, JSON, and diff checks passed. Disposable MySQL CI run **41743904714** passed on commit `8248dcccf1b6510a85d075fc48a026ac86c387b4`; dependency installation, schema application, persistence authority tests, and artifact upload succeeded. FREE_LAUNCH remains active; payment and subscription services remain dormant. The authoritative matrix remains **36 gates, 29 hard blockers, NOT READY**.
