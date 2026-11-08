@@ -30,9 +30,9 @@
     "staticFormatting": "PASSED",
     "previousDisposableMySqlCi": "PASSED",
     "previousCiRunId": 37232144920,
-    "currentSprintCi": "PENDING_NEW_SPRINT68_RUN",
-    "currentSprintCiRunId": null,
-    "currentSprintCiHeadSha": null,
+    "currentSprintCi": "PASSED",
+    "currentSprintCiRunId": 42475817937,
+    "currentSprintCiHeadSha": "c8a7813e2529b26676e8d5f1fd7dbf6b7c54f8cb",
     "testFilesPassed": 114,
     "testFilesSkipped": 1,
     "focusedSprint66TestsPassed": 33,
@@ -134,7 +134,8 @@
     "Sprint 68 deterministic A-J synthetic dataset contract covers 11 scenarios and excludes public search, public stories, real communications, production data, and real identity material.",
     "Sprint 68 architecture remains proposed with 10 unverified isolation boundaries; only disposable MySQL CI behavior is tested. Backup, restore, rollback, staging resources, OAuth, storage, secrets, and monitoring remain unverified.",
     "Sprint 68 local validation: 553 tests passed, 6 intentional skips across 115 test files; 23 focused synthetic-staging and operational-readiness tests passed; TypeScript, production build, dependency audit, formatting, JSON, and diff checks passed.",
-    "Sprint 68 completion report records 10 fictional A-J accounts, 11 scenarios, 10 proposed isolation boundaries, 4 safe repository checks executed, and 9 infrastructure-dependent checks unverified. No provisioning, spending, external access, production data, or real notifications occurred."
+    "Sprint 68 completion report records 10 fictional A-J accounts, 11 scenarios, 10 proposed isolation boundaries, 4 safe repository checks executed, and 9 infrastructure-dependent checks unverified. No provisioning, spending, external access, production data, or real notifications occurred.",
+    "Sprint 68 disposable MySQL CI run 42475817937 passed on commit c8a7813e2529b26676e8d5f1fd7dbf6b7c54f8cb: dependency installation, schema application, persistence authority tests, and artifact upload succeeded. This verifies disposable persistence only and does not prove staging isolation."
   ],
   "trustPatternAudit": {
     "checklistEntriesAudited": 40,

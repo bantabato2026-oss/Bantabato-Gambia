@@ -35,7 +35,7 @@ The recovery sequence is documented for disposable MySQL only. No new staging re
 
 ## 8. Validation
 
-The full local suite passed with **553 tests**, **6 intentional skips across 115 test files**. Focused Sprint 68 tests passed: **23**. TypeScript, production build, dependency audit with no known vulnerabilities, formatting, JSON, and diff checks passed.
+The full local suite passed with **553 tests**, **6 intentional skips across 115 test files**. Focused Sprint 68 tests passed: **23**. TypeScript, production build, dependency audit with no known vulnerabilities, formatting, JSON, and diff checks passed. Disposable MySQL CI run **42475817937** passed on commit `c8a7813e2529b26676e8d5f1fd7dbf6b7c54f8cb`; schema application, persistence authority tests, and artifact upload succeeded.
 
 ## 9. Costs and controls
 
