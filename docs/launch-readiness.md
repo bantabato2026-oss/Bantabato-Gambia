@@ -165,3 +165,13 @@ Founder planning ceilings are recorded as **D500 initial setup**, **D500 monthly
 Sprint 67 isolation verification found no demonstrated separate WebDev target, environment-secret scope, TiDB resource, storage namespace, OAuth/session boundary, monitoring destination, backup/restore target, or rollback/production-denial target. Drizzle migrations are verified in disposable CI only. `STAGE-001` remains **BLOCKED**; launch remains **NOT READY** with **36 gates and 29 hard blockers**.
 
 Sprint 67 disposable MySQL CI run **41746227070** passed on commit `a4eef3acb971fbd057262621b39b19969e74b02a`; dependency installation, Drizzle schema application, persistence authority tests, and artifact upload succeeded. This verifies disposable persistence behavior only and does not close staging isolation, ownership, recovery, legal, accessibility, localization, or independent-review blockers.
+
+## Sprint 68 synthetic-only staging preparation
+
+Sprint 68 founder authorization covers preparation, architecture design, deterministic local validation, and safe disposable testing only. It does **not** authorize provisioning a staging environment, creating cloud resources, spending money, activating paid services, connecting to production, creating production credentials, importing real member data, or granting external access.
+
+The proposed architecture specifies separate WebDev deployment, MySQL-compatible TiDB/disposable database, Drizzle migration target, storage namespace, OAuth callback, session/signing configuration, secret namespace, disabled or synthetic-sink communications, monitoring, and disposable recovery boundaries. These are **PROPOSED**; no separate staging resource is claimed. Disposable MySQL CI is the only tested infrastructure behavior.
+
+The deterministic dataset contract is `SPRINT68-SYNTHETIC-AJ-v1`, with fictional accounts A–J and 11 scenarios covering registration, incomplete profiles, eligibility, five-photo approval, married/polygamy states, Family Circle Parent/Wali permissions, messaging/voice notes, blocking/reporting, privacy/deletion, staff/session boundaries, and recovery/rollback. Synthetic records are excluded from public search and success stories; real notifications, real member data, real identity documents, and production copies are prohibited.
+
+Bubacarr Sillah’s proposed technical/platform, database, backup/recovery, deployment/rollback, and security/incident responsibilities remain **PENDING AUTHENTICATED ACCEPTANCE**. The independent reviewer remains **UNAPPOINTED**; four-eyes actions remain blocked. Recovery rehearsal is plan-prepared but backup creation, restore, and rollback remain unverified. Launch remains **NOT READY** with **36 gates and 29 hard blockers**.
